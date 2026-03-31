@@ -1,0 +1,9 @@
+INFO:     127.0.0.1:53746 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "POST /api/v1/notaries/imports/antioquia-source HTTP/1.1" 201 Created
+INFO:     127.0.0.1:53746 - "GET /api/v1/notaries HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "GET /api/v1/notaries/filters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "GET /api/v1/notaries?commercial_status=negociaci%C3%B3n&priority=cr%C3%ADtica HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "GET /api/v1/notaries/58 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53746 - "POST /api/v1/notaries/58/commercial-activities HTTP/1.1" 201 Created
+INFO:     127.0.0.1:53746 - "GET /api/v1/notaries/58 HTTP/1.1" 200 OK

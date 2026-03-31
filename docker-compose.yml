@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: easypro2-postgres
+    environment:
+      POSTGRES_DB: ${EASYPRO2_POSTGRES_DB:-easypro2}
+      POSTGRES_USER: ${EASYPRO2_POSTGRES_USER:-easypro2}
+      POSTGRES_PASSWORD: ${EASYPRO2_POSTGRES_PASSWORD:-easypro2}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

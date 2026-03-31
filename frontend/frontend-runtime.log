@@ -1,0 +1,10 @@
+
+> easypro2-frontend@0.1.0 start
+> set NEXT_PUBLIC_FRONTEND_URL=http://127.0.0.1:5179&& next start --hostname 127.0.0.1 -p 5179
+
+   ▲ Next.js 15.5.14
+   - Local:        http://127.0.0.1:5179
+   - Network:      http://127.0.0.1:5179
+
+ ✓ Starting...
+ ✓ Ready in 418ms

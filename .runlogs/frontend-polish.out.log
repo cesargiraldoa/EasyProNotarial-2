@@ -1,0 +1,10 @@
+
+> easypro2-frontend@0.1.0 start
+> next start -p 5179
+
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:5179
+   - Network:      http://172.28.192.1:5179
+
+ ✓ Starting...
+ ✓ Ready in 315ms
