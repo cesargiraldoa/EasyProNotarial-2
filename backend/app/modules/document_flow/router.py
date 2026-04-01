@@ -44,10 +44,12 @@ from app.schemas.case import (
     DraftGenerationRequest,
     ExportRequest,
     FinalUploadRequest,
+    GariGenerationRequest,
 )
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
-from app.services.document_generation import build_case_text_snapshot, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
+from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
+from app.services.gari_document_service import generate_notarial_document, save_gari_document_as_docx
 from app.services.storage import guess_media_type, next_case_file_path, save_base64_file
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
@@ -505,6 +507,87 @@ def add_internal_note(case_id: int, payload: CaseInternalNoteCreate, db: Session
 def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
     case = load_case_or_404(db, case_id)
     generate_draft_for_case(db, case, current_user, payload.comment)
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/generate-with-gari", response_model=CaseDetail)
+def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+    case = load_case_or_404(db, case_id)
+    if case.act_data is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador con Gari.")
+    if not case.participants:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar intervinientes antes de generar el borrador con Gari.")
+
+    act_data = json.loads(case.act_data.data_json or "{}")
+    if not act_data:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador con Gari.")
+
+    participants = [
+        {
+            "role_code": item.role_code,
+            "role_label": item.role_label,
+            "full_name": item.person.full_name,
+            "document_type": item.person.document_type,
+            "document_number": item.person.document_number,
+            "sex": item.person.sex,
+            "nationality": item.person.nationality,
+            "marital_status": item.person.marital_status,
+            "profession": item.person.profession,
+            "municipality": item.person.municipality,
+            "is_transient": item.person.is_transient,
+            "phone": item.person.phone,
+            "address": item.person.address,
+            "email": item.person.email,
+        }
+        for item in case.participants
+    ]
+
+    template_reference_text = None
+    if case.template and case.template.storage_path:
+        try:
+            template_reference_text = extract_text_from_docx(case.template.storage_path)
+        except Exception:
+            template_reference_text = None
+
+    try:
+        generated_text = generate_notarial_document(
+            act_type=case.act_type,
+            notary_label=case.notary.notary_label,
+            notary_name=case.notary.current_notary_name or case.notary.legal_name or case.notary.notary_label,
+            participants=participants,
+            act_data=act_data,
+            template_reference_text=template_reference_text,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="No fue posible generar el documento con Gari.") from exc
+
+    case.act_data.gari_draft_text = generated_text
+    db.flush()
+
+    temp_output = next_case_file_path(case.id, "gari-temp", 1, "docx", f"gari_case_{case.id}.docx")
+    save_gari_document_as_docx(generated_text, temp_output)
+    version = add_document_version(
+        db,
+        case,
+        "draft",
+        "Borrador documental Gari",
+        "docx",
+        temp_output,
+        f"{case.internal_case_number or case.id}_gari.docx",
+        current_user.id,
+        case.template_id,
+        json.dumps({"source": "gari", "model": "gpt-4o"}, ensure_ascii=False),
+    )
+
+    previous_state = case.current_state
+    if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
+        case.current_state = "generado"
+
+    append_timeline(db, case.id, current_user.id, "gari_draft_generated", previous_state, case.current_state, payload.comment or "Borrador generado con Gari", {"version": version.version_number})
+    append_workflow(db, case, current_user, "gari_draft_generated", actor_role_code="protocolist", comment=payload.comment or "Borrador generado con Gari", from_state=previous_state, to_state=case.current_state, metadata={"version": version.version_number, "source": "gari"})
     db.commit()
     return serialize_case_detail(load_case_or_404(db, case.id))
 

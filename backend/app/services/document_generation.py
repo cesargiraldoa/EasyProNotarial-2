@@ -38,6 +38,21 @@ def render_docx_template(source_path: str | Path, destination_path: str | Path, 
             dest_zip.writestr(item, data)
 
 
+def extract_text_from_docx(source_path: str | Path) -> str:
+    """
+    Extrae el texto plano del Word para usarlo como referencia para Gari.
+    """
+    source = Path(source_path)
+    text_parts: list[str] = []
+    with zipfile.ZipFile(source, "r") as zf:
+        if "word/document.xml" in zf.namelist():
+            xml_content = zf.read("word/document.xml").decode("utf-8", errors="ignore")
+            clean = re.sub(r"<[^>]+>", " ", xml_content)
+            clean = re.sub(r"\s+", " ", clean).strip()
+            text_parts.append(clean)
+    return "\n".join(text_parts)
+
+
 def generate_plain_pdf(destination_path: str | Path, title: str, lines: list[str]) -> None:
     escaped_lines: list[str] = []
     for raw in [title, *lines]:

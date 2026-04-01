@@ -112,6 +112,7 @@ class CaseActDataSummary(BaseModel):
     id: int
     case_id: int
     data_json: str
+    gari_draft_text: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -213,6 +214,10 @@ class CaseInternalNoteCreate(BaseModel):
 
 
 class DraftGenerationRequest(BaseModel):
+    comment: str | None = None
+
+
+class GariGenerationRequest(BaseModel):
     comment: str | None = None
 
 

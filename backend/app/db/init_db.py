@@ -95,7 +95,7 @@ def repair_model_strings(db) -> None:
         TemplateField: ["field_code", "label", "field_type", "section", "options_json", "placeholder_key", "help_text"],
         Person: ["document_type", "document_number", "full_name", "sex", "nationality", "marital_status", "profession", "municipality", "phone", "address", "email", "metadata_json"],
         CaseParticipant: ["role_code", "role_label", "snapshot_json"],
-        CaseActData: ["data_json"],
+        CaseActData: ["data_json", "gari_draft_text"],
         CaseClientComment: ["comment"],
         CaseInternalNote: ["note"],
         CaseDocument: ["category", "title"],
@@ -199,6 +199,16 @@ def ensure_case_columns() -> None:
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_official_deed_number ON cases (official_deed_number)"))
 
 
+def ensure_case_act_data_columns() -> None:
+    inspector = inspect(engine)
+    if "case_act_data" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("case_act_data")}
+    with engine.begin() as connection:
+        if "gari_draft_text" not in existing_columns:
+            connection.execute(text("ALTER TABLE case_act_data ADD COLUMN gari_draft_text TEXT"))
+
+
 def ensure_case_indexes() -> None:
     inspector = inspect(engine)
     tables = inspector.get_table_names()
@@ -239,6 +249,7 @@ def init_db() -> None:
     ensure_notary_columns()
     ensure_commercial_activity_columns()
     ensure_case_columns()
+    ensure_case_act_data_columns()
     ensure_case_indexes()
     db = SessionLocal()
     try:
