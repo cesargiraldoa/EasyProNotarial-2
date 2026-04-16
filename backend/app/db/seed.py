@@ -222,6 +222,81 @@ def ensure_power_general_template(db: Session, notary: Notary | None) -> Documen
     return template
 
 
+def ensure_compraventa_vis_template(db: Session, notary: Notary | None) -> DocumentTemplate:
+    template = db.query(DocumentTemplate).filter(DocumentTemplate.slug == "compraventa-vis").first()
+    if template is None:
+        template = DocumentTemplate(
+            name="Compraventa VIS",
+            slug="compraventa-vis",
+            case_type="escritura",
+            document_type="Compraventa de Interés Social",
+            description="Escritura pública de compraventa VIS — proyectos ARAGUA y JAGGUA — Constructora Contex",
+            scope_type="global",
+            notary_id=notary.id if notary else None,
+            is_active=True,
+        )
+        db.add(template)
+        db.flush()
+
+    template.name = "Compraventa VIS"
+    template.case_type = "escritura"
+    template.document_type = "Compraventa de Interés Social"
+    template.description = "Escritura pública de compraventa VIS — proyectos ARAGUA y JAGGUA — Constructora Contex"
+    template.scope_type = "global"
+    template.notary_id = notary.id if notary else template.notary_id
+    template.is_active = True
+    db.commit()
+
+    db.query(TemplateRequiredRole).filter(TemplateRequiredRole.template_id == template.id).delete(synchronize_session=False)
+    db.query(TemplateField).filter(TemplateField.template_id == template.id).delete(synchronize_session=False)
+    db.flush()
+
+    db.add_all([
+        TemplateRequiredRole(template_id=template.id, role_code="comprador_1", label="Comprador(a) 1", is_required=True, step_order=1),
+        TemplateRequiredRole(template_id=template.id, role_code="comprador_2", label="Comprador(a) 2", is_required=False, step_order=2),
+        TemplateRequiredRole(template_id=template.id, role_code="comprador_3", label="Comprador(a) 3", is_required=False, step_order=3),
+        TemplateRequiredRole(template_id=template.id, role_code="apoderado_fideicomiso", label="Apoderado(a) Fideicomiso", is_required=True, step_order=4),
+        TemplateRequiredRole(template_id=template.id, role_code="apoderado_fideicomitente", label="Apoderado(a) Fideicomitente", is_required=True, step_order=5),
+        TemplateRequiredRole(template_id=template.id, role_code="apoderado_banco_libera", label="Apoderado(a) banco que libera", is_required=True, step_order=6),
+        TemplateRequiredRole(template_id=template.id, role_code="apoderado_banco_hipoteca", label="Apoderado(a) banco hipotecante", is_required=False, step_order=7),
+    ])
+
+    db.add_all([
+        TemplateField(template_id=template.id, field_code="proyecto", label="Proyecto", field_type="select", section="acto", is_required=True, options_json=json.dumps(["aragua", "jaggua"], ensure_ascii=False), step_order=1),
+        TemplateField(template_id=template.id, field_code="tipo_inmueble", label="Tipo de inmueble", field_type="select", section="acto", is_required=True, options_json=json.dumps(["apartamento", "parqueadero"], ensure_ascii=False), step_order=2),
+        TemplateField(template_id=template.id, field_code="banco_hipotecante", label="Banco hipotecante", field_type="select", section="acto", is_required=False, options_json=json.dumps(["fna", "bogota", "davivienda"], ensure_ascii=False), step_order=3),
+        TemplateField(template_id=template.id, field_code="numero_apartamento", label="Número apartamento/parqueadero", field_type="text", section="acto", is_required=True, step_order=4),
+        TemplateField(template_id=template.id, field_code="matricula_inmobiliaria", label="Matrícula inmobiliaria", field_type="text", section="acto", is_required=True, step_order=5),
+        TemplateField(template_id=template.id, field_code="cedula_catastral", label="Cédula catastral", field_type="text", section="acto", is_required=True, step_order=6),
+        TemplateField(template_id=template.id, field_code="linderos", label="Linderos del inmueble", field_type="textarea", section="acto", is_required=True, step_order=7),
+        TemplateField(template_id=template.id, field_code="numero_piso", label="Número de piso", field_type="text", section="acto", is_required=False, step_order=8),
+        TemplateField(template_id=template.id, field_code="area_privada", label="Área privada (m²)", field_type="number", section="acto", is_required=True, step_order=9),
+        TemplateField(template_id=template.id, field_code="area_total", label="Área total (m²)", field_type="number", section="acto", is_required=False, step_order=10),
+        TemplateField(template_id=template.id, field_code="altura", label="Altura (m)", field_type="number", section="acto", is_required=False, step_order=11),
+        TemplateField(template_id=template.id, field_code="coeficiente_copropiedad", label="Coeficiente copropiedad (%)", field_type="number", section="acto", is_required=True, step_order=12),
+        TemplateField(template_id=template.id, field_code="avaluo_catastral", label="Avalúo catastral ($)", field_type="number", section="acto", is_required=True, step_order=13),
+        TemplateField(template_id=template.id, field_code="valor_venta", label="Valor de la venta ($)", field_type="number", section="acto", is_required=True, step_order=14),
+        TemplateField(template_id=template.id, field_code="valor_venta_letras", label="Valor en letras", field_type="text", section="acto", is_required=True, step_order=15),
+        TemplateField(template_id=template.id, field_code="cuota_inicial", label="Cuota inicial ($)", field_type="number", section="acto", is_required=False, step_order=16),
+        TemplateField(template_id=template.id, field_code="cuota_inicial_letras", label="Cuota inicial en letras", field_type="text", section="acto", is_required=False, step_order=17),
+        TemplateField(template_id=template.id, field_code="valor_hipoteca", label="Valor hipoteca ($)", field_type="number", section="acto", is_required=False, step_order=18),
+        TemplateField(template_id=template.id, field_code="valor_hipoteca_letras", label="Valor hipoteca en letras", field_type="text", section="acto", is_required=False, step_order=19),
+        TemplateField(template_id=template.id, field_code="origen_cuota_inicial", label="Origen cuota inicial", field_type="text", section="acto", is_required=False, step_order=20),
+        TemplateField(template_id=template.id, field_code="fecha_promesa_compraventa", label="Fecha promesa compraventa", field_type="text", section="acto", is_required=True, step_order=21),
+        TemplateField(template_id=template.id, field_code="inmueble_sera_casa_habitacion", label="¿Será casa de habitación?", field_type="select", section="acto", is_required=True, options_json=json.dumps(["SI", "NO"], ensure_ascii=False), step_order=22),
+        TemplateField(template_id=template.id, field_code="tiene_bien_afectado", label="¿Tiene otro bien afectado?", field_type="select", section="acto", is_required=True, options_json=json.dumps(["SI", "NO"], ensure_ascii=False), step_order=23),
+        TemplateField(template_id=template.id, field_code="paz_salvo_predial_numero", label="Paz y salvo predial N°", field_type="text", section="acto", is_required=True, step_order=24),
+        TemplateField(template_id=template.id, field_code="paz_salvo_predial_fecha", label="Fecha paz y salvo", field_type="text", section="acto", is_required=True, step_order=25),
+        TemplateField(template_id=template.id, field_code="paz_salvo_predial_vigencia", label="Vigencia paz y salvo", field_type="text", section="acto", is_required=True, step_order=26),
+        TemplateField(template_id=template.id, field_code="dia_elaboracion", label="Día elaboración escritura", field_type="text", section="acto", is_required=True, step_order=27),
+        TemplateField(template_id=template.id, field_code="mes_elaboracion", label="Mes elaboración escritura", field_type="text", section="acto", is_required=True, step_order=28),
+        TemplateField(template_id=template.id, field_code="ano_elaboracion", label="Año elaboración escritura", field_type="number", section="acto", is_required=True, step_order=29),
+    ])
+    db.commit()
+    db.refresh(template)
+    return template
+
+
 def seed_database(db: Session) -> None:
     role_map = {role.code: role for role in db.query(Role).all()}
     for code, name, scope, description in ROLE_DEFINITIONS:
@@ -494,4 +569,13 @@ def seed_database(db: Session) -> None:
                 db.add(CaseWorkflowEvent(case_id=power_case.id, actor_user_id=persisted_users["protocolista@notaria75.co"].id, actor_role_code="protocolist", event_type="draft_generated", comment="Borrador documental versión 1 generado", metadata_json=json.dumps({"version": 1}, ensure_ascii=False)))
         db.commit()
 
+if __name__ == "__main__":
+    from app.db.session import SessionLocal
 
+    db = SessionLocal()
+    try:
+        seed_notary = db.query(Notary).filter(Notary.slug == "bogota-d-c-easypro-notarial-bogota").first()
+        ensure_power_general_template(db, seed_notary)
+        ensure_compraventa_vis_template(db, seed_notary)
+    finally:
+        db.close()
