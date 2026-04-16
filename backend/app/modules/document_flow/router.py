@@ -389,12 +389,22 @@ def latest_document_version(case: Case, category: str, file_format: str | None =
 def add_document_version(db: Session, case: Case, category: str, title: str, file_format: str, source_path: str | Path, original_filename: str, created_by_user_id: int | None, template_id: int | None = None, placeholder_snapshot_json: str = "{}") -> CaseDocumentVersion:
     document = get_or_create_document(db, case, category, title)
     version_number = document.current_version_number + 1
-    target_path = next_case_file_path(case.id, category, version_number, file_format, original_filename)
-    source = Path(source_path)
-    if source != target_path:
-        shutil.copy2(source, target_path)
+
+    source_raw = str(source_path)
+    is_remote_source = source_raw.startswith("http://") or source_raw.startswith("https://")
+    if is_remote_source:
+        storage_path = source_raw
+        stored_filename = original_filename
+    else:
+        target_path = next_case_file_path(case.id, category, version_number, file_format, original_filename)
+        source = Path(source_path)
+        if source != target_path:
+            shutil.copy2(source, target_path)
+        storage_path = str(target_path)
+        stored_filename = target_path.name
+
     document.current_version_number = version_number
-    version = CaseDocumentVersion(case_document_id=document.id, version_number=version_number, file_format=file_format, storage_path=str(target_path), original_filename=target_path.name, generated_from_template_id=template_id, placeholder_snapshot_json=placeholder_snapshot_json, created_by_user_id=created_by_user_id)
+    version = CaseDocumentVersion(case_document_id=document.id, version_number=version_number, file_format=file_format, storage_path=storage_path, original_filename=stored_filename, generated_from_template_id=template_id, placeholder_snapshot_json=placeholder_snapshot_json, created_by_user_id=created_by_user_id)
     db.add(version)
     db.flush()
     return version
@@ -596,14 +606,14 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     db.flush()
 
     temp_output = next_case_file_path(case.id, "gari-temp", 1, "docx", f"gari_case_{case.id}.docx")
-    save_gari_document_as_docx(generated_text, temp_output)
+    gari_document_url = save_gari_document_as_docx(generated_text, temp_output)
     version = add_document_version(
         db,
         case,
         "draft",
         "Borrador documental Gari",
         "docx",
-        temp_output,
+        gari_document_url,
         f"{case.internal_case_number or case.id}_gari.docx",
         current_user.id,
         case.template_id,
