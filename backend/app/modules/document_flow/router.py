@@ -49,7 +49,7 @@ from app.schemas.case import (
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
 from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
-from app.services.gari_document_service import generate_notarial_document, save_gari_document_as_docx
+from app.services.gari_document_service import generate_notarial_document, resolver_escritura, save_gari_document_as_docx
 from app.services.storage import guess_media_type, next_case_file_path, save_base64_file
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
@@ -550,6 +550,27 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
         except Exception:
             template_reference_text = None
 
+    # Construir campos_caso desde act_data
+    campos_caso = {k: v for k, v in act_data.items() if v not in (None, "", [])}
+
+    # Resolver variante
+    try:
+        resolucion = resolver_escritura(
+            proyecto=act_data.get("proyecto", "aragua"),
+            tipo_inmueble=act_data.get("tipo_inmueble", "apartamento"),
+            num_compradores=act_data.get("num_compradores") or len(case.participants),
+            banco_hipotecante=act_data.get("banco_hipotecante"),
+            campos_caso=campos_caso,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if resolucion["campos_faltantes"]:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Faltan campos requeridos para generar la escritura: {', '.join(resolucion['campos_faltantes'])}"
+        )
+
     try:
         generated_text = generate_notarial_document(
             act_type=case.act_type,
@@ -558,6 +579,7 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
             participants=participants,
             act_data=act_data,
             template_reference_text=template_reference_text,
+            max_tokens=resolucion["max_tokens_estimado"],
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
@@ -586,8 +608,8 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
         case.current_state = "generado"
 
-    append_timeline(db, case.id, current_user.id, "gari_draft_generated", previous_state, case.current_state, payload.comment or "Borrador generado con Gari", {"version": version.version_number})
-    append_workflow(db, case, current_user, "gari_draft_generated", actor_role_code="protocolist", comment=payload.comment or "Borrador generado con Gari", from_state=previous_state, to_state=case.current_state, metadata={"version": version.version_number, "source": "gari"})
+    append_timeline(db, case.id, current_user.id, "gari_draft_generated", previous_state, case.current_state, payload.comment or "Borrador generado con Gari", {"version": version.version_number, "variante_id": resolucion["variante_id"]})
+    append_workflow(db, case, current_user, "gari_draft_generated", actor_role_code="protocolist", comment=payload.comment or "Borrador generado con Gari", from_state=previous_state, to_state=case.current_state, metadata={"version": version.version_number, "source": "gari", "variante_id": resolucion["variante_id"]})
     db.commit()
     return serialize_case_detail(load_case_or_404(db, case.id))
 
