@@ -27,7 +27,7 @@ from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User
 from app.modules.notaries.router import build_catalog_identity_key
 from app.services.document_generation import build_case_text_snapshot, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
-from app.services.storage import copy_template_file, next_case_file_path
+from app.services.storage import copy_template_file, next_case_file_path, template_file_path
 
 ROLE_DEFINITIONS = [
     ("super_admin", "SuperAdmin", "global", "Gestión global de la plataforma"),
@@ -160,7 +160,7 @@ def upsert_person(db: Session, payload: dict) -> Person:
 
 
 def ensure_power_general_template(db: Session, notary: Notary | None) -> DocumentTemplate | None:
-    source_path = Path(r"C:\EasyProNotarial-2\Archivos_referencia\Plantillas\Escritura_1.docx")
+    source_path = template_file_path("poder-general.docx")
     if not source_path.exists():
         return None
 
