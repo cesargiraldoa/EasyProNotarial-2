@@ -195,13 +195,10 @@ INSTRUCCIONES DE REDACCIÓN:
 8. Incluye sección de firmas con datos de comparecientes
 9. Documento listo para firmar, sin placeholders ni etiquetas
 10. Si hay VARIANTE DOCUMENTAL, genera los actos en ese orden exacto
-11. PRÁCTICA NOTARIAL: al final de cada párrafo rellena el espacio sobrante con guiones (- - - - -) hasta completar el renglón. Los guiones van DESPUÉS del texto, nunca en lugar del texto.
-12. Entre secciones usa línea completa de guiones: - - - - - - - - - - - - - - - - - - - - - - - - -
 
 FORMATO DE SALIDA:
 - Solo el texto del documento
 - Sin explicaciones ni etiquetas
-- Guiones rellenan espacios DESPUÉS del contenido
 - Listo para exportar a Word
 """
 
@@ -262,7 +259,10 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> Path:
         if not line:
             doc.add_paragraph()
             continue
-        p = doc.add_paragraph(line)
+        texto = line
+        if texto and not texto.strip().startswith("- -"):
+            texto = texto + " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+        p = doc.add_paragraph(texto)
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         if line.startswith("- - -") or line.startswith("---"):
             run = p.runs[0] if p.runs else p.add_run(line)
