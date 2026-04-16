@@ -154,3 +154,275 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> Path:
 
     doc.save(output)
     return output
+
+
+def resolver_escritura(
+    proyecto: str,
+    tipo_inmueble: str,
+    num_compradores: int,
+    banco_hipotecante: str | None,
+    campos_caso: dict,
+) -> dict:
+    """Resuelve la variante de escritura y valida campos requeridos para el caso."""
+
+    def _esta_vacio(valor: object) -> bool:
+        if valor is None:
+            return True
+        if isinstance(valor, str):
+            return valor.strip() == ""
+        if isinstance(valor, (list, dict, tuple, set)):
+            return len(valor) == 0
+        return False
+
+    actos_aragua_apto = [
+        "liberacion_hipoteca",
+        "cto",
+        "compraventa_vis",
+        "renuncia_resolutoria",
+        "cancelacion_comodato",
+        "patrimonio_familia",
+        "poder_especial",
+    ]
+    campos_aragua_apto = [
+        "numero_apartamento",
+        "matricula_inmobiliaria",
+        "cedula_catastral",
+        "linderos",
+        "numero_piso",
+        "area_privada",
+        "area_total",
+        "altura",
+        "coeficiente_copropiedad",
+        "avaluo_catastral",
+        "valor_venta",
+        "fecha_promesa_compraventa",
+        "paz_salvo_predial_numero",
+        "paz_salvo_predial_fecha",
+        "paz_salvo_predial_vigencia",
+    ]
+
+    actos_aragua_parq = [
+        "liberacion_hipoteca",
+        "cto",
+        "compraventa_vis",
+        "renuncia_resolutoria",
+        "cancelacion_comodato",
+        "poder_especial",
+    ]
+    campos_aragua_parq = [
+        "numero_parqueadero",
+        "matricula_inmobiliaria",
+        "cedula_catastral",
+        "linderos",
+        "area_privada",
+        "altura",
+        "coeficiente_copropiedad",
+        "avaluo_catastral",
+        "valor_venta",
+        "fecha_promesa_compraventa",
+        "paz_salvo_predial_numero",
+        "paz_salvo_predial_fecha",
+        "paz_salvo_predial_vigencia",
+    ]
+
+    actos_jaggua_fna = [
+        "liberacion_hipoteca",
+        "cto",
+        "compraventa_vis",
+        "renuncia_resolutoria",
+        "cancelacion_comodato",
+        "hipoteca_primer_grado",
+        "patrimonio_familia",
+        "poder_especial",
+    ]
+    campos_jaggua_fna = [
+        "numero_apartamento",
+        "matricula_inmobiliaria",
+        "linderos",
+        "numero_piso",
+        "area_privada",
+        "area_total",
+        "altura",
+        "coeficiente_copropiedad",
+        "valor_venta",
+        "cuota_inicial",
+        "valor_hipoteca",
+        "origen_cuota_inicial",
+        "fecha_promesa_compraventa",
+        "inmueble_sera_casa_habitacion",
+        "tiene_bien_afectado",
+    ]
+
+    actos_jaggua_bogota = [
+        "liberacion_hipoteca",
+        "cto",
+        "compraventa_vis",
+        "renuncia_resolutoria",
+        "hipoteca_primer_grado",
+        "patrimonio_familia",
+        "poder_especial",
+    ]
+    campos_jaggua_bogota = [
+        "numero_apartamento",
+        "matricula_inmobiliaria",
+        "linderos",
+        "numero_piso",
+        "area_privada",
+        "area_total",
+        "altura",
+        "valor_venta",
+        "cuota_inicial",
+        "valor_hipoteca",
+        "origen_cuota_inicial",
+        "fecha_promesa_compraventa",
+        "inmueble_sera_casa_habitacion",
+        "tiene_bien_afectado",
+    ]
+
+    variantes = {
+        ("aragua", "apartamento", 1, None): {
+            "variante_id": "aragua_apto_1c",
+            "plantilla_id": "aragua_apto_1c",
+            "actos_requeridos": actos_aragua_apto,
+            "campos_requeridos": campos_aragua_apto,
+            "banco_nit": "890.903.938-8",
+            "max_tokens_estimado": 5500,
+        },
+        ("aragua", "apartamento", 2, None): {
+            "variante_id": "aragua_apto_2c",
+            "plantilla_id": "aragua_apto_2c",
+            "actos_requeridos": actos_aragua_apto,
+            "campos_requeridos": campos_aragua_apto,
+            "banco_nit": "890.903.938-8",
+            "max_tokens_estimado": 5800,
+        },
+        ("aragua", "parqueadero", 2, None): {
+            "variante_id": "aragua_parq_2c",
+            "plantilla_id": "aragua_parq_2c",
+            "actos_requeridos": actos_aragua_parq,
+            "campos_requeridos": campos_aragua_parq,
+            "banco_nit": "890.903.938-8",
+            "max_tokens_estimado": 5200,
+        },
+        ("aragua", "parqueadero", 3, None): {
+            "variante_id": "aragua_parq_3c",
+            "plantilla_id": "aragua_parq_3c",
+            "actos_requeridos": actos_aragua_parq,
+            "campos_requeridos": campos_aragua_parq,
+            "banco_nit": "890.903.938-8",
+            "max_tokens_estimado": 5400,
+        },
+        ("jaggua", "apartamento", 1, "fna"): {
+            "variante_id": "jaggua_fna_1c",
+            "plantilla_id": "jaggua_fna_1c",
+            "actos_requeridos": actos_jaggua_fna,
+            "campos_requeridos": campos_jaggua_fna,
+            "banco_nit": "899.999.284-4",
+            "max_tokens_estimado": 6500,
+        },
+        ("jaggua", "apartamento", 2, "fna"): {
+            "variante_id": "jaggua_fna_2c",
+            "plantilla_id": "jaggua_fna_2c",
+            "actos_requeridos": actos_jaggua_fna,
+            "campos_requeridos": campos_jaggua_fna,
+            "banco_nit": "899.999.284-4",
+            "max_tokens_estimado": 6800,
+        },
+        ("jaggua", "apartamento", 1, "bogota"): {
+            "variante_id": "jaggua_bogota_1c",
+            "plantilla_id": "jaggua_bogota_1c",
+            "actos_requeridos": actos_jaggua_bogota,
+            "campos_requeridos": campos_jaggua_bogota,
+            "banco_nit": "860.002.964-4",
+            "max_tokens_estimado": 6800,
+        },
+        ("jaggua", "apartamento", 2, "bogota"): {
+            "variante_id": "jaggua_bogota_2c",
+            "plantilla_id": "jaggua_bogota_2c",
+            "actos_requeridos": actos_jaggua_bogota,
+            "campos_requeridos": campos_jaggua_bogota,
+            "banco_nit": "860.002.964-4",
+            "max_tokens_estimado": 7200,
+        },
+    }
+
+    proyecto_norm = (proyecto or "").strip().lower()
+    tipo_inmueble_norm = (tipo_inmueble or "").strip().lower()
+    banco_norm = (banco_hipotecante or "").strip().lower() or None
+
+    key = (proyecto_norm, tipo_inmueble_norm, num_compradores, banco_norm)
+    if key not in variantes:
+        raise ValueError(
+            "No existe una variante de escritura para la combinación "
+            f"proyecto={proyecto_norm}, tipo_inmueble={tipo_inmueble_norm}, "
+            f"num_compradores={num_compradores}, banco_hipotecante={banco_norm}."
+        )
+
+    variante = variantes[key]
+    campos_requeridos = variante["campos_requeridos"]
+    campos_faltantes = [
+        campo for campo in campos_requeridos if _esta_vacio(campos_caso.get(campo))
+    ]
+
+    return {
+        "variante_id": variante["variante_id"],
+        "plantilla_id": variante["plantilla_id"],
+        "actos_requeridos": list(variante["actos_requeridos"]),
+        "campos_requeridos": list(campos_requeridos),
+        "campos_faltantes": campos_faltantes,
+        "banco_nit": variante["banco_nit"],
+        "max_tokens_estimado": variante["max_tokens_estimado"],
+    }
+
+
+if __name__ == "__main__":
+    ejemplo_aragua = resolver_escritura(
+        proyecto="aragua",
+        tipo_inmueble="apartamento",
+        num_compradores=1,
+        banco_hipotecante=None,
+        campos_caso={
+            "numero_apartamento": "1201",
+            "matricula_inmobiliaria": "50N-123456",
+            "cedula_catastral": "AA-001",
+            "linderos": "Norte con...",
+            "numero_piso": "12",
+            "area_privada": "80",
+            "area_total": "90",
+            "altura": "2.40",
+            "coeficiente_copropiedad": "1.25%",
+            "avaluo_catastral": "180000000",
+            "valor_venta": "250000000",
+            "fecha_promesa_compraventa": "2026-04-01",
+            "paz_salvo_predial_numero": "PSP-55",
+            "paz_salvo_predial_fecha": "2026-03-20",
+            "paz_salvo_predial_vigencia": "2026",
+        },
+    )
+    print("Ejemplo aragua apartamento 1c:")
+    print(ejemplo_aragua)
+
+    ejemplo_jaggua = resolver_escritura(
+        proyecto="jaggua",
+        tipo_inmueble="apartamento",
+        num_compradores=2,
+        banco_hipotecante="bogota",
+        campos_caso={
+            "numero_apartamento": "905",
+            "matricula_inmobiliaria": "50C-765432",
+            "linderos": "Sur con...",
+            "numero_piso": "9",
+            "area_privada": "70",
+            "area_total": "78",
+            "altura": "2.35",
+            "valor_venta": "320000000",
+            "cuota_inicial": "80000000",
+            "valor_hipoteca": "240000000",
+            "origen_cuota_inicial": "Ahorros",
+            "fecha_promesa_compraventa": "2026-04-10",
+            "inmueble_sera_casa_habitacion": True,
+            "tiene_bien_afectado": False,
+        },
+    )
+    print("Ejemplo jaggua bogota 2c:")
+    print(ejemplo_jaggua)
