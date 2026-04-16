@@ -10,6 +10,7 @@ import {
   FileStack,
   Layers3,
   Mail,
+  Play,
   Plus,
   Phone,
   ShieldCheck,
@@ -100,10 +101,44 @@ const faqs = [
 
 const identityChips = ["Colores propios", "URL propia", "Imagen propia"];
 
+const successCases = [
+  {
+    initials: "NC",
+    status: "Live desde Abr 2026",
+    title: "Notaría Única del Círculo de Caldas",
+    subtitle: "Caldas, Antioquia  Colombia",
+    description:
+      "La primera notaría en operar en vivo con EasyPro, consolidando el flujo completo de atención, validación y generación documental en producción.",
+    tags: ["Poder General", "Venta sin RPH", "Salida del País"],
+    href: "https://wa.me/573107932844",
+    cta: "Contactar como referencia",
+    videoUrl: "https://www.youtube.com/embed/TODO_CALDAS",
+    live: true,
+  },
+  {
+    initials: "NB",
+    status: "Demo disponible",
+    title: "Notaría Primera del Círculo de Bello",
+    subtitle: "Bello, Antioquia  Colombia",
+    description:
+      "Notaría piloto de referencia con acceso a demo guiada para validar el flujo, resolver dudas y revisar casos reales antes de salir a producción.",
+    tags: ["Entorno de demo", "Casos reales", "Acceso guiado"],
+    href: "https://wa.me/573107932844",
+    cta: "Solicitar demo",
+    videoUrl: "https://www.youtube.com/embed/TODO_BELLO",
+    live: false,
+  },
+];
+
 export function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterAccepted, setNewsletterAccepted] = useState(false);
+  const [videoModal, setVideoModal] = useState<{ open: boolean; url: string; title: string }>({
+    open: false,
+    url: "",
+    title: "",
+  });
 
   return (
     <main className="min-h-screen bg-[#0D1B2A] font-sans text-white">
@@ -117,10 +152,10 @@ export function LandingPage() {
               <LogoBadge initials={defaultBranding.logoInitials} compact />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold uppercase tracking-[0.24em] text-white">
+              <p className="truncate text-base font-black uppercase tracking-[0.24em] text-white">
                 {defaultBranding.commercialName}
               </p>
-              <p className="truncate text-sm text-[#8892A4]">{defaultBranding.legalName}</p>
+              <p className="truncate text-xs font-medium uppercase tracking-[0.18em] text-[#8892A4]">{defaultBranding.legalName}</p>
             </div>
           </div>
 
@@ -322,6 +357,89 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section id="casos-de-exito" className="bg-[#0D1B2A] py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#00E5A0]">CASOS DE ÉXITO</p>
+          <h2 className="mt-4 text-4xl font-bold tracking-tight text-white md:text-5xl">
+            Notarías que ya operan
+            <br />
+            <span className="text-[#00E5A0]">con EasyPro.</span>
+          </h2>
+          <p className="mt-6 max-w-3xl text-lg leading-relaxed text-[#8892A4]">
+            Estas notarías ya trabajan con una operación más clara, trazable y ordenada. Una está en producción y la otra funciona como referencia guiada para evaluación y demo.
+          </p>
+
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {successCases.map((caseItem) => (
+              <article
+                key={caseItem.title}
+                className="rounded-3xl border border-[#1E3A5F] bg-[#112236] p-8 transition-all duration-200 hover:border-[#00E5A0]/60"
+              >
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#00E5A0] text-base font-black text-black">
+                    {caseItem.initials}
+                  </div>
+
+                  <div
+                    className={`inline-flex items-center gap-2 rounded-full border border-[#1E3A5F] px-4 py-2 text-sm font-medium ${caseItem.live ? "text-[#00E5A0]" : "text-[#8892A4]"}`}
+                  >
+                    {caseItem.live ? (
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00E5A0] opacity-40" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E5A0]" />
+                      </span>
+                    ) : null}
+                    <span>{caseItem.status}</span>
+                  </div>
+                </div>
+
+                <h3 className="mt-6 text-2xl font-bold tracking-tight text-white">{caseItem.title}</h3>
+                <p className="mt-2 text-sm font-medium text-[#8892A4]">{caseItem.subtitle}</p>
+                <p className="mt-5 text-base leading-relaxed text-[#8892A4]">{caseItem.description}</p>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {caseItem.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-[#1E3A5F] bg-[#1A3350] px-4 py-2 text-sm text-[#E6EBF5]"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-8 border-t border-[#1E3A5F] pt-6 flex items-center justify-between gap-4 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVideoModal({
+                        open: true,
+                        url: caseItem.videoUrl,
+                        title: caseItem.title,
+                      })
+                    }
+                    className="inline-flex items-center gap-2 rounded-full border border-[#00E5A0]/40 px-4 py-2 text-sm font-semibold text-[#00E5A0] transition-colors hover:bg-[#00E5A0]/10"
+                  >
+                    <Play className="h-4 w-4" />
+                    Ver testimonio
+                  </button>
+
+                  <a
+                    href={caseItem.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-[#00E5A0] transition-colors hover:text-[#00C98A]"
+                  >
+                    {caseItem.cta}
+                    <ArrowRight className="h-4 w-4" />
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="bg-[#0D1B2A] py-24">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#00E5A0]">SOPORTE Y CLARIDAD</p>
@@ -386,6 +504,39 @@ export function LandingPage() {
           <p className="mt-14 text-sm text-[#8892A4]">© 2026 EasyPro Notarial · Todos los derechos reservados</p>
         </div>
       </section>
+      {videoModal.open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setVideoModal({ open: false, url: "", title: "" })}
+        >
+          <div
+            className="relative mx-4 w-full max-w-3xl rounded-3xl border border-[#1E3A5F] bg-[#0D1B2A] p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-lg font-bold text-white">{videoModal.title}</h3>
+              <button
+                type="button"
+                onClick={() => setVideoModal({ open: false, url: "", title: "" })}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#1E3A5F] text-[#8892A4] transition-colors hover:border-[#00E5A0]/60 hover:text-[#00E5A0]"
+                aria-label="Cerrar modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <iframe
+              className="mt-4 aspect-video w-full rounded-2xl"
+              src={videoModal.url}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={videoModal.title}
+            />
+
+            <p className="mt-3 text-center text-xs text-[#8892A4]">Video testimonial  próximamente disponible</p>
+          </div>
+        </div>
+      ) : null}
       <footer>
         <section className="bg-black py-12 px-6">
           <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">

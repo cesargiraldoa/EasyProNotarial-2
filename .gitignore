@@ -16,3 +16,18 @@ frontend/.env.local
 frontend/.env
 postgres-data/
 .DS_Store
+
+# Base de datos local
+*.db
+*.db-shm
+*.db-wal
+
+# Almacenamiento de casos
+backend/storage/
+
+# Repomix
+repomix-*.xml
+
+# Backups
+*.db.bak
+backend/*backup*
