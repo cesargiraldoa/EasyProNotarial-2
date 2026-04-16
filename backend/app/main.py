@@ -1,4 +1,5 @@
-﻿from contextlib import asynccontextmanager
+﻿import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from sqlalchemy import text
@@ -15,24 +16,48 @@ settings = get_settings()
 
 
 class FlexibleCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: StarletteRequest, call_next):
-        origin = request.headers.get("origin", "")
-        allowed = {
-            settings.frontend_url.rstrip("/"),
-            "http://localhost:5179",
+    def __init__(self, app):
+        super().__init__(app)
+        self.allowed_origins = self._load_allowed_origins()
+        print(f"[CORS DEBUG] Allowed origins loaded: {sorted(self.allowed_origins)}")
+
+    def _load_allowed_origins(self) -> set[str]:
+        origins = {
+            "https://easypro-notarial-2.vercel.app",
             "http://127.0.0.1:5179",
+            "http://localhost:5179",
+            "http://localhost:3000",
         }
-        is_allowed = (
-            origin in allowed
-            or origin.endswith(".vercel.app")
-            or origin.endswith(".railway.app")
-            or origin.endswith(".easypro.co")
-        )
+
+        env_values = [
+            settings.frontend_url,
+            os.getenv("FRONTEND_URL", ""),
+            os.getenv("FRONTEND_URLS", ""),
+            os.getenv("CORS_ALLOWED_ORIGINS", ""),
+        ]
+        for value in env_values:
+            if not value:
+                continue
+            for origin in value.split(","):
+                cleaned = origin.strip().rstrip("/")
+                if cleaned:
+                    origins.add(cleaned)
+        return origins
+
+    def _is_allowed_origin(self, origin: str) -> bool:
+        normalized = origin.rstrip("/")
+        if normalized in self.allowed_origins:
+            return True
+        return normalized.startswith("https://easypro-notarial-2-pr") and normalized.endswith(".vercel.app")
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        origin = request.headers.get("origin", "").rstrip("/")
+        is_allowed = self._is_allowed_origin(origin)
         cors_headers = {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization,Content-Type,Accept,Origin,X-Requested-With",
             "Access-Control-Max-Age": "600",
         }
         if request.method == "OPTIONS":
