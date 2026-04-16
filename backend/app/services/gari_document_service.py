@@ -187,25 +187,22 @@ DATOS DEL ACTO:{act_data_text}
 
 INSTRUCCIONES DE REDACCIÓN:
 1. Redacta el documento completo en español formal notarial colombiano
-2. Usa el formato de escritura pública con guiones separadores: "- - - - - - - - -"
-3. Incluye todas las secciones requeridas para este tipo de acto según la ley colombiana
-4. Inserta los datos de los intervinientes exactamente como se proporcionan
+2. Incluye todas las secciones requeridas según la ley colombiana
+3. Inserta los datos de los intervinientes exactamente como se proporcionan — nunca inventar datos
 5. Usa el género gramatical correcto según el sexo de cada interviniente
-6. Incluye las constancias notariales obligatorias:
-   - Autorización de tratamiento de datos (Ley 1581 de 2012)
-   - Advertencia sobre verificación de datos (Art. 102 Decreto Ley 960 de 1970)
-   - Deber de consejo del notario
-7. Incluye la sección de liquidación de derechos notariales con los valores proporcionados
-8. Incluye la sección de firmas con los datos de los comparecientes
-9. El documento debe estar listo para ser firmado sin marcadores de posición ni etiquetas
-10. Cada interviniente debe aparecer con EXACTAMENTE los datos proporcionados — nunca inventar ni completar datos faltantes.
-11. Los actos deben generarse en el orden exacto indicado en VARIANTE DOCUMENTAL si está presente.
+6. Incluye constancias notariales obligatorias: Ley 1581/2012, Art. 102 Decreto 960/1970
+7. Incluye liquidación de derechos notariales con los valores proporcionados
+8. Incluye sección de firmas con datos de comparecientes
+9. Documento listo para firmar, sin placeholders ni etiquetas
+10. Si hay VARIANTE DOCUMENTAL, genera los actos en ese orden exacto
+11. PRÁCTICA NOTARIAL: al final de cada párrafo rellena el espacio sobrante con guiones (- - - - -) hasta completar el renglón. Los guiones van DESPUÉS del texto, nunca en lugar del texto.
+12. Entre secciones usa línea completa de guiones: - - - - - - - - - - - - - - - - - - - - - - - - -
 
 FORMATO DE SALIDA:
-- Solo el texto del documento, sin explicaciones adicionales
-- Sin etiquetas ni placeholders
-- Con los datos reales insertados
-- En formato que pueda exportarse directamente a Word
+- Solo el texto del documento
+- Sin explicaciones ni etiquetas
+- Guiones rellenan espacios DESPUÉS del contenido
+- Listo para exportar a Word
 """
 
 
