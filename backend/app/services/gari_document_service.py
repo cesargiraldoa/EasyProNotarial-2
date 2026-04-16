@@ -199,11 +199,7 @@ INSTRUCCIONES DE REDACCIÓN:
 8. Incluye la sección de firmas con los datos de los comparecientes
 9. El documento debe estar listo para ser firmado sin marcadores de posición ni etiquetas
 10. Cada interviniente debe aparecer con EXACTAMENTE los datos proporcionados — nunca inventar ni completar datos faltantes.
-11. Cada acto comienza con su título en mayúsculas entre líneas de guiones: - - - - PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA - - - -
-12. Separar párrafos con: - - - - - - - - - - - - - - - - - - - -
-13. El documento debe terminar con: OTORGAMIENTO Y AUTORIZACIÓN, luego INSTRUCCIÓN ADMINISTRATIVA #17 DE AGOSTO DE 2010, luego ADVERTENCIAS, luego AUTORIZACIÓN LEY 1581 DE 2012, luego ARTÍCULO 29 LEY 675 DE 2001.
-14. El rol del APODERADO(A) DEL FIDEICOMISO actúa como vocera del fideicomiso, no como propietario ni constructor.
-15. El rol del APODERADO(A) DEL FIDEICOMITENTE actúa como constructor/promotor/comercializador.
+11. Los actos deben generarse en el orden exacto indicado en VARIANTE DOCUMENTAL si está presente.
 
 FORMATO DE SALIDA:
 - Solo el texto del documento, sin explicaciones adicionales
