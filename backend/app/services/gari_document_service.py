@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 
@@ -7,8 +8,17 @@ from docx import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm
 from openai import OpenAI
+from supabase import Client, create_client
 
 from app.core.config import get_settings
+
+
+def get_supabase_client() -> Client:
+    url = os.environ.get("SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not url or not key:
+        raise ValueError("SUPABASE_URL y SUPABASE_SERVICE_KEY requeridos")
+    return create_client(url, key)
 
 
 def get_openai_client() -> OpenAI:
@@ -242,10 +252,9 @@ def generate_notarial_document(
     return response.choices[0].message.content or ""
 
 
-def save_gari_document_as_docx(text: str, output_path: str | Path) -> Path:
-    """Guarda el texto generado por Gari como archivo .docx simple."""
+def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
+    """Guarda el texto generado por Gari como archivo .docx en Supabase Storage."""
     output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
 
     doc = DocxDocument()
     section = doc.sections[0]
@@ -268,8 +277,24 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> Path:
             run = p.runs[0] if p.runs else p.add_run(line)
             run.bold = True
 
-    doc.save(output)
-    return output
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    file_bytes = buffer.read()
+
+    supabase = get_supabase_client()
+    storage_path = str(output).replace("\\", "/")
+    supabase.storage.from_("documentos").upload(
+        path=storage_path,
+        file=file_bytes,
+        file_options={
+            "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "upsert": "true",
+        },
+    )
+
+    signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
+    return signed["signedURL"]
 
 
 def resolver_escritura(
