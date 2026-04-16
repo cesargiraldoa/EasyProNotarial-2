@@ -367,12 +367,19 @@ def list_notaries(
     current_user: User = Depends(get_current_user),
 ):
     owner_alias = aliased(User)
+    activity_counts = (
+        db.query(
+            NotaryCommercialActivity.notary_id.label("notary_id"),
+            func.count(NotaryCommercialActivity.id).label("activity_count"),
+        )
+        .group_by(NotaryCommercialActivity.notary_id)
+        .subquery()
+    )
     query = (
-        db.query(Notary, func.count(NotaryCommercialActivity.id).label("activity_count"))
-        .outerjoin(NotaryCommercialActivity, NotaryCommercialActivity.notary_id == Notary.id)
+        db.query(Notary, func.coalesce(activity_counts.c.activity_count, 0).label("activity_count"))
+        .outerjoin(activity_counts, activity_counts.c.notary_id == Notary.id)
         .outerjoin(owner_alias, owner_alias.id == Notary.commercial_owner_user_id)
         .options(joinedload(Notary.commercial_owner_user))
-        .group_by(Notary.id)
         .order_by(Notary.municipality.asc(), Notary.notary_label.asc())
     )
 
