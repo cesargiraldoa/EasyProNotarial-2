@@ -360,8 +360,8 @@ function getSessionToken() {
 function persistSessionToken(token: string, rememberSession: boolean) {
   if (typeof document !== "undefined") {
     const cookie = rememberSession
-      ? `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=Lax`
-      : `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+      ? `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=None; Secure`
+      : `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; SameSite=None; Secure`;
     document.cookie = cookie;
   }
   if (typeof window !== "undefined") {
