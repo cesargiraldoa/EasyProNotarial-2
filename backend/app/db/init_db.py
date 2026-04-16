@@ -84,9 +84,11 @@ def repair_model_strings(db) -> None:
         Role: ["name", "description"],
         User: ["full_name", "job_title", "phone"],
         Notary: [
-            "commercial_name", "legal_name", "city", "department", "municipality", "notary_label", "address", "phone", "email",
-            "current_notary_name", "business_hours", "commercial_owner", "main_contact_name", "main_contact_title", "commercial_phone",
-            "commercial_email", "commercial_notes", "lead_source", "potential", "internal_observations", "institutional_data",
+            "commercial_name", "legal_name", "city", "department", "municipality",
+            "notary_label", "address", "phone", "email", "current_notary_name",
+            "business_hours", "commercial_owner", "main_contact_name", "main_contact_title",
+            "commercial_phone", "commercial_email", "commercial_notes", "lead_source",
+            "potential", "internal_observations", "institutional_data",
         ],
         Case: ["case_type", "act_type", "metadata_json", "internal_case_number", "official_deed_number", "approved_by_role_code"],
         CaseStateDefinition: ["case_type", "code", "label"],
@@ -123,9 +125,9 @@ def ensure_notary_columns() -> None:
         return
     existing_columns = {column["name"] for column in inspector.get_columns("notaries")}
     required_columns = {
-        "address": 'ALTER TABLE notaries ADD COLUMN address VARCHAR(255)',
-        "phone": 'ALTER TABLE notaries ADD COLUMN phone TEXT',
-        "email": 'ALTER TABLE notaries ADD COLUMN email VARCHAR(120)',
+        "address": "ALTER TABLE notaries ADD COLUMN address VARCHAR(255)",
+        "phone": "ALTER TABLE notaries ADD COLUMN phone TEXT",
+        "email": "ALTER TABLE notaries ADD COLUMN email VARCHAR(120)",
         "department": "ALTER TABLE notaries ADD COLUMN department VARCHAR(80) DEFAULT 'Antioquia'",
         "municipality": "ALTER TABLE notaries ADD COLUMN municipality VARCHAR(120) DEFAULT ''",
         "notary_label": "ALTER TABLE notaries ADD COLUMN notary_label VARCHAR(160) DEFAULT ''",
@@ -140,8 +142,8 @@ def ensure_notary_columns() -> None:
         "main_contact_title": "ALTER TABLE notaries ADD COLUMN main_contact_title VARCHAR(120)",
         "commercial_phone": "ALTER TABLE notaries ADD COLUMN commercial_phone TEXT",
         "commercial_email": "ALTER TABLE notaries ADD COLUMN commercial_email VARCHAR(120)",
-        "last_management_at": "ALTER TABLE notaries ADD COLUMN last_management_at DATETIME",
-        "next_management_at": "ALTER TABLE notaries ADD COLUMN next_management_at DATETIME",
+        "last_management_at": "ALTER TABLE notaries ADD COLUMN last_management_at TIMESTAMP",
+        "next_management_at": "ALTER TABLE notaries ADD COLUMN next_management_at TIMESTAMP",
         "commercial_notes": "ALTER TABLE notaries ADD COLUMN commercial_notes TEXT",
         "priority": "ALTER TABLE notaries ADD COLUMN priority VARCHAR(20) DEFAULT 'media'",
         "lead_source": "ALTER TABLE notaries ADD COLUMN lead_source VARCHAR(120)",
@@ -152,14 +154,6 @@ def ensure_notary_columns() -> None:
         for column_name, ddl in required_columns.items():
             if column_name not in existing_columns:
                 connection.execute(text(ddl))
-        connection.execute(text("UPDATE notaries SET department = COALESCE(NULLIF(department, ''), 'Antioquia')"))
-        connection.execute(text("UPDATE notaries SET municipality = COALESCE(NULLIF(municipality, ''), city)"))
-        connection.execute(text("UPDATE notaries SET notary_label = COALESCE(NULLIF(notary_label, ''), commercial_name)"))
-        connection.execute(text("UPDATE notaries SET commercial_status = COALESCE(NULLIF(commercial_status, ''), 'prospecto')"))
-        connection.execute(text("UPDATE notaries SET base_color = COALESCE(NULLIF(base_color, ''), '#F4F7FB')"))
-        connection.execute(text("UPDATE notaries SET priority = COALESCE(NULLIF(priority, ''), 'media')"))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_notaries_catalog_identity_key_idx ON notaries (catalog_identity_key)"))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_notaries_catalog_identity_idx ON notaries (municipality, notary_label, email)"))
 
 
 def ensure_commercial_activity_columns() -> None:
@@ -170,7 +164,6 @@ def ensure_commercial_activity_columns() -> None:
     with engine.begin() as connection:
         if "responsible_user_id" not in existing_columns:
             connection.execute(text("ALTER TABLE notary_commercial_activities ADD COLUMN responsible_user_id INTEGER"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_notary_commercial_activities_responsible_user_id ON notary_commercial_activities (responsible_user_id)"))
 
 
 def ensure_case_columns() -> None:
@@ -184,7 +177,7 @@ def ensure_case_columns() -> None:
         "internal_case_number": "ALTER TABLE cases ADD COLUMN internal_case_number VARCHAR(40)",
         "official_deed_number": "ALTER TABLE cases ADD COLUMN official_deed_number VARCHAR(40)",
         "official_deed_year": "ALTER TABLE cases ADD COLUMN official_deed_year INTEGER",
-        "approved_at": "ALTER TABLE cases ADD COLUMN approved_at DATETIME",
+        "approved_at": "ALTER TABLE cases ADD COLUMN approved_at TIMESTAMP",
         "approved_by_user_id": "ALTER TABLE cases ADD COLUMN approved_by_user_id INTEGER",
         "approved_by_role_code": "ALTER TABLE cases ADD COLUMN approved_by_role_code VARCHAR(80)",
         "approved_document_version_id": "ALTER TABLE cases ADD COLUMN approved_document_version_id INTEGER",
@@ -193,10 +186,6 @@ def ensure_case_columns() -> None:
         for column_name, ddl in required_columns.items():
             if column_name not in existing_columns:
                 connection.execute(text(ddl))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_template_id ON cases (template_id)"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_created_by_user_id ON cases (created_by_user_id)"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_internal_case_number ON cases (internal_case_number)"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_official_deed_number ON cases (official_deed_number)"))
 
 
 def ensure_case_act_data_columns() -> None:
@@ -209,40 +198,6 @@ def ensure_case_act_data_columns() -> None:
             connection.execute(text("ALTER TABLE case_act_data ADD COLUMN gari_draft_text TEXT"))
 
 
-def ensure_case_indexes() -> None:
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
-    with engine.begin() as connection:
-        if "cases" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_current_state ON cases (current_state)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_current_owner_user_id ON cases (current_owner_user_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_notary_id ON cases (notary_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_cases_case_type ON cases (case_type)"))
-        if "case_state_definitions" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_state_definitions_case_type_step_order ON case_state_definitions (case_type, step_order)"))
-        if "case_timeline_events" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_timeline_events_case_id ON case_timeline_events (case_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_timeline_events_actor_user_id ON case_timeline_events (actor_user_id)"))
-        if "persons" in tables:
-            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_person_document_unique ON persons (document_type, document_number)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_person_full_name ON persons (full_name)"))
-        if "document_templates" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_document_templates_active_scope ON document_templates (is_active, scope_type)"))
-        if "template_required_roles" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_template_required_roles_template_id ON template_required_roles (template_id)"))
-        if "template_fields" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_template_fields_template_id ON template_fields (template_id)"))
-        if "case_participants" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_participants_case_id ON case_participants (case_id)"))
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_participants_person_id ON case_participants (person_id)"))
-        if "case_document_versions" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_document_versions_document_id ON case_document_versions (case_document_id)"))
-        if "case_workflow_events" in tables:
-            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_case_workflow_events_case_id ON case_workflow_events (case_id)"))
-        if "numbering_sequences" in tables:
-            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_numbering_sequences_scope ON numbering_sequences (sequence_type, notary_id, year)"))
-
-
 def init_db() -> None:
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
@@ -250,11 +205,13 @@ def init_db() -> None:
     ensure_commercial_activity_columns()
     ensure_case_columns()
     ensure_case_act_data_columns()
-    ensure_case_indexes()
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        seed_database(db)
+        from app.models.role import Role
+        role_count = db.query(Role).count()
+        if role_count == 0:
+            seed_database(db)
         repair_model_strings(db)
     finally:
         db.close()

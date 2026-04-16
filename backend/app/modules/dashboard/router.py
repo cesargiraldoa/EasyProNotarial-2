@@ -85,7 +85,7 @@ def top_counter(counter: Counter[str], *, limit: int = 6, highlight_label: str |
 
 
 def infer_online_users(cases: list[Case], active_users: list[User]) -> int:
-    recent_threshold = datetime.utcnow() - timedelta(days=14)
+    recent_threshold = datetime.now(timezone.utc) - timedelta(days=14)
     online_ids: set[int] = set()
     for case in cases:
         if case.updated_at and case.updated_at >= recent_threshold:
