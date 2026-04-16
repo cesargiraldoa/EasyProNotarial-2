@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
@@ -568,6 +568,26 @@ def seed_database(db: Session) -> None:
                 db.add(CaseDocumentVersion(case_document_id=export_pdf_doc.id, version_number=1, file_format="pdf", storage_path=str(pdf_path), original_filename=pdf_path.name, generated_from_template_id=template.id, placeholder_snapshot_json=serialize_placeholder_snapshot(replacements), created_by_user_id=persisted_users["protocolista@notaria75.co"].id))
                 db.add(CaseWorkflowEvent(case_id=power_case.id, actor_user_id=persisted_users["protocolista@notaria75.co"].id, actor_role_code="protocolist", event_type="draft_generated", comment="Borrador documental versión 1 generado", metadata_json=json.dumps({"version": 1}, ensure_ascii=False)))
         db.commit()
+
+    tablas = [
+        "cases",
+        "case_documents",
+        "case_document_versions",
+        "case_participants",
+        "case_act_data",
+        "case_timeline_events",
+        "case_workflow_events",
+    ]
+
+    for tabla in tablas:
+        db.execute(text(f"""
+            SELECT setval(
+                pg_get_serial_sequence('{tabla}', 'id'),
+                COALESCE((SELECT MAX(id) FROM {tabla}), 0) + 1,
+                false
+            )
+        """))
+    db.commit()
 
 if __name__ == "__main__":
     from app.db.session import SessionLocal
