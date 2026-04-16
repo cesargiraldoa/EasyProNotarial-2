@@ -17,6 +17,11 @@ def ensure_storage_dirs() -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
+def template_file_path(filename: str) -> Path:
+    ensure_storage_dirs()
+    return TEMPLATE_STORAGE / sanitize_filename(filename)
+
+
 def sanitize_filename(filename: str) -> str:
     keep = [char if char.isalnum() or char in {"-", "_", "."} else "_" for char in filename.strip()]
     sanitized = "".join(keep).strip("._") or "archivo"
