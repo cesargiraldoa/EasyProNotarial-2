@@ -212,6 +212,14 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     }
   }
 
+  function handleVersionDownload(version: { download_url?: string | null; storage_path?: string | null }, filename: string) {
+    if (version.storage_path?.startsWith("https://")) {
+      window.open(version.storage_path, "_blank");
+      return;
+    }
+    void handleDownload(version.download_url ?? "", filename);
+  }
+
   return (
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] p-6">
@@ -274,10 +282,10 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                   {draftDocument?.versions?.[0] && (
                     <button
                       type="button"
-                      onClick={() => void handleDownload(
-                        draftDocument.versions[draftDocument.versions.length - 1].download_url ?? "",
-                        `gari_borrador_v${draftDocument.versions[draftDocument.versions.length - 1].version_number}.docx`
-                      )}
+                      onClick={() => {
+                        const latestVersion = draftDocument.versions[draftDocument.versions.length - 1];
+                        handleVersionDownload(latestVersion, `gari_borrador_v${latestVersion.version_number}.docx`);
+                      }}
                       className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold text-primary"
                     >
                       <Download className="h-4 w-4" />
@@ -403,10 +411,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => void handleDownload(
-                                    v.download_url ?? "",
-                                    `gari_v${v.version_number}.docx`
-                                  )}
+                                  onClick={() => handleVersionDownload(v, `gari_v${v.version_number}.docx`)}
                                   className="rounded-lg border border-[var(--line)] p-1.5 text-secondary hover:text-primary transition"
                                 >
                                   <Download className="h-3.5 w-3.5" />
@@ -463,5 +468,3 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     </div>
   );
 }
-
-
