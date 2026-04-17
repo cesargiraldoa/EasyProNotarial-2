@@ -305,7 +305,10 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
             },
         )
         signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
-        return signed["signedURL"]
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        if not signed_url:
+            raise ValueError(f"Supabase no genero signed URL. Respuesta: {signed}")
+        return signed_url
     except Exception as exc:
         raise ValueError(f"Error al subir documento a Supabase Storage: {exc}") from exc
 
@@ -580,3 +583,4 @@ if __name__ == "__main__":
     )
     print("Ejemplo jaggua bogota 2c:")
     print(ejemplo_jaggua)
+
