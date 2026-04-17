@@ -182,7 +182,8 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     try {
       const { getToken } = await import("@/lib/auth");
       const token = getToken();
-      const res = await fetch(`http://127.0.0.1:8001${downloadUrl}`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
+      const res = await fetch(`${API_URL}${downloadUrl}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("No fue posible descargar el archivo.");
@@ -361,7 +362,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                             setIsRegenerating(true);
                             setError(null);
                             try {
-                              const updated = await generateWithGari(caseId, correctionNote);
+                              const updated = await generateWithGari(caseId, correctionNote, correctionNote);
                               setCaseDetail(updated);
                               setGariText(updated?.act_data?.gari_draft_text ?? null);
                               setCorrectionNote("");
@@ -407,7 +408,17 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
 
                       <button
                         type="button"
-                        onClick={() => setFeedback("Documento aprobado. Listo para firma del notario.")}
+                        onClick={async () => {
+                          try {
+                            const { approveDocumentCase } = await import("@/lib/document-flow");
+                            await approveDocumentCase(caseId, "approver", "Documento aprobado");
+                            setFeedback("Documento aprobado. Listo para firma del notario.");
+                            const updated = await getDocumentCase(caseId);
+                            setCaseDetail(updated);
+                          } catch (e) {
+                            setError(e instanceof Error ? e.message : "Error al aprobar.");
+                          }
+                        }}
                         className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:opacity-90 transition"
                       >
                         <FileSignature className="h-4 w-4" />

@@ -197,13 +197,12 @@ export async function saveCaseActData(caseId: number, payload: CaseActDataPayloa
 export async function addClientComment(caseId: number, comment: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/client-comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment }) })); }
 export async function addInternalNote(caseId: number, note: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/internal-notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) })); }
 export async function generateCaseDraft(caseId: number, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/generate-draft`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment: comment || null }) })); }
-export async function generateWithGari(caseId: number, comment?: string): Promise<DocumentFlowCase> {
-  const res = await apiFetch(`/api/v1/document-flow/cases/${caseId}/generate-with-gari`, {
+export async function generateWithGari(caseId: number, comment?: string, correctionText?: string): Promise<DocumentFlowCase> {
+  return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/generate-with-gari`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ comment: comment || "Generado con Gari" }),
-  });
-  return res as DocumentFlowCase;
+    body: JSON.stringify({ comment: comment || null, correction_text: correctionText || null }),
+  }));
 }
 export async function approveDocumentCase(caseId: number, role_code: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role_code, comment: comment || null }) })); }
 export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_format }) })); }
