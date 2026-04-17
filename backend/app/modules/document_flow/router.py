@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -723,6 +723,8 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
                 break
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versin documental no encontrada.")
+    if version.storage_path.startswith("https://"):
+        return RedirectResponse(url=version.storage_path, status_code=302)
     path = Path(version.storage_path)
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no est disponible.")
