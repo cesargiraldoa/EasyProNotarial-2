@@ -37,7 +37,8 @@ def build_gari_prompt(
     act_data: dict,
     template_reference_text: str | None = None,
     variante_id: str | None = None,
-    correction_text: str | None = None,
+    correction_note: str | None = None,
+    previous_draft: str | None = None,
 ) -> str:
     """Construye el prompt para Gari con todos los datos del acto notarial."""
     ROLES_LABEL = {
@@ -182,6 +183,26 @@ ACTOS QUE DEBE CONTENER EN ESTE ORDEN EXACTO:
 {actos_texto}
 """
 
+    correction_section = ""
+    if correction_note and previous_draft:
+        correction_section = f"""
+MODO CORRECCIÓN ACTIVO:
+El siguiente es el borrador actual que debes corregir:
+---BORRADOR ACTUAL---
+{previous_draft[:8000]}
+---FIN BORRADOR---
+
+Instrucción de corrección: {correction_note}
+
+INSTRUCCIÓN CRÍTICA: Aplica ÚNICAMENTE el cambio solicitado en la instrucción anterior.
+No reescribas párrafos que no fueron mencionados. No cambies datos que no se pidan.
+Devuelve el documento completo con solo esa corrección aplicada.
+"""
+    elif correction_note:
+        correction_section = f"""
+INSTRUCCIÓN DE CORRECCIÓN: {correction_note}
+Aplica únicamente este cambio. No modifiques nada más del documento.
+"""
     prompt = f"""Eres un experto en derecho notarial colombiano. Tu tarea es redactar un instrumento público notarial completo y correcto jurídicamente.
 
 NOTARÍA: {notary_label}
@@ -195,6 +216,8 @@ DATOS DEL ACTO:{act_data_text}
 {variante_section}
 
 {reference_section}
+
+{correction_section}
 
 INSTRUCCIONES DE REDACCIÓN:
 1. Redacta el documento completo en español formal notarial colombiano
@@ -213,9 +236,6 @@ FORMATO DE SALIDA:
 - Listo para exportar a Word
 """
 
-    if correction_text is not None:
-        prompt += f"\n\nINSTRUCCIÓN DE CORRECCIÓN (prioridad máxima):\n{correction_text}\nAplica esta corrección al documento manteniendo el resto exactamente igual."
-
     return prompt
 
 
@@ -226,8 +246,10 @@ def generate_notarial_document(
     participants: list[dict],
     act_data: dict,
     template_reference_text: str | None = None,
-    correction_text: str | None = None,
     max_tokens: int = 4000,
+    variante_id: str | None = None,
+    correction_note: str | None = None,
+    previous_draft: str | None = None,
 ) -> str:
     """Genera el documento notarial completo usando GPT-4o."""
     client = get_openai_client()
@@ -238,7 +260,9 @@ def generate_notarial_document(
         participants=participants,
         act_data=act_data,
         template_reference_text=template_reference_text,
-        correction_text=correction_text,
+        variante_id=variante_id,
+        correction_note=correction_note,
+        previous_draft=previous_draft,
     )
 
     response = client.chat.completions.create(
@@ -275,7 +299,16 @@ def build_gari_docx_buffer(text: str) -> io.BytesIO:
             doc.add_paragraph()
             continue
         texto = line
-        if texto and not texto.strip().startswith("- -"):
+        # Solo agregar guiones si la línea parece un campo para rellenar
+        # (termina con ":" o es corta y no es un título/cláusula completa)
+        es_encabezado = any(line.upper().startswith(kw) for kw in [
+            "PRIMERO", "SEGUNDO", "TERCERO", "CUARTO", "QUINTO", "SEXTO",
+            "SÉPTIMO", "OCTAVO", "NOVENO", "DÉCIMO", "ESCRITURA", "ACTO:",
+            "OTORGAMIENTO", "CONSTANCIA", "AUTORIZACIÓN", "PARÁGRAFO",
+            "PARAGRAFO", "NOTA", "DERECHOS", "SUPERFONDO", "LIQUIDACIÓN",
+        ])
+        es_campo_vacio = line.endswith(":") or (len(line) < 60 and not es_encabezado and not line.endswith("."))
+        if es_campo_vacio and not line.strip().startswith("- -"):
             texto = texto + " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
         p = doc.add_paragraph(texto)
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -290,13 +323,26 @@ def build_gari_docx_buffer(text: str) -> io.BytesIO:
 
 
 def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
-    """Guarda el texto generado por Gari como archivo .docx en disco local."""
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
+    """Genera el .docx en memoria y lo sube a Supabase Storage. Retorna signed URL."""
     buffer = build_gari_docx_buffer(text)
-    output.write_bytes(buffer.getvalue())
-    return str(output)
+    file_bytes = buffer.getvalue()
 
+    supabase = get_supabase_client()
+    storage_path = str(output_path).replace("\\", "/")
+    supabase.storage.from_("documentos").upload(
+        path=storage_path,
+        file=file_bytes,
+        file_options={
+            "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "upsert": "true",
+        },
+    )
+
+    signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
+    url = signed.get("signedUrl") or signed.get("signedURL") or ""
+    if not url:
+        raise ValueError(f"Supabase no retornó signed URL para {storage_path}. Respuesta: {signed}")
+    return url
 
 def resolver_escritura(
     proyecto: str,

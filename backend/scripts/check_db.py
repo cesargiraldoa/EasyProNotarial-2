@@ -1,11 +1,15 @@
-import sqlite3
-
-conn = sqlite3.connect('easypro2.db')
-cursor = conn.cursor()
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-tables = cursor.fetchall()
-for t in tables:
-    cursor.execute(f"SELECT COUNT(*) FROM {t[0]}")
-    count = cursor.fetchone()[0]
-    print(f"{t[0]}: {count} registros")
-conn.close()
+import os
+os.environ['DATABASE_URL'] = 'postgresql://postgres:JuanV1959%2F%2F%2A@db.egwdrdgtgmogcahhdtdy.supabase.co:5432/postgres'
+from sqlalchemy import create_engine, text
+engine = create_engine(os.environ['DATABASE_URL'])
+with engine.connect() as conn:
+    r = conn.execute(text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name='case_document_versions' ORDER BY ordinal_position"
+    )).fetchall()
+    print("COLUMNAS:", [x[0] for x in r])
+    r2 = conn.execute(text(
+        "SELECT storage_path FROM case_document_versions ORDER BY id DESC LIMIT 3"
+    )).fetchall()
+    for row in r2:
+        print("storage_path:", row[0])
