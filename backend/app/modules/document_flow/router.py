@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import io
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -49,8 +50,12 @@ from app.schemas.case import (
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
 from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
-from app.services.gari_document_service import generate_notarial_document, resolver_escritura, save_gari_document_as_docx
-from app.services.storage import guess_media_type, next_case_file_path, save_base64_file
+from app.services.gari_document_service import (
+    build_gari_docx_buffer,
+    generate_notarial_document,
+    resolver_escritura,
+)
+from app.services.storage import next_case_file_path, save_base64_file
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
 
@@ -392,7 +397,8 @@ def add_document_version(db: Session, case: Case, category: str, title: str, fil
 
     source_raw = str(source_path)
     is_remote_source = source_raw.startswith("http://") or source_raw.startswith("https://")
-    if is_remote_source:
+    is_virtual_source = source_raw.startswith("gari://")
+    if is_remote_source or is_virtual_source:
         storage_path = source_raw
         stored_filename = original_filename
     else:
@@ -606,15 +612,13 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     case.act_data.gari_draft_text = generated_text
     db.flush()
 
-    temp_output = next_case_file_path(case.id, "gari-temp", 1, "docx", f"gari_case_{case.id}.docx")
-    gari_document_url = save_gari_document_as_docx(generated_text, temp_output)
     version = add_document_version(
         db,
         case,
         "draft",
         "Borrador documental Gari",
         "docx",
-        gari_document_url,
+        f"gari://{case.id}",
         f"{case.internal_case_number or case.id}_gari.docx",
         current_user.id,
         case.template_id,
@@ -725,12 +729,28 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
                 break
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versin documental no encontrada.")
+    if version.storage_path.startswith("gari://"):
+        return RedirectResponse(url=f"/api/v1/document-flow/cases/{case_id}/gari-download", status_code=302)
     if version.storage_path.startswith("https://"):
         return RedirectResponse(url=version.storage_path, status_code=302)
-    path = Path(version.storage_path)
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no est disponible.")
-    return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no disponible en producción")
+
+
+@router.get("/cases/{case_id}/gari-download")
+def download_gari_document(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    gari_text = (case.act_data.gari_draft_text if case.act_data else None) or ""
+    if not gari_text.strip():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay documento Gari generado")
+
+    buffer = build_gari_docx_buffer(gari_text)
+    filename = f"{case.internal_case_number or case.id}_gari.docx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        io.BytesIO(buffer.getvalue()),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
+    )
 
 
 @router.post("/cases/{case_id}/timeline-events", response_model=CaseDetail)

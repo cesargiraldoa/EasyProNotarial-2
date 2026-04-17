@@ -260,10 +260,8 @@ def generate_notarial_document(
     return response.choices[0].message.content or ""
 
 
-def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
-    """Guarda el texto generado por Gari como archivo .docx en Supabase Storage."""
-    output = Path(output_path)
-
+def build_gari_docx_buffer(text: str) -> io.BytesIO:
+    """Construye un documento .docx en memoria con formato Gari."""
     doc = DocxDocument()
     section = doc.sections[0]
     section.top_margin = Cm(2.5)
@@ -288,35 +286,16 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
-    file_bytes = buffer.read()
+    return buffer
 
-    case_folder = output.parent.name
-    filename = output.name
-    storage_path = f"cases/{filename}"
 
-    try:
-        supabase = get_supabase_client()
-        print(
-            f"[GARI-STORAGE] Iniciando upload a Supabase. storage_path={storage_path}",
-            flush=True,
-        )
-        supabase.storage.from_("documentos").upload(
-            path=storage_path,
-            file=file_bytes,
-            file_options={
-                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "upsert": "true",
-            },
-        )
-        print("[GARI-STORAGE] Upload completado. Generando signed URL.", flush=True)
-        signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
-        print(f"[GARI-STORAGE] signed URL response: {signed}", flush=True)
-        signed_url = signed.get("signedURL") or signed.get("signedUrl")
-        if not signed_url:
-            raise ValueError(f"Supabase no genero signed URL. Respuesta: {signed}")
-        return signed_url
-    except Exception as exc:
-        raise ValueError(f"Error al subir documento a Supabase Storage: {exc}") from exc
+def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
+    """Guarda el texto generado por Gari como archivo .docx en disco local."""
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    buffer = build_gari_docx_buffer(text)
+    output.write_bytes(buffer.getvalue())
+    return str(output)
 
 
 def resolver_escritura(
