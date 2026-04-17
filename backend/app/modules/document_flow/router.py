@@ -595,6 +595,7 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
             participants=participants,
             act_data=act_data,
             template_reference_text=template_reference_text,
+            correction_text=payload.correction_text,
             max_tokens=max_tokens,
         )
     except ValueError as exc:
@@ -624,8 +625,9 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
         case.current_state = "generado"
 
-    append_timeline(db, case.id, current_user.id, "gari_draft_generated", previous_state, case.current_state, payload.comment or "Borrador generado con Gari", {"version": version.version_number, "variante_id": variante_id})
-    append_workflow(db, case, current_user, "gari_draft_generated", actor_role_code="protocolist", comment=payload.comment or "Borrador generado con Gari", from_state=previous_state, to_state=case.current_state, metadata={"version": version.version_number, "source": "gari", "variante_id": variante_id})
+    comment = f"Corrección aplicada: {payload.correction_text}" if payload.correction_text else payload.comment or "Borrador generado con Gari"
+    append_timeline(db, case.id, current_user.id, "gari_draft_generated", previous_state, case.current_state, comment, {"version": version.version_number, "variante_id": variante_id})
+    append_workflow(db, case, current_user, "gari_draft_generated", actor_role_code="protocolist", comment=comment, from_state=previous_state, to_state=case.current_state, metadata={"version": version.version_number, "source": "gari", "variante_id": variante_id})
     db.commit()
     return serialize_case_detail(load_case_or_404(db, case.id))
 

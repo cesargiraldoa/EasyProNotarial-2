@@ -219,6 +219,7 @@ class DraftGenerationRequest(BaseModel):
 
 class GariGenerationRequest(BaseModel):
     comment: str | None = None
+    correction_text: str | None = None
 
 
 class ApprovalRequest(BaseModel):

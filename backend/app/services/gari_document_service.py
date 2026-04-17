@@ -37,6 +37,7 @@ def build_gari_prompt(
     act_data: dict,
     template_reference_text: str | None = None,
     variante_id: str | None = None,
+    correction_text: str | None = None,
 ) -> str:
     """Construye el prompt para Gari con todos los datos del acto notarial."""
     ROLES_LABEL = {
@@ -181,7 +182,7 @@ ACTOS QUE DEBE CONTENER EN ESTE ORDEN EXACTO:
 {actos_texto}
 """
 
-    return f"""Eres un experto en derecho notarial colombiano. Tu tarea es redactar un instrumento público notarial completo y correcto jurídicamente.
+    prompt = f"""Eres un experto en derecho notarial colombiano. Tu tarea es redactar un instrumento público notarial completo y correcto jurídicamente.
 
 NOTARÍA: {notary_label}
 NOTARIO TITULAR: {notary_name}
@@ -212,6 +213,11 @@ FORMATO DE SALIDA:
 - Listo para exportar a Word
 """
 
+    if correction_text is not None:
+        prompt += f"\n\nINSTRUCCIÓN DE CORRECCIÓN (prioridad máxima):\n{correction_text}\nAplica esta corrección al documento manteniendo el resto exactamente igual."
+
+    return prompt
+
 
 def generate_notarial_document(
     act_type: str,
@@ -220,6 +226,7 @@ def generate_notarial_document(
     participants: list[dict],
     act_data: dict,
     template_reference_text: str | None = None,
+    correction_text: str | None = None,
     max_tokens: int = 4000,
 ) -> str:
     """Genera el documento notarial completo usando GPT-4o."""
@@ -231,6 +238,7 @@ def generate_notarial_document(
         participants=participants,
         act_data=act_data,
         template_reference_text=template_reference_text,
+        correction_text=correction_text,
     )
 
     response = client.chat.completions.create(
