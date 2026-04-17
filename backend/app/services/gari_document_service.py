@@ -290,19 +290,24 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
     buffer.seek(0)
     file_bytes = buffer.read()
 
-    supabase = get_supabase_client()
-    storage_path = str(output).replace("\\", "/")
-    supabase.storage.from_("documentos").upload(
-        path=storage_path,
-        file=file_bytes,
-        file_options={
-            "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "upsert": "true",
-        },
-    )
+    case_folder = output.parent.name
+    filename = output.name
+    storage_path = f"cases/{filename}"
 
-    signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
-    return signed["signedURL"]
+    try:
+        supabase = get_supabase_client()
+        supabase.storage.from_("documentos").upload(
+            path=storage_path,
+            file=file_bytes,
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "upsert": "true",
+            },
+        )
+        signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
+        return signed["signedURL"]
+    except Exception as exc:
+        raise ValueError(f"Error al subir documento a Supabase Storage: {exc}") from exc
 
 
 def resolver_escritura(
