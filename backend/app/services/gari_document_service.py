@@ -296,6 +296,10 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
 
     try:
         supabase = get_supabase_client()
+        print(
+            f"[GARI-STORAGE] Iniciando upload a Supabase. storage_path={storage_path}",
+            flush=True,
+        )
         supabase.storage.from_("documentos").upload(
             path=storage_path,
             file=file_bytes,
@@ -304,7 +308,9 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
                 "upsert": "true",
             },
         )
+        print("[GARI-STORAGE] Upload completado. Generando signed URL.", flush=True)
         signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
+        print(f"[GARI-STORAGE] signed URL response: {signed}", flush=True)
         signed_url = signed.get("signedURL") or signed.get("signedUrl")
         if not signed_url:
             raise ValueError(f"Supabase no genero signed URL. Respuesta: {signed}")
@@ -583,4 +589,3 @@ if __name__ == "__main__":
     )
     print("Ejemplo jaggua bogota 2c:")
     print(ejemplo_jaggua)
-
