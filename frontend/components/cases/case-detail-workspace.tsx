@@ -180,9 +180,20 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
 
   async function handleDownload(downloadUrl: string, filename: string) {
     try {
+      if (downloadUrl.startsWith("https://")) {
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = filename;
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
       const { getToken } = await import("@/lib/auth");
       const token = getToken();
-      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
       const res = await fetch(`${API_URL}${downloadUrl}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
