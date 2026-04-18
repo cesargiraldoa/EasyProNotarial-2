@@ -5,13 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Clock3,
-  ImageIcon,
-  Mail,
-  MapPin,
-  Phone,
   Save,
   ShieldCheck,
-  SwatchBook,
   UserRound
 } from "lucide-react";
 import {
@@ -93,18 +88,6 @@ function auditLabel(eventType: string, fieldName?: string | null) {
   if (eventType === "owner_changed") return "Cambio de responsable";
   if (eventType === "activity_added") return "Gestión agregada";
   return eventType;
-}
-
-function colorInput(label: string, value: string, onChange: (value: string) => void) {
-  return (
-    <label className="grid gap-2 text-sm font-medium text-primary">
-      {label}
-      <div className="ep-input flex items-center gap-3 rounded-2xl px-4 py-3">
-        <input type="color" value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-12 rounded-xl border-0 bg-transparent p-0" />
-        <input value={value} onChange={(event) => onChange(event.target.value)} className="w-full bg-transparent text-primary outline-none" />
-      </div>
-    </label>
-  );
 }
 
 export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
@@ -211,22 +194,19 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
     return <div className="ep-card rounded-[2rem] p-6 text-secondary">Cargando detalle de notaría...</div>;
   }
 
-  const initials = formState.notary_label.slice(0, 2).toUpperCase();
-
   return (
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
-            <Link href="/dashboard/notarias" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+            <Link href="/dashboard/comercial" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
               <ArrowLeft className="h-4 w-4" />
-              Volver al catálogo maestro
+              Volver a Comercial
             </Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de notaría + CRM</p>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Gestión comercial</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary sm:text-4xl">{notary.notary_label}</h1>
             <p className="mt-3 text-base leading-7 text-secondary">
-              Entidad única del sistema con identidad institucional, datos fuente del catálogo maestro,
-              responsable comercial real y branding listo para operación, interfaz y documentos.
+              Registro comercial y seguimiento de gestiones.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:w-[420px]">
@@ -243,7 +223,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-secondary">Editor integral</p>
-              <h2 className="mt-2 text-2xl font-semibold text-primary">Catálogo, branding y CRM comercial</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-primary">Gestión CRM comercial</h2>
             </div>
             <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:cursor-not-allowed disabled:opacity-70">
               <Save className="h-4 w-4" />
@@ -263,22 +243,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
               <label className="grid gap-2 text-sm font-medium text-primary">Horario<textarea value={formState.business_hours} onChange={(event) => updateField("business_hours", event.target.value)} rows={3} className="ep-textarea rounded-2xl px-4 py-3" /></label>
             </div>
 
-            <div className="ep-filter-panel rounded-[1.75rem] p-5">
-              <div className="flex items-center gap-3">
-                <SwatchBook className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="text-sm font-semibold text-primary">Branding institucional ampliado</p>
-                  <p className="text-sm text-secondary">Logo, tres colores y base visual lista para interfaz y documentos.</p>
-                </div>
-              </div>
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <label className="grid gap-2 text-sm font-medium text-primary">Logo URL<input value={formState.logo_url} onChange={(event) => updateField("logo_url", event.target.value)} placeholder="https://.../logo.png" className="ep-input h-12 rounded-2xl px-4" /></label>
-                <label className="grid gap-2 text-sm font-medium text-primary">Estado activo<select value={String(formState.is_active)} onChange={(event) => updateField("is_active", event.target.value === "true")} className="ep-select h-12 rounded-2xl px-4"><option value="true">Activa</option><option value="false">Inactiva</option></select></label>
-                {colorInput("Color primario", formState.primary_color, (value) => updateField("primary_color", value))}
-                {colorInput("Color secundario", formState.secondary_color, (value) => updateField("secondary_color", value))}
-                {colorInput("Color base", formState.base_color, (value) => updateField("base_color", value))}
-              </div>
-            </div>
+            <label className="grid gap-2 text-sm font-medium text-primary">Estado activo<select value={String(formState.is_active)} onChange={(event) => updateField("is_active", event.target.value === "true")} className="ep-select h-12 rounded-2xl px-4"><option value="true">Activa</option><option value="false">Inactiva</option></select></label>
           </div>
 
           <label className="grid gap-2 text-sm font-medium text-primary">Datos institucionales<textarea value={formState.institutional_data} onChange={(event) => updateField("institutional_data", event.target.value)} rows={4} className="ep-textarea rounded-2xl px-4 py-3" /></label>
@@ -306,27 +271,6 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
         </form>
 
         <aside className="space-y-6">
-          <div className="ep-card rounded-[2rem] p-6" style={{ backgroundColor: formState.base_color }}>
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] border border-white/40 bg-white/60 text-lg font-semibold text-primary shadow-soft">
-                {formState.logo_url ? <ImageIcon className="h-7 w-7" /> : initials}
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-secondary">Vista previa</p>
-                <h2 className="mt-2 text-2xl font-semibold text-primary">Branding de la notaría</h2>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-3">
-              <div className="rounded-[1.2rem] px-4 py-3 text-white shadow-panel" style={{ backgroundColor: formState.primary_color }}>CTA primario · identidad institucional</div>
-              <div className="rounded-[1.2rem] px-4 py-3 text-primary shadow-soft" style={{ backgroundColor: formState.secondary_color }}>Color secundario · apoyo visual</div>
-              <div className="ep-card rounded-[1.2rem] px-4 py-3 text-sm text-secondary">
-                <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />{formState.address || "Sin dirección registrada"}</div>
-                <div className="mt-2 flex items-center gap-2"><Phone className="h-4 w-4 text-primary" />{formState.phone || formState.commercial_phone || "Sin teléfono registrado"}</div>
-                <div className="mt-2 flex items-center gap-2"><Mail className="h-4 w-4 text-primary" />{formState.email || formState.commercial_email || "Sin correo registrado"}</div>
-              </div>
-            </div>
-          </div>
-
           <div className="ep-card rounded-[2rem] p-6">
             <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-[0.2em] text-secondary">Actividad comercial</p><h2 className="text-2xl font-semibold text-primary">Registrar gestión</h2></div></div>
             <form onSubmit={handleAddActivity} className="mt-5 space-y-4">
