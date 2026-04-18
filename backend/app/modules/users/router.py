@@ -127,10 +127,21 @@ def list_roles(db: Session = Depends(get_db), current_user: User = Depends(requi
 @router.get("/options", response_model=list[UserOption])
 def list_user_options(
     active_only: bool = Query(default=True),
+    role_code: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    role_codes = get_role_codes(current_user)
     query = db.query(User).options(joinedload(User.default_notary)).order_by(User.full_name.asc())
+    if "super_admin" not in role_codes:
+        query = query.filter(User.default_notary_id == current_user.default_notary_id)
+    if role_code:
+        query = (
+            query.join(User.role_assignments)
+            .join(RoleAssignment.role)
+            .filter(Role.code == role_code)
+            .distinct()
+        )
     if active_only:
         query = query.filter(User.is_active.is_(True))
     users = query.all()
