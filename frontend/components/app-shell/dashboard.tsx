@@ -350,13 +350,6 @@ export function DashboardOverview() {
           <div className="grid gap-6 bg-[radial-gradient(circle_at_top_left,rgba(80,214,144,0.12),transparent_32%),linear-gradient(180deg,rgba(var(--panel),1)_0%,rgba(var(--panel-strong),1)_100%)] p-6 sm:p-7">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-3xl">
-                <p className="text-xs uppercase tracking-[0.2em] text-secondary">Centro operativo</p>
-                <h2 className="mt-2 text-[2rem] font-semibold tracking-[-0.05em] text-primary sm:text-[2.35rem]">
-                  {pilot ? `${pilot.municipality}, ${pilot.department} como referencia clara de operación real.` : "Centro de control documental."}
-                </h2>
-                <p className="mt-3 max-w-2xl text-base leading-7 text-secondary">
-                  Este bloque ocupa más ancho para que la lectura principal no compita con tarjetas laterales ni con datos secundarios.
-                </p>
               </div>
             </div>
 
