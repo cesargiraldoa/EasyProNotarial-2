@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -105,6 +105,7 @@ export function AppShell({ children }: AppShellProps) {
     Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "System Status": ["super_admin"],
     Configuración: ["super_admin", "admin_notary"],
+    "Mi Perfil": ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
   };
   const navModuleCodesByLabel: Record<string, string[]> = {
     Resumen: ["resumen"],
@@ -120,6 +121,7 @@ export function AppShell({ children }: AppShellProps) {
     Lotes: ["lotes"],
     "System Status": ["system_status"],
     Configuración: ["configuracion"],
+    "Mi Perfil": [],
   };
   const hasPermissions = Boolean(currentUser?.permissions?.length);
   const allowedModuleCodes = new Set(
@@ -134,6 +136,10 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     if (hasPermissions) {
+      if (label === "Mi Perfil") {
+        return true;
+      }
+
       const allowedModuleCodesForLabel = navModuleCodesByLabel[label];
       if (!allowedModuleCodesForLabel) {
         return false;
