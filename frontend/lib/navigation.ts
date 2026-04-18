@@ -17,6 +17,7 @@ export const appNavigation = [
   { label: "Comercial", href: "/dashboard/comercial", icon: ShieldCheck },
   { label: "Notarías", href: "/dashboard/notarias", icon: Building2 },
   { label: "Usuarios", href: "/dashboard/usuarios", icon: Users2 },
+  { label: "Roles", href: "/dashboard/roles", icon: ShieldCheck },
   { label: "Casos", href: "/dashboard/casos", icon: FolderKanban },
   { label: "Crear Caso", href: "/dashboard/casos/crear", icon: PenTool },
   { label: "Actos / Plantillas", href: "/dashboard/actos-plantillas", icon: Layers3 },
