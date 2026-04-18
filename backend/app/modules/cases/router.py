@@ -6,7 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload
 
-from app.core.deps import get_current_user, get_db, require_roles
+from app.core.deps import get_current_user, get_db, get_role_codes, require_roles
 from app.models.case import Case
 from app.models.case_state_definition import CaseStateDefinition
 from app.models.case_timeline_event import CaseTimelineEvent
@@ -201,6 +201,7 @@ def list_cases(
     current_user: User = Depends(get_current_user),
 ):
     owner_alias = aliased(User)
+    role_codes = get_role_codes(current_user)
     query = (
         db.query(Case)
         .options(
@@ -215,6 +216,8 @@ def list_cases(
         .outerjoin(owner_alias, owner_alias.id == Case.current_owner_user_id)
         .order_by(Case.updated_at.desc(), Case.id.desc())
     )
+    if "super_admin" not in role_codes:
+        query = query.filter(Case.notary_id == current_user.default_notary_id)
     if current_state:
         query = query.filter(Case.current_state == current_state)
     if case_type:

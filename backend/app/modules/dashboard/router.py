@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import get_settings
 from app.core.datetime_utils import format_bogota_datetime, to_bogota
-from app.core.deps import get_db, require_roles
+from app.core.deps import get_current_user, get_db, get_role_codes
 from app.models.case import Case
 from app.models.notary import Notary
 from app.models.user import User
@@ -113,8 +113,13 @@ def get_superadmin_dashboard(
     act_type: str | None = Query(default=None),
     owner_user_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("super_admin")),
+    current_user: User = Depends(get_current_user),
 ):
+    role_codes = get_role_codes(current_user)
+    is_super_admin = "super_admin" in role_codes
+    scope_notary_id = None if is_super_admin else current_user.default_notary_id
+    effective_notary_id = notary_id if is_super_admin else scope_notary_id
+
     query = (
         db.query(Case)
         .options(
@@ -133,8 +138,8 @@ def get_superadmin_dashboard(
         query = query.filter(Case.updated_at >= datetime.combine(date_from, time.min))
     if date_to is not None:
         query = query.filter(Case.updated_at <= datetime.combine(date_to, time.max))
-    if notary_id is not None:
-        query = query.filter(Case.notary_id == notary_id)
+    if effective_notary_id is not None:
+        query = query.filter(Case.notary_id == effective_notary_id)
     if state:
         query = query.filter(Case.current_state == state)
     if act_type:
@@ -143,11 +148,20 @@ def get_superadmin_dashboard(
         query = query.filter(Case.current_owner_user_id == owner_user_id)
 
     cases = query.all()
-    all_users = db.query(User).options(joinedload(User.default_notary)).all()
-    all_notaries = db.query(Notary).order_by(Notary.municipality.asc(), Notary.notary_label.asc()).all()
+    all_users_query = db.query(User).options(joinedload(User.default_notary))
+    all_notaries_query = db.query(Notary)
+    if not is_super_admin:
+        all_users_query = all_users_query.filter(User.default_notary_id == scope_notary_id)
+        all_notaries_query = all_notaries_query.filter(Notary.id == scope_notary_id)
+    all_users = all_users_query.all()
+    all_notaries = all_notaries_query.order_by(Notary.municipality.asc(), Notary.notary_label.asc()).all()
     active_users = [user for user in all_users if user.is_active]
     pilot_notary = (
         db.query(Notary)
+        .filter(Notary.id == scope_notary_id)
+        .first()
+        if not is_super_admin
+        else db.query(Notary)
         .filter(Notary.department == "Antioquia", Notary.municipality == "Caldas")
         .order_by(Notary.id.asc())
         .first()
@@ -209,7 +223,12 @@ def get_superadmin_dashboard(
         )
 
     db.execute(text("SELECT 1"))
-    latest_import_notary = db.query(Notary).filter(Notary.department == "Antioquia").order_by(Notary.updated_at.desc()).first()
+    latest_import_notary_query = db.query(Notary)
+    if not is_super_admin:
+        latest_import_notary_query = latest_import_notary_query.filter(Notary.id == scope_notary_id)
+    else:
+        latest_import_notary_query = latest_import_notary_query.filter(Notary.department == "Antioquia")
+    latest_import_notary = latest_import_notary_query.order_by(Notary.updated_at.desc()).first()
     latest_import_reference = None
     if latest_import_notary is not None and latest_import_notary.updated_at is not None:
         latest_import_reference = (

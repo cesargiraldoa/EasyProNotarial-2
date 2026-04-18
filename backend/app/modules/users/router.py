@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user, get_db, get_manageable_notary_ids, get_role_codes, has_role, require_roles
+from app.core.deps import get_current_user, get_db, get_role_codes, require_roles
 from app.core.security import get_password_hash
 from app.models.notary import Notary
 from app.models.role import Role
@@ -148,7 +148,8 @@ def list_user_options(
 
 
 @router.get("", response_model=list[UserSummary])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    role_codes = get_role_codes(current_user)
     query = (
         db.query(User)
         .options(
@@ -158,15 +159,9 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(requi
         )
         .order_by(User.full_name.asc())
     )
-    users = query.all()
-    if not has_role(current_user, "super_admin"):
-        manageable_notary_ids = get_manageable_notary_ids(current_user)
-        users = [
-            user for user in users
-            if user.default_notary_id in manageable_notary_ids
-            or any(assignment.notary_id in manageable_notary_ids for assignment in user.role_assignments if assignment.notary_id is not None)
-        ]
-    return [serialize_user(user) for user in users]
+    if "super_admin" not in role_codes:
+        query = query.filter(User.default_notary_id == current_user.default_notary_id)
+    return [serialize_user(user) for user in query.all()]
 
 
 @router.get("/{user_id}", response_model=UserDetail)
