@@ -355,11 +355,13 @@ export function CommercialWorkspace() {
 
         {error ? <div className="ep-kpi-critical mt-5 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
 
-        <div className="mt-6 flex items-center gap-2 rounded-2xl bg-slate-100 p-1">
+        <div className="ep-card mt-6 flex gap-1 rounded-2xl bg-[var(--panel)] p-1">
           <button
             onClick={() => setActiveTab("lista")}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              activeTab === "lista" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"
+              activeTab === "lista"
+                ? "bg-[var(--primary)] text-white"
+                : "border-none bg-transparent text-secondary hover:bg-[var(--panel-soft)]"
             }`}
           >
             Lista
@@ -367,7 +369,9 @@ export function CommercialWorkspace() {
           <button
             onClick={() => setActiveTab("graficos")}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              activeTab === "graficos" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"
+              activeTab === "graficos"
+                ? "bg-[var(--primary)] text-white"
+                : "border-none bg-transparent text-secondary hover:bg-[var(--panel-soft)]"
             }`}
           >
             Gráficos
