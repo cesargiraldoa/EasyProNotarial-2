@@ -87,6 +87,39 @@ export function AppShell({ children }: AppShellProps) {
 
   const userName = currentUser?.full_name ?? "Operación EasyPro";
   const userSubtitle = currentUser?.roles?.[0] ?? "Sesión activa";
+  const normalizedRoles = (currentUser?.roles ?? []).map((role) => role.toLowerCase());
+  const recognizedRoles = new Set(["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]);
+  const hasRecognizedRole = normalizedRoles.some((role) => recognizedRoles.has(role));
+
+  const navVisibilityByLabel: Record<string, string[]> = {
+    Resumen: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
+    Comercial: ["super_admin"],
+    Notarías: ["super_admin"],
+    Usuarios: ["super_admin", "admin_notary", "notary"],
+    Casos: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
+    "Crear Caso": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
+    "Actos / Plantillas": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
+    Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
+    "System Status": ["super_admin"],
+    Configuración: ["super_admin", "admin_notary"],
+  };
+
+  const visibleNavigation = appNavigation.filter(({ label }) => {
+    if (label === "Ayuda") {
+      return false;
+    }
+
+    if (!hasRecognizedRole) {
+      return label === "Resumen" || label === "Casos";
+    }
+
+    const allowedRoles = navVisibilityByLabel[label];
+    if (!allowedRoles) {
+      return false;
+    }
+
+    return normalizedRoles.some((role) => allowedRoles.includes(role));
+  });
 
   return (
     <div className="min-h-screen text-ink">
@@ -101,7 +134,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <nav className="mt-10 space-y-2">
-            {appNavigation.map(({ label, href, icon: Icon }) => {
+            {visibleNavigation.map(({ label, href, icon: Icon }) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <Link
