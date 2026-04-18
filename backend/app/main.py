@@ -11,7 +11,9 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
+from dotenv import load_dotenv
 
+load_dotenv()
 settings = get_settings()
 
 
