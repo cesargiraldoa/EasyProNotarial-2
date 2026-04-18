@@ -177,16 +177,27 @@ export function AppShell({ children }: AppShellProps) {
       <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col lg:flex-row">
         <aside
           className={cn(
-            "ep-sidebar ep-shell-divider-y hidden shrink-0 flex-col py-6 transition-all duration-300 ease-in-out lg:flex",
+            "ep-sidebar ep-shell-divider-y hidden min-h-screen shrink-0 flex-col overflow-y-auto py-6 transition-all duration-300 ease-in-out lg:flex",
             isSidebarCollapsed ? "w-16 px-2" : "w-[292px] px-6",
           )}
         >
-          <div className={cn("flex items-center gap-4", isSidebarCollapsed && "justify-center")}>
-            <LogoBadge initials={defaultBranding.logoInitials} compact />
-            <div className={cn("min-w-0", isSidebarCollapsed && "hidden")}>
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/80">EasyPro 2</p>
-              <p className="mt-1 text-xs text-secondary">{defaultBranding.officeLabel}</p>
+          <div className={cn("flex gap-4", isSidebarCollapsed ? "flex-col items-center" : "items-start justify-between")}>
+            <div className={cn("flex items-center gap-4", isSidebarCollapsed && "justify-center")}>
+              <LogoBadge initials={defaultBranding.logoInitials} compact />
+              <div className={cn("min-w-0", isSidebarCollapsed && "hidden")}>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/80">EasyPro 2</p>
+                <p className="mt-1 text-xs text-secondary">{defaultBranding.officeLabel}</p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed((current) => !current)}
+              aria-label={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              title={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+              className="ep-nav-item inline-flex h-8 w-8 items-center justify-center rounded-xl transition"
+            >
+              {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
           </div>
 
           <nav className="mt-10 space-y-2">
@@ -234,17 +245,6 @@ export function AppShell({ children }: AppShellProps) {
               <LogOut className="h-4 w-4 shrink-0" />
               {!isSidebarCollapsed ? <span>Cerrar sesión</span> : null}
             </button>
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setIsSidebarCollapsed((current) => !current)}
-                aria-label={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
-                title={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
-                className="ep-nav-item inline-flex h-10 w-10 items-center justify-center rounded-2xl transition"
-              >
-                {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              </button>
-            </div>
           </div>
         </aside>
 
