@@ -113,7 +113,7 @@ export function AppShell({ children }: AppShellProps) {
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0">{label}</span>
+                  <span className="min-w-0">{label === "Casos" ? "Minutas" : label === "Crear Caso" ? "Crear Minuta" : label}</span>
                 </Link>
               );
             })}
