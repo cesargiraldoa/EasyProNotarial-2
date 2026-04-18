@@ -119,14 +119,6 @@ export function AppShell({ children }: AppShellProps) {
             })}
           </nav>
 
-          <div className="mt-10 rounded-[1.8rem] bg-primary p-5 text-white shadow-panel">
-            <p className="text-xs uppercase tracking-[0.22em] text-white/72">Capacidad prevista</p>
-            <p className="mt-3 text-2xl font-semibold leading-tight">Operación por lotes</p>
-            <p className="mt-3 text-sm leading-6 text-white/80">
-              Base preparada para creación y gestión masiva de minutas, lotes y documentos con trazabilidad individual.
-            </p>
-          </div>
-
           <div className="mt-auto space-y-2 pt-8">
             <Link href="/dashboard/ayuda" className="ep-nav-item flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition">
               <HelpCircle className="h-4 w-4 shrink-0" />
