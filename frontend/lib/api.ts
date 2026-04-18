@@ -539,6 +539,30 @@ export async function addCaseComment(id: number, comment: string, metadataJson =
 
 export async function getExecutiveDashboard(filters: ExecutiveDashboardFilters = {}): Promise<ExecutiveDashboard> { return apiFetch<ExecutiveDashboard>(`/api/v1/dashboard/superadmin${buildQuery(filters)}`); }
 
+export async function createRole(payload: {
+  code: string; name: string; scope: string; description: string;
+}): Promise<RoleCatalogItem> {
+  return apiFetch<RoleCatalogItem>("/api/v1/users/roles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateRole(
+  roleId: number,
+  payload: { name: string; description: string }
+): Promise<RoleCatalogItem> {
+  return apiFetch<RoleCatalogItem>(`/api/v1/users/roles/${roleId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteRole(roleId: number): Promise<{ deleted: boolean }> {
+  return apiFetch<{ deleted: boolean }>(`/api/v1/users/roles/${roleId}`, { method: "DELETE" });
+}
 
 
 
