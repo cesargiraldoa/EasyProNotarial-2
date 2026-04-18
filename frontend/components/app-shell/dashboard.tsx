@@ -6,7 +6,6 @@ import {
   ArrowRight,
   BarChart3,
   CalendarClock,
-  CheckCircle2,
   Clock3,
   Filter,
   LineChart,
@@ -290,9 +289,6 @@ export function DashboardOverview() {
             <h1 className="mt-4 text-3xl font-semibold tracking-[-0.05em] text-primary sm:text-[2.6rem] sm:leading-[1.02]">
               Qué está pasando hoy, qué requiere atención y qué mover primero.
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-secondary">
-              El tablero ahora prioriza lectura rápida: primero el pulso general, luego el centro operativo, después alertas y pendientes, y al final las distribuciones de apoyo.
-            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:w-[520px]">
@@ -361,10 +357,6 @@ export function DashboardOverview() {
                 <p className="mt-3 max-w-2xl text-base leading-7 text-secondary">
                   Este bloque ocupa más ancho para que la lectura principal no compita con tarjetas laterales ni con datos secundarios.
                 </p>
-              </div>
-              <div className="ep-card-soft inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-primary">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-                Vista priorizada para demo
               </div>
             </div>
 
