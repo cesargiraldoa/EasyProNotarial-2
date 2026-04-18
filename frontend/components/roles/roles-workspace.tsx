@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import {
   createRole,
@@ -75,7 +75,7 @@ function isRoleScope(value: string): value is RoleScope {
 function normalizePermissions(items: RolePermissionItem[]): RolePermissionItem[] {
   const byModule = new Map<string, boolean>();
   items.forEach((item) => {
-    byModule.set(item.module_code, Boolean(item.can_access));
+    byModule.set(item.module_code, item.can_access === true);
   });
 
   return MODULE_ORDER.map((moduleCode) => ({
@@ -92,10 +92,11 @@ function getInitialPermissions(): RolePermissionItem[] {
 }
 
 function ToggleSwitch({ checked, disabled, onToggle }: { checked: boolean; disabled: boolean; onToggle: () => void }) {
+  const isChecked = checked === true;
   return (
     <div
       role="switch"
-      aria-checked={checked}
+      aria-checked={isChecked}
       aria-disabled={disabled}
       onClick={() => {
         if (!disabled) {
@@ -105,14 +106,14 @@ function ToggleSwitch({ checked, disabled, onToggle }: { checked: boolean; disab
       className={`relative h-7 w-14 rounded-full border transition ${
         disabled
           ? "cursor-not-allowed border-line bg-[var(--panel-soft)] opacity-60"
-          : checked
-            ? "cursor-pointer border-primary/70 bg-primary/20"
+          : isChecked
+            ? "cursor-pointer border-primary bg-primary"
             : "cursor-pointer border-line bg-[var(--panel-soft)]"
       }`}
     >
       <div
-        className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-white shadow transition ${
-          checked ? "left-7" : "left-0.5"
+        className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-white shadow transition-all ${
+          isChecked ? "left-8" : "left-0.5"
         }`}
       />
     </div>
@@ -144,8 +145,6 @@ export function RolesWorkspace() {
   const [permissionsFeedback, setPermissionsFeedback] = useState<string | null>(null);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
 
-  const editSectionRef = useRef<HTMLDivElement | null>(null);
-
   const roleCodes = useMemo(
     () => (currentUser?.role_codes ?? []).map((item) => item.toLowerCase()),
     [currentUser?.role_codes]
@@ -159,13 +158,6 @@ export function RolesWorkspace() {
     () => roles.find((role) => role.id === selectedRoleId) ?? null,
     [roles, selectedRoleId]
   );
-
-  const canEditSelectedRole = useMemo(() => {
-    if (!selectedRole) {
-      return false;
-    }
-    return !(isAdminNotary && selectedRole.code.toLowerCase() === "super_admin");
-  }, [isAdminNotary, selectedRole]);
 
   const hasPermissionChanges = useMemo(() => {
     if (permissions.length !== initialPermissions.length) {
@@ -202,7 +194,11 @@ export function RolesWorkspace() {
         }
         const normalized = normalizePermissions(response);
         setPermissions(normalized);
-        setInitialPermissions(normalized);
+        setInitialPermissions(
+          normalized.map((item) => ({
+            ...item
+          }))
+        );
       } catch (error) {
         if (!isCancelled) {
           setPermissions([]);
@@ -259,7 +255,14 @@ export function RolesWorkspace() {
   }
 
   function selectRole(role: RoleCatalogItem) {
-    setSelectedRoleId(role.id);
+    const nextSelectedRoleId = selectedRoleId === role.id ? null : role.id;
+    setSelectedRoleId(nextSelectedRoleId);
+    if (nextSelectedRoleId === null) {
+      setRoleEditor({ name: "", description: "" });
+      setPermissionsFeedback(null);
+      setPermissionsError(null);
+      return;
+    }
     setRoleEditor({
       name: role.name,
       description: role.description ?? ""
@@ -267,10 +270,6 @@ export function RolesWorkspace() {
     setRoleEditorError(null);
     setPermissionsFeedback(null);
     setPermissionsError(null);
-
-    window.setTimeout(() => {
-      editSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
   }
 
   async function handleSaveRole() {
@@ -432,174 +431,167 @@ export function RolesWorkspace() {
                 const isSuperAdminRole = role.code.toLowerCase() === "super_admin";
                 const roleBlockedForAdminNotary = isAdminNotary && isSuperAdminRole;
                 const roleAssignedCount = countRoleAssignments(role);
+                const isExpanded = selectedRoleId === role.id;
+                const canEditRole = !(isAdminNotary && role.code.toLowerCase() === "super_admin");
 
                 return (
-                  <tr key={role.id}>
-                    <td className="border-b border-line px-4 py-4 text-sm font-semibold text-primary">{role.name}</td>
-                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.code}</td>
-                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.scope}</td>
-                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.description || "—"}</td>
-                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{roleAssignedCount}</td>
-                    <td className="border-b border-line px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => selectRole(role)}
-                          className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-primary hover:bg-[var(--panel-soft)]"
-                        >
-                          Editar permisos
-                        </button>
-                        {isSuperAdmin ? (
+                  <Fragment key={role.id}>
+                    <tr>
+                      <td className="border-b border-line px-4 py-4 text-sm font-semibold text-primary">{role.name}</td>
+                      <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.code}</td>
+                      <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.scope}</td>
+                      <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.description || "—"}</td>
+                      <td className="border-b border-line px-4 py-4 text-sm text-secondary">{roleAssignedCount}</td>
+                      <td className="border-b border-line px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => void handleDeleteRole(role)}
-                            disabled={isDeletingRole || roleAssignedCount > 0}
-                            className="inline-flex items-center gap-1 rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => selectRole(role)}
+                            className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-primary hover:bg-[var(--panel-soft)]"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Eliminar
+                            {isExpanded ? "Cerrar" : "Editar permisos"}
                           </button>
+                          {isSuperAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteRole(role)}
+                              disabled={isDeletingRole || roleAssignedCount > 0}
+                              className="inline-flex items-center gap-1 rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Eliminar
+                            </button>
+                          ) : null}
+                        </div>
+                        {roleBlockedForAdminNotary ? (
+                          <p className="mt-2 text-xs text-amber-600">Edición restringida para admin_notary.</p>
                         ) : null}
-                      </div>
-                      {roleBlockedForAdminNotary ? (
-                        <p className="mt-2 text-xs text-amber-600">Edición restringida para admin_notary.</p>
-                      ) : null}
-                      {isSuperAdmin && roleAssignedCount > 0 ? (
-                        <p className="mt-2 text-xs text-secondary">No se puede eliminar: tiene usuarios asignados.</p>
-                      ) : null}
-                    </td>
-                  </tr>
+                        {isSuperAdmin && roleAssignedCount > 0 ? (
+                          <p className="mt-2 text-xs text-secondary">No se puede eliminar: tiene usuarios asignados.</p>
+                        ) : null}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={6} className="border-b border-line p-0">
+                        <div
+                          className={`transition-all duration-300 ease-out ${
+                            isExpanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"
+                          } overflow-hidden`}
+                        >
+                          <div className="ep-card-muted p-6">
+                            <div className="grid gap-6 lg:grid-cols-2">
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-primary">Datos del rol</h3>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-primary">Nombre</label>
+                                  <input
+                                    value={isExpanded ? roleEditor.name : role.name}
+                                    disabled={!canEditRole || isSavingRole}
+                                    onChange={(event) => setRoleEditor((current) => ({ ...current, name: event.target.value }))}
+                                    className="ep-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-primary">Descripción</label>
+                                  <textarea
+                                    value={isExpanded ? roleEditor.description : role.description ?? ""}
+                                    disabled={!canEditRole || isSavingRole}
+                                    onChange={(event) => setRoleEditor((current) => ({ ...current, description: event.target.value }))}
+                                    className="ep-input min-h-[120px] w-full rounded-2xl px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-primary">Código</label>
+                                    <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{role.code}</div>
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-primary">Ámbito</label>
+                                    <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{role.scope}</div>
+                                  </div>
+                                </div>
+                                {!canEditRole ? (
+                                  <p className="text-sm text-amber-700">admin_notary no puede editar el rol super_admin.</p>
+                                ) : null}
+                                {roleEditorError ? (
+                                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{roleEditorError}</div>
+                                ) : null}
+                                <div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleSaveRole()}
+                                    disabled={!canEditRole || isSavingRole}
+                                    className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isSavingRole ? "Guardando..." : "Guardar cambios"}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-primary">Permisos por módulo</h3>
+                                {isLoadingPermissions ? <p className="text-sm text-secondary">Cargando permisos del rol...</p> : null}
+                                {!isLoadingPermissions ? (
+                                  <div className="overflow-x-auto">
+                                    <table className="min-w-full border-separate border-spacing-0">
+                                      <thead>
+                                        <tr>
+                                          <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Módulo</th>
+                                          <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Acceso</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {permissions.map((item) => {
+                                          const moduleCode = item.module_code as ModuleCode;
+                                          return (
+                                            <tr key={item.module_code}>
+                                              <td className="border-b border-line px-3 py-3 text-sm text-primary">
+                                                {MODULE_LABELS[moduleCode] ?? item.module_code}
+                                              </td>
+                                              <td className="border-b border-line px-3 py-3">
+                                                <ToggleSwitch
+                                                  checked={item.can_access === true}
+                                                  disabled={!canEditRole || isSavingPermissions}
+                                                  onToggle={() => togglePermission(item.module_code)}
+                                                />
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null}
+                                {!canEditRole ? (
+                                  <p className="text-sm text-amber-700">admin_notary no puede editar permisos del rol super_admin.</p>
+                                ) : null}
+                                {permissionsFeedback ? <p className="text-sm text-emerald-700">{permissionsFeedback}</p> : null}
+                                {permissionsError ? <p className="text-sm text-rose-700">{permissionsError}</p> : null}
+                                {!isLoadingPermissions && hasPermissionChanges ? (
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleSavePermissions()}
+                                      disabled={!canEditRole || isSavingPermissions}
+                                      className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {isSavingPermissions ? "Guardando..." : "Guardar permisos"}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
       </section>
-
-      {selectedRole ? (
-        <section ref={editSectionRef} className="ep-card rounded-[2rem] p-6">
-          <div className="flex flex-col gap-3 border-b border-line pb-5 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Rol seleccionado</p>
-              <h2 className="mt-2 text-2xl font-semibold text-primary">{selectedRole.name}</h2>
-              <p className="mt-1 text-sm text-secondary">Gestiona los datos básicos y permisos por módulo.</p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-6">
-            <div className="ep-card-muted rounded-2xl p-5">
-              <h3 className="text-lg font-semibold text-primary">Datos del rol</h3>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-primary">Nombre</label>
-                  <input
-                    value={roleEditor.name}
-                    disabled={!canEditSelectedRole || isSavingRole}
-                    onChange={(event) => setRoleEditor((current) => ({ ...current, name: event.target.value }))}
-                    className="ep-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-primary">Código</label>
-                  <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{selectedRole.code}</div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-primary">Ámbito</label>
-                  <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{selectedRole.scope}</div>
-                </div>
-
-                <div className="lg:col-span-2">
-                  <label className="mb-2 block text-sm font-medium text-primary">Descripción</label>
-                  <textarea
-                    value={roleEditor.description}
-                    disabled={!canEditSelectedRole || isSavingRole}
-                    onChange={(event) => setRoleEditor((current) => ({ ...current, description: event.target.value }))}
-                    className="ep-input min-h-[120px] w-full rounded-2xl px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </div>
-              </div>
-
-              {!canEditSelectedRole ? (
-                <p className="mt-4 text-sm text-amber-700">admin_notary no puede editar el rol super_admin.</p>
-              ) : null}
-
-              {roleEditorError ? (
-                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{roleEditorError}</div>
-              ) : null}
-
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => void handleSaveRole()}
-                  disabled={!canEditSelectedRole || isSavingRole}
-                  className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSavingRole ? "Guardando..." : "Guardar cambios"}
-                </button>
-              </div>
-            </div>
-
-            <div className="ep-card-soft rounded-2xl p-5">
-              <h3 className="text-lg font-semibold text-primary">Permisos por módulo</h3>
-
-              {isLoadingPermissions ? <p className="mt-4 text-sm text-secondary">Cargando permisos del rol...</p> : null}
-
-              {!isLoadingPermissions ? (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-full border-separate border-spacing-0">
-                    <thead>
-                      <tr>
-                        <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Módulo</th>
-                        <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Acceso</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {permissions.map((item) => {
-                        const moduleCode = item.module_code as ModuleCode;
-                        return (
-                          <tr key={item.module_code}>
-                            <td className="border-b border-line px-3 py-3 text-sm text-primary">{MODULE_LABELS[moduleCode] ?? item.module_code}</td>
-                            <td className="border-b border-line px-3 py-3">
-                              <ToggleSwitch
-                                checked={item.can_access}
-                                disabled={!canEditSelectedRole || isSavingPermissions}
-                                onToggle={() => togglePermission(item.module_code)}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-
-              {!canEditSelectedRole ? (
-                <p className="mt-4 text-sm text-amber-700">admin_notary no puede editar permisos del rol super_admin.</p>
-              ) : null}
-
-              {permissionsFeedback ? <p className="mt-4 text-sm text-emerald-700">{permissionsFeedback}</p> : null}
-              {permissionsError ? <p className="mt-4 text-sm text-rose-700">{permissionsError}</p> : null}
-
-              {!isLoadingPermissions && hasPermissionChanges ? (
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    onClick={() => void handleSavePermissions()}
-                    disabled={!canEditSelectedRole || isSavingPermissions}
-                    className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSavingPermissions ? "Guardando..." : "Guardar permisos"}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       {showCreateModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-8">
