@@ -2,7 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { MapPinned, RefreshCw, Target } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts";
 import {
   getNotaries,
   getNotaryFilterOptions,
@@ -14,6 +26,49 @@ import {
 
 const PAGE_SIZE = 20;
 
+type WorkspaceTab = "lista" | "graficos";
+
+type StatusConfig = {
+  key: string;
+  label: string;
+  badgeClass: string;
+  chartColor: string;
+};
+
+const STATUS_CONFIG: StatusConfig[] = [
+  { key: "prospecto", label: "Prospecto", badgeClass: "bg-slate-200 text-slate-700", chartColor: "#94a3b8" },
+  { key: "contactado", label: "Contactado", badgeClass: "bg-blue-100 text-blue-700", chartColor: "#3b82f6" },
+  { key: "en seguimiento", label: "En seguimiento", badgeClass: "bg-cyan-100 text-cyan-700", chartColor: "#06b6d4" },
+  {
+    key: "reunión agendada",
+    label: "Reunión agendada",
+    badgeClass: "bg-orange-100 text-orange-700",
+    chartColor: "#f97316"
+  },
+  {
+    key: "propuesta enviada",
+    label: "Propuesta enviada",
+    badgeClass: "bg-violet-100 text-violet-700",
+    chartColor: "#8b5cf6"
+  },
+  { key: "negociación", label: "Negociación", badgeClass: "bg-amber-100 text-amber-700", chartColor: "#f59e0b" },
+  {
+    key: "cerrado ganado",
+    label: "Cerrado ganado",
+    badgeClass: "bg-emerald-100 text-emerald-700",
+    chartColor: "#10b981"
+  },
+  { key: "cerrado perdido", label: "Cerrado perdido", badgeClass: "bg-red-100 text-red-700", chartColor: "#ef4444" },
+  {
+    key: "no interesado",
+    label: "No interesado",
+    badgeClass: "bg-slate-700 text-slate-100",
+    chartColor: "#334155"
+  }
+];
+
+const statusByKey = new Map<string, StatusConfig>(STATUS_CONFIG.map((status) => [status.key, status]));
+
 const emptyFilters: NotaryFilters = {
   commercial_status: "",
   municipality: "",
@@ -22,31 +77,12 @@ const emptyFilters: NotaryFilters = {
   q: ""
 };
 
-const statusColorMap: Record<string, string> = {
-  prospecto: "bg-slate-200 text-slate-700",
-  contactado: "bg-blue-100 text-blue-700",
-  negociación: "bg-amber-100 text-amber-700",
-  "reunión agendada": "bg-orange-100 text-orange-700",
-  "propuesta enviada": "bg-violet-100 text-violet-700",
-  "cerrado ganado": "bg-emerald-100 text-emerald-700",
-  "cerrado perdido": "bg-red-100 text-red-700"
-};
-
 function normalizeStatus(status: string): string {
   return status.trim().toLowerCase();
 }
 
 function badgeTone(status: string): string {
-  return statusColorMap[normalizeStatus(status)] ?? "bg-slate-100 text-slate-700";
-}
-
-function summarizeStatus(notaries: NotaryRecord[]) {
-  const summary = new Map<string, number>();
-  for (const notary of notaries) {
-    const key = notary.commercial_status || "sin estado";
-    summary.set(key, (summary.get(key) ?? 0) + 1);
-  }
-  return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
+  return statusByKey.get(normalizeStatus(status))?.badgeClass ?? "bg-slate-100 text-slate-700";
 }
 
 export function CommercialWorkspace() {
@@ -62,6 +98,7 @@ export function CommercialWorkspace() {
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("lista");
 
   useEffect(() => {
     void Promise.all([loadNotaries(emptyFilters), loadFilterOptions()]);
@@ -109,12 +146,12 @@ export function CommercialWorkspace() {
     void loadNotaries(nextFilters);
   }
 
-  const statusSummary = useMemo(() => summarizeStatus(notaries), [notaries]);
   const totalNotaries = notaries.length;
   const highPriorityCount = useMemo(
     () => notaries.filter((notary) => ["alta", "crítica"].includes(notary.priority.toLowerCase())).length,
     [notaries]
   );
+
   const activeOwnersCount = useMemo(() => {
     const owners = new Set(
       notaries
@@ -123,7 +160,69 @@ export function CommercialWorkspace() {
     );
     return owners.size;
   }, [notaries]);
-  const crmStatesCount = statusSummary.length;
+
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>(STATUS_CONFIG.map((status) => [status.key, 0]));
+    for (const notary of notaries) {
+      const normalized = normalizeStatus(notary.commercial_status || "");
+      if (counts.has(normalized)) {
+        counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+      }
+    }
+
+    return STATUS_CONFIG.map((status) => ({
+      ...status,
+      count: counts.get(status.key) ?? 0
+    }));
+  }, [notaries]);
+
+  const pieData = useMemo(
+    () =>
+      statusCounts
+        .filter((item) => item.count > 0)
+        .map((item) => ({
+          name: item.label,
+          value: item.count,
+          color: item.chartColor
+        })),
+    [statusCounts]
+  );
+
+  const topMunicipalitiesData = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const notary of notaries) {
+      const municipality = notary.municipality?.trim() || "Sin municipio";
+      totals.set(municipality, (totals.get(municipality) ?? 0) + notary.activity_count);
+    }
+
+    return Array.from(totals.entries())
+      .map(([municipality, gestiones]) => ({ municipality, gestiones }))
+      .sort((a, b) => b.gestiones - a.gestiones)
+      .slice(0, 10)
+      .reverse();
+  }, [notaries]);
+
+  const ownersActivityData = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const notary of notaries) {
+      const owner = notary.commercial_owner_display?.trim() || "Sin asignar";
+      totals.set(owner, (totals.get(owner) ?? 0) + notary.activity_count);
+    }
+
+    return Array.from(totals.entries())
+      .map(([responsable, gestiones]) => ({ responsable, gestiones }))
+      .filter((item) => item.gestiones > 0)
+      .sort((a, b) => b.gestiones - a.gestiones);
+  }, [notaries]);
+
+  const commercialProgressRate = useMemo(() => {
+    if (totalNotaries === 0) {
+      return 0;
+    }
+
+    const prospectCount = statusCounts.find((status) => status.key === "prospecto")?.count ?? 0;
+    return ((totalNotaries - prospectCount) / totalNotaries) * 100;
+  }, [statusCounts, totalNotaries]);
 
   const totalPages = Math.max(1, Math.ceil(notaries.length / PAGE_SIZE));
   const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -153,7 +252,7 @@ export function CommercialWorkspace() {
           </button>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
           <div className="ep-card-muted rounded-[1.5rem] p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-secondary">Total notarías</p>
             <p className="mt-3 text-3xl font-semibold text-primary">{totalNotaries}</p>
@@ -166,10 +265,14 @@ export function CommercialWorkspace() {
             <p className="text-xs uppercase tracking-[0.2em] text-secondary">Responsables activos</p>
             <p className="mt-3 text-3xl font-semibold text-primary">{activeOwnersCount}</p>
           </div>
-          <div className="rounded-[1.5rem] bg-primary p-4 text-white shadow-panel">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/72">Estados CRM</p>
-            <p className="mt-3 text-3xl font-semibold">{crmStatesCount}</p>
-          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {statusCounts.map((status) => (
+            <span key={status.key} className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${status.badgeClass}`}>
+              {status.label}: {status.count}
+            </span>
+          ))}
         </div>
       </section>
 
@@ -252,8 +355,27 @@ export function CommercialWorkspace() {
 
         {error ? <div className="ep-kpi-critical mt-5 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_340px]">
-          <div className="overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/80">
+        <div className="mt-6 flex items-center gap-2 rounded-2xl bg-slate-100 p-1">
+          <button
+            onClick={() => setActiveTab("lista")}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "lista" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"
+            }`}
+          >
+            Lista
+          </button>
+          <button
+            onClick={() => setActiveTab("graficos")}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "graficos" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"
+            }`}
+          >
+            Gráficos
+          </button>
+        </div>
+
+        {activeTab === "lista" ? (
+          <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/80">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50/90 text-left text-xs uppercase tracking-[0.14em] text-secondary">
@@ -293,7 +415,9 @@ export function CommercialWorkspace() {
                           </td>
                           <td className="px-4 py-3">{notary.municipality || "Sin municipio"}</td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeTone(notary.commercial_status)}`}>
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeTone(notary.commercial_status)}`}
+                            >
                               {notary.commercial_status || "sin estado"}
                             </span>
                           </td>
@@ -337,38 +461,69 @@ export function CommercialWorkspace() {
               </div>
             </div>
           </div>
-
-          <aside className="space-y-4">
-            <div className="ep-card-soft rounded-[1.6rem] p-5">
-              <div className="flex items-center gap-3">
-                <Target className="h-5 w-5 text-primary" />
-                <p className="text-lg font-semibold text-primary">Radar comercial</p>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-secondary">
-                {statusSummary.length === 0 ? (
-                  <div className="ep-card-muted rounded-2xl px-4 py-3">Sin datos para resumir.</div>
-                ) : (
-                  statusSummary.map(([label, count]) => (
-                    <div key={label} className="flex items-center justify-between ep-card-muted rounded-2xl px-4 py-3">
-                      <span>{label}</span>
-                      <span className="font-semibold text-primary">{count}</span>
-                    </div>
+        ) : (
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <div className="ep-card-soft rounded-[1.5rem] p-4">
+              <p className="mb-3 text-sm font-semibold text-primary">Distribución por estado comercial</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={110} paddingAngle={2}>
+                    {pieData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                {pieData.length > 0 ? (
+                  pieData.map((item) => (
+                    <span key={item.name} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                      {item.name}: {item.value}
+                    </span>
                   ))
+                ) : (
+                  <span className="text-secondary">Sin datos para el gráfico.</span>
                 )}
               </div>
             </div>
 
-            <div className="ep-card-soft rounded-[1.6rem] p-5">
-              <div className="flex items-center gap-3">
-                <MapPinned className="h-5 w-5 text-primary" />
-                <p className="text-lg font-semibold text-primary">Cobertura</p>
-              </div>
+            <div className="ep-card-soft rounded-[1.5rem] p-4">
+              <p className="mb-3 text-sm font-semibold text-primary">Top 10 municipios por gestiones</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topMunicipalitiesData} layout="vertical" margin={{ top: 8, right: 12, left: 12, bottom: 8 }}>
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="municipality" width={120} />
+                  <Tooltip />
+                  <Bar dataKey="gestiones" fill="#2563eb" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="ep-card-soft rounded-[1.5rem] p-4">
+              <p className="mb-3 text-sm font-semibold text-primary">Gestiones por responsable</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={ownersActivityData} margin={{ top: 8, right: 12, left: 0, bottom: 36 }}>
+                  <XAxis dataKey="responsable" angle={-25} textAnchor="end" interval={0} height={70} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="gestiones" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="ep-card-soft rounded-[1.5rem] p-6">
+              <p className="text-sm font-semibold text-primary">Tasa de avance comercial</p>
+              <p className="mt-5 text-5xl font-semibold tracking-[-0.04em] text-primary">{commercialProgressRate.toFixed(1)}%</p>
               <p className="mt-3 text-sm leading-6 text-secondary">
-                {filterOptions.municipalities.length} municipios disponibles en el catálogo comercial.
+                Porcentaje de notarías que avanzaron más allá de estado prospecto, calculado como (total - prospecto) /
+                total * 100.
               </p>
             </div>
-          </aside>
-        </div>
+          </div>
+        )}
       </section>
     </div>
   );
