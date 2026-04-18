@@ -1,14 +1,8 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Clock3,
-  Save,
-  ShieldCheck,
-  UserRound
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Clock3, Save, ShieldCheck, UserRound } from "lucide-react";
 import {
   createCommercialActivity,
   getNotary,
@@ -31,10 +25,12 @@ const commercialStatuses = [
   "cerrado ganado",
   "cerrado perdido",
   "no interesado"
-];
-const priorities = ["baja", "media", "alta", "crítica"];
-const potentials = ["bajo", "medio", "alto", "estratégico"];
+] as const;
 
+const priorities = ["baja", "media", "alta", "crítica"] as const;
+const potentials = ["bajo", "medio", "alto", "estratégico"] as const;
+const tabs = ["Gestión", "Nueva gestión", "Historial"] as const;
+type WorkspaceTab = (typeof tabs)[number];
 
 function mapNotaryToPayload(notary: NotaryDetail): NotaryPayload {
   return {
@@ -95,6 +91,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
   const [formState, setFormState] = useState<NotaryPayload | null>(null);
   const [activityState, setActivityState] = useState<CommercialActivityPayload>(emptyActivity);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("Gestión");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingActivity, setIsAddingActivity] = useState(false);
@@ -147,8 +144,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
     updateActivityField("responsible", selectedUser?.full_name ?? "");
   }
 
-  async function handleSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSave() {
     if (!formState) return;
     setIsSaving(true);
     setFeedback(null);
@@ -164,8 +160,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
     }
   }
 
-  async function handleAddActivity(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleAddActivity() {
     setIsAddingActivity(true);
     setFeedback(null);
     setError(null);
@@ -174,6 +169,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
       await loadWorkspace();
       setActivityState({
         ...emptyActivity,
+        occurred_at: getCurrentBogotaDateTimeLocalValue(),
         responsible_user_id: formState?.commercial_owner_user_id ?? null,
         responsible: formState?.commercial_owner ?? ""
       });
@@ -197,137 +193,355 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
   return (
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl">
-            <Link href="/dashboard/comercial" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              <ArrowLeft className="h-4 w-4" />
-              Volver a Comercial
-            </Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Gestión comercial</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary sm:text-4xl">{notary.notary_label}</h1>
-            <p className="mt-3 text-base leading-7 text-secondary">
-              Registro comercial y seguimiento de gestiones.
-            </p>
+        <div className="space-y-5">
+          <Link href="/dashboard/comercial" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+            <ArrowLeft className="h-4 w-4" />
+            Volver a Comercial
+          </Link>
+
+          <div>
+            <h1 className="text-3xl font-semibold tracking-[-0.05em] text-primary sm:text-4xl">
+              {notary.notary_label} · {notary.municipality}
+            </h1>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:w-[420px]">
-            <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Estado CRM</p><p className="mt-2 text-xl font-semibold text-primary">{notary.commercial_status}</p></div>
-            <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Prioridad</p><p className="mt-2 text-xl font-semibold text-primary">{notary.priority}</p></div>
-            <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Responsable</p><p className="mt-2 text-lg font-semibold text-primary">{notary.commercial_owner_display || "Sin asignar"}</p></div>
-            <div className="rounded-[1.5rem] bg-primary p-4 text-white shadow-panel"><p className="text-xs uppercase tracking-[0.2em] text-white/70">Gestiones</p><p className="mt-2 text-xl font-semibold">{notary.activity_count}</p></div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="ep-card-muted rounded-[1.3rem] p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Estado CRM</p>
+              <p className="mt-2 text-lg font-semibold text-primary">{notary.commercial_status}</p>
+            </div>
+            <div className="ep-card-muted rounded-[1.3rem] p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Prioridad</p>
+              <p className="mt-2 text-lg font-semibold text-primary">{notary.priority}</p>
+            </div>
+            <div className="ep-card-muted rounded-[1.3rem] p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Responsable</p>
+              <p className="mt-2 text-lg font-semibold text-primary">{notary.commercial_owner_display || "Sin asignar"}</p>
+            </div>
+            <div className="rounded-[1.3rem] bg-primary p-4 text-white shadow-panel">
+              <p className="text-xs uppercase tracking-[0.2em] text-white/70">Gestiones</p>
+              <p className="mt-2 text-lg font-semibold">{notary.activity_count}</p>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(380px,0.92fr)]">
-        <form onSubmit={handleSave} className="space-y-6 ep-card rounded-[2rem] p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Editor integral</p>
-              <h2 className="mt-2 text-2xl font-semibold text-primary">Gestión CRM comercial</h2>
-            </div>
-            <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:cursor-not-allowed disabled:opacity-70">
-              <Save className="h-4 w-4" />
-              {isSaving ? "Guardando..." : "Guardar cambios"}
-            </button>
-          </div>
-
-          <div className="grid gap-6">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <label className="grid gap-2 text-sm font-medium text-primary">Departamento<input value={formState.department} onChange={(event) => updateField("department", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Municipio<input value={formState.municipality} onChange={(event) => updateField("municipality", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Etiqueta de notaría<input value={formState.notary_label} onChange={(event) => updateField("notary_label", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Notario/a actual<input value={formState.current_notary_name} onChange={(event) => updateField("current_notary_name", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Dirección<input value={formState.address} onChange={(event) => updateField("address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Teléfono fuente<input value={formState.phone} onChange={(event) => updateField("phone", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Correo fuente<input type="email" value={formState.email} onChange={(event) => updateField("email", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Horario<textarea value={formState.business_hours} onChange={(event) => updateField("business_hours", event.target.value)} rows={3} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-            </div>
-
-            <label className="grid gap-2 text-sm font-medium text-primary">Estado activo<select value={String(formState.is_active)} onChange={(event) => updateField("is_active", event.target.value === "true")} className="ep-select h-12 rounded-2xl px-4"><option value="true">Activa</option><option value="false">Inactiva</option></select></label>
-          </div>
-
-          <label className="grid gap-2 text-sm font-medium text-primary">Datos institucionales<textarea value={formState.institutional_data} onChange={(event) => updateField("institutional_data", event.target.value)} rows={4} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <label className="grid gap-2 text-sm font-medium text-primary">Estado comercial<select value={formState.commercial_status} onChange={(event) => updateField("commercial_status", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{commercialStatuses.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Responsable comercial<select value={formState.commercial_owner_user_id?.toString() ?? ""} onChange={(event) => handleOwnerSelection(event.target.value)} className="ep-select h-12 rounded-2xl px-4"><option value="">Sin asignar por usuario</option>{userOptions.map((user) => <option key={user.id} value={user.id}>{user.full_name}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Responsable heredado / respaldo<input value={formState.commercial_owner} onChange={(event) => updateField("commercial_owner", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Contacto principal<input value={formState.main_contact_name} onChange={(event) => updateField("main_contact_name", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Cargo del contacto<input value={formState.main_contact_title} onChange={(event) => updateField("main_contact_title", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Celular comercial<input value={formState.commercial_phone} onChange={(event) => updateField("commercial_phone", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Correo comercial<input type="email" value={formState.commercial_email} onChange={(event) => updateField("commercial_email", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Última gestión<input type="datetime-local" value={formState.last_management_at} onChange={(event) => updateField("last_management_at", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Próxima gestión<input type="datetime-local" value={formState.next_management_at} onChange={(event) => updateField("next_management_at", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Prioridad<select value={formState.priority} onChange={(event) => updateField("priority", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{priorities.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Origen del lead<input value={formState.lead_source} onChange={(event) => updateField("lead_source", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Potencial<select value={formState.potential} onChange={(event) => updateField("potential", event.target.value)} className="ep-select h-12 rounded-2xl px-4"><option value="">Sin definir</option>{potentials.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-          </div>
-
-          <label className="grid gap-2 text-sm font-medium text-primary">Notas comerciales<textarea value={formState.commercial_notes} onChange={(event) => updateField("commercial_notes", event.target.value)} rows={4} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-          <label className="grid gap-2 text-sm font-medium text-primary">Observaciones internas<textarea value={formState.internal_observations} onChange={(event) => updateField("internal_observations", event.target.value)} rows={4} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-
-          {feedback ? <div className="ep-kpi-success rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
-          {error ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
-        </form>
-
-        <aside className="space-y-6">
-          <div className="ep-card rounded-[2rem] p-6">
-            <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-[0.2em] text-secondary">Actividad comercial</p><h2 className="text-2xl font-semibold text-primary">Registrar gestión</h2></div></div>
-            <form onSubmit={handleAddActivity} className="mt-5 space-y-4">
-              <label className="grid gap-2 text-sm font-medium text-primary">Fecha<input type="datetime-local" value={activityState.occurred_at} onChange={(event) => updateActivityField("occurred_at", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Tipo de gestión<input value={activityState.management_type} onChange={(event) => updateActivityField("management_type", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Responsable<select value={activityState.responsible_user_id?.toString() ?? ""} onChange={(event) => handleActivityResponsibleSelection(event.target.value)} className="ep-select h-12 rounded-2xl px-4"><option value="">Sin usuario asignado</option>{userOptions.map((user) => <option key={user.id} value={user.id}>{user.full_name}</option>)}</select></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Responsable textual<input value={activityState.responsible} onChange={(event) => updateActivityField("responsible", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Comentario<textarea value={activityState.comment} onChange={(event) => updateActivityField("comment", event.target.value)} rows={4} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Resultado<input value={activityState.result} onChange={(event) => updateActivityField("result", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <label className="grid gap-2 text-sm font-medium text-primary">Próxima acción<input value={activityState.next_action} onChange={(event) => updateActivityField("next_action", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-              <button type="submit" disabled={isAddingActivity} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:opacity-70"><Clock3 className="h-4 w-4" />{isAddingActivity ? "Registrando..." : "Agregar gestión"}</button>
-            </form>
-          </div>
-
-          <div className="ep-card rounded-[2rem] p-6">
-            <div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-[0.2em] text-secondary">Resumen operativo</p><h2 className="text-2xl font-semibold text-primary">Próxima acción</h2></div></div>
-            <p className="mt-5 rounded-[1.4rem] bg-[var(--panel-soft)] px-4 py-4 text-sm leading-6 text-secondary">{nextActionSummary}</p>
-          </div>
-        </aside>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-2">
-        <div className="ep-card rounded-[2rem] p-6">
-          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-[0.2em] text-secondary">Historial de gestiones</p><h2 className="text-2xl font-semibold text-primary">Seguimiento comercial</h2></div></div>
-          <div className="mt-6 space-y-3">
-            {notary.commercial_activities.length === 0 ? <div className="ep-card-muted rounded-[1.4rem] px-4 py-4 text-sm text-secondary">No hay gestiones registradas todavía.</div> : null}
-            {notary.commercial_activities.map((activity) => (
-              <div key={activity.id} className="ep-card-soft rounded-[1.5rem] p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-primary">{activity.management_type}</p>
-                  <span className="text-xs text-secondary">{formatDateTime(activity.occurred_at, { strategy: "bogota" })}</span>
-                </div>
-                <p className="mt-2 text-sm text-secondary">Responsable: {activity.responsible_user_name || activity.responsible || "Sin definir"}</p>
-                {activity.comment ? <p className="mt-2 text-sm leading-6 text-secondary">{activity.comment}</p> : null}
-                {activity.result ? <p className="mt-2 text-sm text-secondary"><span className="font-semibold text-primary">Resultado:</span> {activity.result}</p> : null}
-                {activity.next_action ? <p className="mt-2 text-sm text-secondary"><span className="font-semibold text-primary">Próxima acción:</span> {activity.next_action}</p> : null}
-              </div>
-            ))}
+      <section className="ep-card rounded-[2rem] p-4 sm:p-6">
+        <div className="border-b border-[var(--border-soft)] pb-4">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map((tab) => {
+              const isActive = tab === activeTab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    isActive ? "bg-primary text-white shadow-panel" : "ep-card-muted text-secondary hover:text-primary"
+                  }`}
+                >
+                  {tab}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        <div className="ep-card rounded-[2rem] p-6">
-          <div className="flex items-center gap-3"><ShieldCheck className="h-5 w-5 text-primary" /><div><p className="text-xs uppercase tracking-[0.2em] text-secondary">Auditoría básica</p><h2 className="text-2xl font-semibold text-primary">Cambios relevantes</h2></div></div>
-          <div className="mt-6 space-y-3">
-            {notary.crm_audit_logs.length === 0 ? <div className="ep-card-muted rounded-[1.4rem] px-4 py-4 text-sm text-secondary">No hay eventos de auditoría registrados todavía.</div> : null}
-            {notary.crm_audit_logs.map((item) => (
-              <div key={item.id} className="ep-card-soft rounded-[1.5rem] p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-primary">{auditLabel(item.event_type, item.field_name)}</p>
-                  <span className="text-xs text-secondary">{formatDateTime(item.created_at)}</span>
-                </div>
-                <p className="mt-2 text-sm text-secondary">Actor: {item.actor_user_name || "Sistema"}</p>
-                {(item.old_value || item.new_value) ? <p className="mt-2 text-sm text-secondary">{item.old_value || "-"} → {item.new_value || "-"}</p> : null}
-                {item.comment ? <p className="mt-2 text-sm leading-6 text-secondary">{item.comment}</p> : null}
+        <div className="pt-6">
+          {activeTab === "Gestión" ? (
+            <div className="space-y-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <label className="grid gap-2 text-sm font-medium text-primary">Estado comercial
+                  <select
+                    value={formState.commercial_status}
+                    onChange={(event) => updateField("commercial_status", event.target.value)}
+                    className="ep-select h-12 rounded-2xl px-4"
+                  >
+                    {commercialStatuses.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Responsable comercial
+                  <select
+                    value={formState.commercial_owner_user_id?.toString() ?? ""}
+                    onChange={(event) => handleOwnerSelection(event.target.value)}
+                    className="ep-select h-12 rounded-2xl px-4"
+                  >
+                    <option value="">Sin asignar por usuario</option>
+                    {userOptions.map((user) => (
+                      <option key={user.id} value={user.id}>{user.full_name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Responsable heredado / respaldo
+                  <input
+                    value={formState.commercial_owner}
+                    onChange={(event) => updateField("commercial_owner", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Contacto principal
+                  <input
+                    value={formState.main_contact_name}
+                    onChange={(event) => updateField("main_contact_name", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Cargo del contacto
+                  <input
+                    value={formState.main_contact_title}
+                    onChange={(event) => updateField("main_contact_title", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Celular comercial
+                  <input
+                    value={formState.commercial_phone}
+                    onChange={(event) => updateField("commercial_phone", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Correo comercial
+                  <input
+                    type="email"
+                    value={formState.commercial_email}
+                    onChange={(event) => updateField("commercial_email", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Última gestión
+                  <input
+                    type="datetime-local"
+                    value={formState.last_management_at}
+                    onChange={(event) => updateField("last_management_at", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Próxima gestión
+                  <input
+                    type="datetime-local"
+                    value={formState.next_management_at}
+                    onChange={(event) => updateField("next_management_at", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Prioridad
+                  <select
+                    value={formState.priority}
+                    onChange={(event) => updateField("priority", event.target.value)}
+                    className="ep-select h-12 rounded-2xl px-4"
+                  >
+                    {priorities.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Potencial
+                  <select
+                    value={formState.potential}
+                    onChange={(event) => updateField("potential", event.target.value)}
+                    className="ep-select h-12 rounded-2xl px-4"
+                  >
+                    <option value="">Sin definir</option>
+                    {potentials.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Origen del lead
+                  <input
+                    value={formState.lead_source}
+                    onChange={(event) => updateField("lead_source", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
               </div>
-            ))}
-          </div>
+
+              <div className="grid gap-4">
+                <label className="grid gap-2 text-sm font-medium text-primary">Notas comerciales
+                  <textarea
+                    value={formState.commercial_notes}
+                    onChange={(event) => updateField("commercial_notes", event.target.value)}
+                    rows={4}
+                    className="ep-textarea rounded-2xl px-4 py-3"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Observaciones internas
+                  <textarea
+                    value={formState.internal_observations}
+                    onChange={(event) => updateField("internal_observations", event.target.value)}
+                    rows={4}
+                    className="ep-textarea rounded-2xl px-4 py-3"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => {
+                    void handleSave();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <Save className="h-4 w-4" />
+                  {isSaving ? "Guardando..." : "Guardar gestión"}
+                </button>
+                <p className="text-xs text-secondary">Próxima acción sugerida: {nextActionSummary}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {activeTab === "Nueva gestión" ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <label className="grid gap-2 text-sm font-medium text-primary">Fecha
+                  <input
+                    type="datetime-local"
+                    value={activityState.occurred_at}
+                    onChange={(event) => updateActivityField("occurred_at", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Tipo de gestión
+                  <input
+                    value={activityState.management_type}
+                    onChange={(event) => updateActivityField("management_type", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Responsable
+                  <select
+                    value={activityState.responsible_user_id?.toString() ?? ""}
+                    onChange={(event) => handleActivityResponsibleSelection(event.target.value)}
+                    className="ep-select h-12 rounded-2xl px-4"
+                  >
+                    <option value="">Sin usuario asignado</option>
+                    {userOptions.map((user) => (
+                      <option key={user.id} value={user.id}>{user.full_name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Responsable textual
+                  <input
+                    value={activityState.responsible}
+                    onChange={(event) => updateActivityField("responsible", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary lg:col-span-2">Comentario
+                  <textarea
+                    value={activityState.comment}
+                    onChange={(event) => updateActivityField("comment", event.target.value)}
+                    rows={4}
+                    className="ep-textarea rounded-2xl px-4 py-3"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Resultado
+                  <input
+                    value={activityState.result}
+                    onChange={(event) => updateActivityField("result", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-primary">Próxima acción
+                  <input
+                    value={activityState.next_action}
+                    onChange={(event) => updateActivityField("next_action", event.target.value)}
+                    className="ep-input h-12 rounded-2xl px-4"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                disabled={isAddingActivity}
+                onClick={() => {
+                  void handleAddActivity();
+                }}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <UserRound className="h-4 w-4" />
+                {isAddingActivity ? "Agregando..." : "Agregar gestión"}
+              </button>
+            </div>
+          ) : null}
+
+          {activeTab === "Historial" ? (
+            <div className="space-y-6">
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Clock3 className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold text-primary">Gestiones anteriores</h2>
+                </div>
+                <div className="space-y-3">
+                  {notary.commercial_activities.length === 0 ? (
+                    <div className="ep-card-muted rounded-[1.4rem] px-4 py-4 text-sm text-secondary">Sin gestiones registradas</div>
+                  ) : null}
+                  {notary.commercial_activities.map((activity) => (
+                    <div key={activity.id} className="ep-card-soft rounded-[1.5rem] p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-semibold text-primary">{activity.management_type}</p>
+                        <span className="text-xs text-secondary">{formatDateTime(activity.occurred_at, { strategy: "bogota" })}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-secondary">Responsable: {activity.responsible_user_name || activity.responsible || "Sin definir"}</p>
+                      {activity.comment ? <p className="mt-2 text-sm text-secondary">Comentario: {activity.comment}</p> : null}
+                      {activity.result ? <p className="mt-2 text-sm text-secondary">Resultado: {activity.result}</p> : null}
+                      {activity.next_action ? <p className="mt-2 text-sm text-secondary">Próxima acción: {activity.next_action}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                  <h2 className="text-xl font-semibold text-primary">Cambios relevantes</h2>
+                </div>
+                <div className="space-y-3">
+                  {notary.crm_audit_logs.length === 0 ? (
+                    <div className="ep-card-muted rounded-[1.4rem] px-4 py-4 text-sm text-secondary">No hay eventos de auditoría registrados todavía.</div>
+                  ) : null}
+                  {notary.crm_audit_logs.map((item) => (
+                    <div key={item.id} className="ep-card-soft rounded-[1.5rem] p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-semibold text-primary">{auditLabel(item.event_type, item.field_name)}</p>
+                        <span className="text-xs text-secondary">{formatDateTime(item.created_at, { strategy: "bogota" })}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-secondary">Actor: {item.actor_user_name || "Sistema"}</p>
+                      {item.old_value || item.new_value ? (
+                        <p className="mt-2 text-sm text-secondary">{item.old_value || "-"} → {item.new_value || "-"}</p>
+                      ) : null}
+                      {item.comment ? <p className="mt-2 text-sm text-secondary">{item.comment}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {feedback ? <div className="mt-5 ep-kpi-success rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
+          {error ? <div className="mt-5 ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
         </div>
       </section>
     </div>
