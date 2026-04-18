@@ -26,8 +26,6 @@ import {
 
 const PAGE_SIZE = 20;
 
-type WorkspaceTab = "lista" | "graficos";
-
 type StatusConfig = {
   key: string;
   label: string;
@@ -98,7 +96,7 @@ export function CommercialWorkspace() {
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("lista");
+  const [activeTab, setActiveTab] = useState<"lista" | "graficos">("lista");
 
   useEffect(() => {
     void Promise.all([loadNotaries(emptyFilters), loadFilterOptions()]);
@@ -355,30 +353,30 @@ export function CommercialWorkspace() {
 
         {error ? <div className="ep-kpi-critical mt-5 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
 
-        <div className="ep-card mt-6 flex gap-1 rounded-2xl bg-[var(--panel)] p-1">
+        <div className="mt-6 flex gap-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-1 w-fit">
           <button
             onClick={() => setActiveTab("lista")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            className={
               activeTab === "lista"
-                ? "bg-[var(--primary)] text-white"
-                : "border-none bg-transparent text-secondary hover:bg-[var(--panel-soft)]"
-            }`}
+                ? "rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-white"
+                : "rounded-xl px-5 py-2 text-sm font-medium text-secondary hover:bg-[var(--panel-soft)]"
+            }
           >
             Lista
           </button>
           <button
             onClick={() => setActiveTab("graficos")}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            className={
               activeTab === "graficos"
-                ? "bg-[var(--primary)] text-white"
-                : "border-none bg-transparent text-secondary hover:bg-[var(--panel-soft)]"
-            }`}
+                ? "rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-white"
+                : "rounded-xl px-5 py-2 text-sm font-medium text-secondary hover:bg-[var(--panel-soft)]"
+            }
           >
             Gráficos
           </button>
         </div>
 
-        {activeTab === "lista" ? (
+        {activeTab === "lista" && (
           <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/80">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -465,7 +463,9 @@ export function CommercialWorkspace() {
               </div>
             </div>
           </div>
-        ) : (
+        )}
+
+        {activeTab === "graficos" && (
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <div className="ep-card-soft rounded-[1.5rem] p-4">
               <p className="mb-3 text-sm font-semibold text-primary">Distribución por estado comercial</p>
