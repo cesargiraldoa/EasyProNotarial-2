@@ -96,7 +96,9 @@ export function AppShell({ children }: AppShellProps) {
     Comercial: ["super_admin"],
     Notarías: ["super_admin"],
     Usuarios: ["super_admin", "admin_notary", "notary"],
+    Minutas: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
     Casos: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
+    "Crear Minuta": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "Crear Caso": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "Actos / Plantillas": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
@@ -110,7 +112,7 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     if (!hasRecognizedRole) {
-      return label === "Resumen" || label === "Casos";
+      return label === "Resumen" || label === "Minutas" || label === "Casos";
     }
 
     const allowedRoles = navVisibilityByLabel[label];
