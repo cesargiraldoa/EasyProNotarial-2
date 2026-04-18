@@ -65,7 +65,12 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     setIsLoading(true);
     setError(null);
     try {
-      setCaseDetail(await getDocumentCase(caseId));
+      const data = await getDocumentCase(caseId);
+      setCaseDetail(data);
+      const draftText = data?.act_data?.gari_draft_text ?? null;
+      if (draftText && draftText.trim().length > 0) {
+        setGariText(draftText);
+      }
     } catch (issue) {
       setCaseDetail(null);
       setError(issue instanceof Error ? issue.message : "No fue posible cargar el caso.");
@@ -84,8 +89,11 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
 
   useEffect(() => {
-    setGariText(caseDetail?.act_data?.gari_draft_text ?? null);
-  }, [caseDetail]);
+    const text = caseDetail?.act_data?.gari_draft_text ?? null;
+    if (text && text.trim().length > 0) {
+      setGariText(text);
+    }
+  }, [caseDetail?.act_data?.gari_draft_text]);
 
   async function fileToBase64(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -158,7 +166,9 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
       const updated = await generateWithGari(caseId, "Generado con Gari desde detalle del caso");
       setCaseDetail(updated);
       setGariText(updated?.act_data?.gari_draft_text ?? null);
-      setFeedback("Documento generado por Gari correctamente.");
+      setTab("Documento Gari");
+      setFeedback(null);
+      setTimeout(() => setFeedback("Documento generado por Gari correctamente."), 100);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "No fue posible generar el documento con Gari.");
     } finally {
@@ -274,10 +284,28 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                   {draftDocument?.versions?.[0] && (
                     <button
                       type="button"
-                      onClick={() => void handleDownload(
-                        draftDocument.versions[draftDocument.versions.length - 1].download_url ?? "",
-                        `gari_borrador_v${draftDocument.versions[draftDocument.versions.length - 1].version_number}.docx`
-                      )}
+                      onClick={async () => {
+  try {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
+    const { getToken } = await import("@/lib/auth");
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/v1/document-flow/cases/${caseId}/gari-download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("No fue posible descargar el archivo.");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `caso_${caseId}_gari.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (issue) {
+    setError(issue instanceof Error ? issue.message : "Error al descargar.");
+  }
+}}
                       className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] px-4 py-2 text-sm font-semibold text-primary"
                     >
                       <Download className="h-4 w-4" />

@@ -54,6 +54,7 @@ from app.services.gari_document_service import (
     build_gari_docx_buffer,
     generate_notarial_document,
     resolver_escritura,
+    save_gari_document_as_docx,
 )
 from app.services.storage import next_case_file_path, save_base64_file
 
@@ -408,8 +409,7 @@ def add_document_version(db: Session, case: Case, category: str, title: str, fil
 
     source_raw = str(source_path)
     is_remote_source = source_raw.startswith("http://") or source_raw.startswith("https://")
-    is_virtual_source = source_raw.startswith("gari://")
-    if is_remote_source or is_virtual_source:
+    if is_remote_source:
         storage_path = source_raw
         stored_filename = original_filename
     else:
@@ -626,13 +626,16 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     case.act_data.gari_draft_text = generated_text
     db.flush()
 
+    output_path = f"cases/case-{case.id}/draft/{case.internal_case_number or case.id}_gari.docx"
+    signed_url = save_gari_document_as_docx(generated_text, output_path)
+
     version = add_document_version(
         db,
         case,
         "draft",
         "Borrador documental Gari",
         "docx",
-        f"gari://{case.id}",
+        signed_url,
         f"{case.internal_case_number or case.id}_gari.docx",
         current_user.id,
         case.template_id,

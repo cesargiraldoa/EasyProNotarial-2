@@ -135,7 +135,7 @@ function normalizeParticipant(value: unknown): CaseParticipant {
 function normalizeActData(value: unknown): CaseActData | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
-  return { id: asNumber(item.id), case_id: asNumber(item.case_id), data_json: asString(item.data_json, "{}"), created_at: asString(item.created_at), updated_at: asString(item.updated_at) };
+  return { id: asNumber(item.id), case_id: asNumber(item.case_id), data_json: asString(item.data_json, "{}"), gari_draft_text: asNullableString(item.gari_draft_text), created_at: asString(item.created_at), updated_at: asString(item.updated_at) };
 }
 function normalizeCase(value: unknown): DocumentFlowCase {
   const item = (value ?? {}) as Record<string, unknown>;
