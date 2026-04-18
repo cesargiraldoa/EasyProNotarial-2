@@ -1,4 +1,4 @@
-﻿import {
+import {
   Activity,
   Building2,
   FileArchive,
@@ -10,6 +10,7 @@
   Settings,
   ShieldCheck,
   Users2,
+  UserCircle,
 } from "lucide-react";
 
 export const appNavigation = [
@@ -24,6 +25,7 @@ export const appNavigation = [
   { label: "Lotes", href: "/dashboard/lotes", icon: FileArchive },
   { label: "System Status", href: "/dashboard/system-status", icon: Activity },
   { label: "Configuración", href: "/dashboard/configuracion", icon: Settings },
+  { label: "Mi Perfil", href: "/dashboard/perfil", icon: UserCircle },
   { label: "Ayuda", href: "/dashboard/ayuda", icon: HelpCircle },
 ];
 
