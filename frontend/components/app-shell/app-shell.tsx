@@ -96,6 +96,7 @@ export function AppShell({ children }: AppShellProps) {
     Comercial: ["super_admin"],
     Notarías: ["super_admin"],
     Usuarios: ["super_admin", "admin_notary", "notary"],
+    Roles: ["super_admin", "admin_notary"],
     Minutas: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
     Casos: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
     "Crear Minuta": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
