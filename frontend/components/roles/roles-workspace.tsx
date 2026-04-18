@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import {
   createRole,
   deleteRole,
   getCurrentUser,
   getRoleCatalog,
+  getRolePermissions,
   getUsers,
   updateRole,
-  updateUser,
+  updateRolePermissions,
   type CurrentUser,
   type RoleCatalogItem,
-  type UserAssignmentPayload,
-  type UserPayload,
+  type RolePermissionItem,
   type UserRecord
 } from "@/lib/api";
 
@@ -31,11 +31,36 @@ type RoleEditorState = {
   description: string;
 };
 
-type CurrentUserWithDefaultNotary = CurrentUser & {
-  default_notary_id?: number | null;
+const MODULE_ORDER = [
+  "resumen",
+  "comercial",
+  "notarias",
+  "usuarios",
+  "roles",
+  "minutas",
+  "crear_minuta",
+  "actos_plantillas",
+  "lotes",
+  "system_status",
+  "configuracion"
+] as const;
+
+type ModuleCode = (typeof MODULE_ORDER)[number];
+
+const MODULE_LABELS: Record<ModuleCode, string> = {
+  resumen: "Resumen",
+  comercial: "Comercial",
+  notarias: "Notarías",
+  usuarios: "Usuarios",
+  roles: "Roles",
+  minutas: "Minutas",
+  crear_minuta: "Crear Minuta",
+  actos_plantillas: "Actos / Plantillas",
+  lotes: "Lotes",
+  system_status: "System Status",
+  configuracion: "Configuración"
 };
 
-const PAGE_SIZE = 20;
 const EMPTY_NEW_ROLE: NewRolePayload = {
   name: "",
   code: "",
@@ -43,25 +68,55 @@ const EMPTY_NEW_ROLE: NewRolePayload = {
   description: ""
 };
 
-function getCellKey(userId: number, roleCode: string): string {
-  return `${userId}:${roleCode}`;
-}
-
 function isRoleScope(value: string): value is RoleScope {
   return value === "global" || value === "notary";
 }
 
-function createUserPayload(user: UserRecord, assignments: UserAssignmentPayload[]): UserPayload {
-  return {
-    email: user.email,
-    full_name: user.full_name,
-    password: null,
-    is_active: user.is_active,
-    phone: user.phone ?? "",
-    job_title: user.job_title ?? "",
-    default_notary_id: user.default_notary_id ?? null,
-    assignments
-  };
+function normalizePermissions(items: RolePermissionItem[]): RolePermissionItem[] {
+  const byModule = new Map<string, boolean>();
+  items.forEach((item) => {
+    byModule.set(item.module_code, Boolean(item.can_access));
+  });
+
+  return MODULE_ORDER.map((moduleCode) => ({
+    module_code: moduleCode,
+    can_access: byModule.get(moduleCode) ?? false
+  }));
+}
+
+function getInitialPermissions(): RolePermissionItem[] {
+  return MODULE_ORDER.map((moduleCode) => ({
+    module_code: moduleCode,
+    can_access: moduleCode === "resumen" || moduleCode === "minutas"
+  }));
+}
+
+function ToggleSwitch({ checked, disabled, onToggle }: { checked: boolean; disabled: boolean; onToggle: () => void }) {
+  return (
+    <div
+      role="switch"
+      aria-checked={checked}
+      aria-disabled={disabled}
+      onClick={() => {
+        if (!disabled) {
+          onToggle();
+        }
+      }}
+      className={`relative h-7 w-14 rounded-full border transition ${
+        disabled
+          ? "cursor-not-allowed border-line bg-[var(--panel-soft)] opacity-60"
+          : checked
+            ? "cursor-pointer border-primary/70 bg-primary/20"
+            : "cursor-pointer border-line bg-[var(--panel-soft)]"
+      }`}
+    >
+      <div
+        className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-white shadow transition ${
+          checked ? "left-7" : "left-0.5"
+        }`}
+      />
+    </div>
+  );
 }
 
 export function RolesWorkspace() {
@@ -69,24 +124,27 @@ export function RolesWorkspace() {
   const [roles, setRoles] = useState<RoleCatalogItem[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRole, setNewRole] = useState<NewRolePayload>(EMPTY_NEW_ROLE);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [createRoleError, setCreateRoleError] = useState<string | null>(null);
 
-  const [activeRoleEditorId, setActiveRoleEditorId] = useState<number | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [roleEditor, setRoleEditor] = useState<RoleEditorState>({ name: "", description: "" });
+  const [isSavingRole, setIsSavingRole] = useState(false);
   const [roleEditorError, setRoleEditorError] = useState<string | null>(null);
-  const [roleEditorLoading, setRoleEditorLoading] = useState(false);
-  const [roleDeleting, setRoleDeleting] = useState(false);
+  const [isDeletingRole, setIsDeletingRole] = useState(false);
 
-  const [loadingCells, setLoadingCells] = useState<Record<string, boolean>>({});
-  const [rowErrors, setRowErrors] = useState<Record<number, string | null>>({});
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<RolePermissionItem[]>([]);
+  const [initialPermissions, setInitialPermissions] = useState<RolePermissionItem[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+  const [permissionsFeedback, setPermissionsFeedback] = useState<string | null>(null);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+
+  const editSectionRef = useRef<HTMLDivElement | null>(null);
 
   const roleCodes = useMemo(
     () => (currentUser?.role_codes ?? []).map((item) => item.toLowerCase()),
@@ -97,102 +155,141 @@ export function RolesWorkspace() {
   const isAdminNotary = roleCodes.includes("admin_notary");
   const canManageRoles = isSuperAdmin || isAdminNotary;
 
-  const currentDefaultNotaryId = useMemo(() => {
-    const candidate = (currentUser as CurrentUserWithDefaultNotary | null)?.default_notary_id;
-    return typeof candidate === "number" ? candidate : null;
-  }, [currentUser]);
+  const selectedRole = useMemo(
+    () => roles.find((role) => role.id === selectedRoleId) ?? null,
+    [roles, selectedRoleId]
+  );
+
+  const canEditSelectedRole = useMemo(() => {
+    if (!selectedRole) {
+      return false;
+    }
+    return !(isAdminNotary && selectedRole.code.toLowerCase() === "super_admin");
+  }, [isAdminNotary, selectedRole]);
+
+  const hasPermissionChanges = useMemo(() => {
+    if (permissions.length !== initialPermissions.length) {
+      return true;
+    }
+    return permissions.some((item, index) => {
+      const source = initialPermissions[index];
+      return item.module_code !== source?.module_code || item.can_access !== source?.can_access;
+    });
+  }, [initialPermissions, permissions]);
 
   useEffect(() => {
-    void loadData();
+    void loadWorkspace();
   }, []);
 
-  async function loadData() {
+  useEffect(() => {
+    if (!selectedRole) {
+      setPermissions([]);
+      setInitialPermissions([]);
+      return;
+    }
+    const selectedRoleIdForPermissions = selectedRole.id;
+
+    let isCancelled = false;
+
+    async function loadSelectedRolePermissions() {
+      setIsLoadingPermissions(true);
+      setPermissionsError(null);
+      setPermissionsFeedback(null);
+      try {
+        const response = await getRolePermissions(selectedRoleIdForPermissions);
+        if (isCancelled) {
+          return;
+        }
+        const normalized = normalizePermissions(response);
+        setPermissions(normalized);
+        setInitialPermissions(normalized);
+      } catch (error) {
+        if (!isCancelled) {
+          setPermissions([]);
+          setInitialPermissions([]);
+          setPermissionsError(error instanceof Error ? error.message : "No fue posible cargar los permisos.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingPermissions(false);
+        }
+      }
+    }
+
+    void loadSelectedRolePermissions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedRole]);
+
+  async function loadWorkspace(selectRoleId?: number | null) {
     setIsLoading(true);
     setGlobalError(null);
     try {
-      const [nextCurrentUser, nextRoles, nextUsers] = await Promise.all([
-        getCurrentUser(),
-        getRoleCatalog(),
-        getUsers()
-      ]);
+      const [nextCurrentUser, nextRoles, nextUsers] = await Promise.all([getCurrentUser(), getRoleCatalog(), getUsers()]);
       setCurrentUser(nextCurrentUser);
       setRoles(nextRoles);
       setUsers(nextUsers);
+
+      if (typeof selectRoleId === "number") {
+        const exists = nextRoles.some((role) => role.id === selectRoleId);
+        setSelectedRoleId(exists ? selectRoleId : null);
+      } else {
+        setSelectedRoleId((currentSelectedRoleId) => {
+          if (currentSelectedRoleId === null) {
+            return null;
+          }
+          const exists = nextRoles.some((role) => role.id === currentSelectedRoleId);
+          return exists ? currentSelectedRoleId : null;
+        });
+      }
     } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : "No fue posible cargar la matriz de roles.");
+      setGlobalError(error instanceof Error ? error.message : "No fue posible cargar los roles.");
     } finally {
       setIsLoading(false);
     }
   }
 
-  const visibleUsers = useMemo(() => {
-    const scopedUsers = isAdminNotary && currentDefaultNotaryId !== null
-      ? users.filter((user) => user.default_notary_id === currentDefaultNotaryId)
-      : users;
-
-    if (!search.trim()) {
-      return scopedUsers;
-    }
-
-    const normalized = search.trim().toLowerCase();
-    return scopedUsers.filter((user) => {
-      return user.full_name.toLowerCase().includes(normalized) || user.email.toLowerCase().includes(normalized);
-    });
-  }, [currentDefaultNotaryId, isAdminNotary, search, users]);
-
-  const totalPages = Math.max(1, Math.ceil(visibleUsers.length / PAGE_SIZE));
-
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, totalPages]);
-
-  const pagedUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return visibleUsers.slice(start, start + PAGE_SIZE);
-  }, [page, visibleUsers]);
-
-  const totalAssignments = useMemo(
-    () => visibleUsers.reduce((total, user) => total + user.assignments.length, 0),
-    [visibleUsers]
-  );
-
-  function hasAssignment(user: UserRecord, role: RoleCatalogItem): boolean {
-    const targetNotaryId = role.scope === "notary" ? user.default_notary_id ?? null : null;
-    return user.assignments.some((assignment) => {
-      const normalizedNotaryId = assignment.notary_id ?? null;
-      return assignment.role_code === role.code && normalizedNotaryId === targetNotaryId;
-    });
+  function countRoleAssignments(role: RoleCatalogItem): number {
+    return users.reduce((count, user) => {
+      const found = user.assignments.some((assignment) => assignment.role_code === role.code);
+      return count + (found ? 1 : 0);
+    }, 0);
   }
 
-  function roleAssignedCount(role: RoleCatalogItem): number {
-    return visibleUsers.reduce((count, user) => count + (hasAssignment(user, role) ? 1 : 0), 0);
-  }
-
-  function openRoleEditor(role: RoleCatalogItem) {
-    setActiveRoleEditorId(role.id);
+  function selectRole(role: RoleCatalogItem) {
+    setSelectedRoleId(role.id);
     setRoleEditor({
       name: role.name,
       description: role.description ?? ""
     });
     setRoleEditorError(null);
+    setPermissionsFeedback(null);
+    setPermissionsError(null);
+
+    window.setTimeout(() => {
+      editSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   }
 
-  async function handleSaveRole(roleId: number) {
-    setRoleEditorLoading(true);
+  async function handleSaveRole() {
+    if (!selectedRole) {
+      return;
+    }
+
+    setIsSavingRole(true);
     setRoleEditorError(null);
     try {
-      await updateRole(roleId, {
+      await updateRole(selectedRole.id, {
         name: roleEditor.name.trim(),
         description: roleEditor.description.trim()
       });
-      await loadData();
-      setActiveRoleEditorId(null);
+      await loadWorkspace(selectedRole.id);
     } catch (error) {
       setRoleEditorError(error instanceof Error ? error.message : "No fue posible actualizar el rol.");
     } finally {
-      setRoleEditorLoading(false);
+      setIsSavingRole(false);
     }
   }
 
@@ -200,95 +297,53 @@ export function RolesWorkspace() {
     if (!isSuperAdmin) {
       return;
     }
-    if (roleAssignedCount(role) > 0) {
-      return;
-    }
 
-    setRoleDeleting(true);
+    setIsDeletingRole(true);
     setRoleEditorError(null);
     try {
       await deleteRole(role.id);
-      await loadData();
-      setActiveRoleEditorId(null);
+      await loadWorkspace(selectedRole?.id === role.id ? null : selectedRole?.id ?? null);
     } catch (error) {
       setRoleEditorError(error instanceof Error ? error.message : "No fue posible eliminar el rol.");
     } finally {
-      setRoleDeleting(false);
+      setIsDeletingRole(false);
     }
   }
 
-  async function handleToggleCell(user: UserRecord, role: RoleCatalogItem, checked: boolean) {
-    const cellKey = getCellKey(user.id, role.code);
-    const targetNotaryId = role.scope === "notary" ? user.default_notary_id ?? null : null;
+  function togglePermission(moduleCode: string) {
+    setPermissions((current) =>
+      current.map((item) =>
+        item.module_code === moduleCode
+          ? {
+              ...item,
+              can_access: !item.can_access
+            }
+          : item
+      )
+    );
+    setPermissionsFeedback(null);
+    setPermissionsError(null);
+  }
 
-    const previousUsers = users;
+  async function handleSavePermissions() {
+    if (!selectedRole) {
+      return;
+    }
 
-    const nextUsers = users.map((candidate) => {
-      if (candidate.id !== user.id) {
-        return candidate;
-      }
-
-      const existingAssignments = candidate.assignments.map((assignment) => ({
-        role_code: assignment.role_code,
-        notary_id: assignment.notary_id ?? null
-      }));
-
-      const updatedAssignments = checked
-        ? existingAssignments.filter((assignment) => {
-            return !(assignment.role_code === role.code && assignment.notary_id === targetNotaryId);
-          })
-        : [...existingAssignments, { role_code: role.code, notary_id: targetNotaryId }];
-
-      return {
-        ...candidate,
-        assignments: updatedAssignments.map((assignment, index) => ({
-          id: -(index + 1),
-          role_id: 0,
-          role_code: assignment.role_code,
-          role_name: role.code,
-          notary_id: assignment.notary_id,
-          notary_label: assignment.notary_id === null ? null : candidate.default_notary_label ?? null
-        }))
-      };
-    });
-
-    setUsers(nextUsers);
-    setLoadingCells((current) => ({ ...current, [cellKey]: true }));
-    setRowErrors((current) => ({ ...current, [user.id]: null }));
-
+    setIsSavingPermissions(true);
+    setPermissionsFeedback(null);
+    setPermissionsError(null);
     try {
-      const sourceUser = previousUsers.find((candidate) => candidate.id === user.id);
-      if (!sourceUser) {
-        throw new Error("No fue posible identificar el usuario para actualizar.");
-      }
-
-      const currentPayloadAssignments: UserAssignmentPayload[] = sourceUser.assignments.map((assignment) => ({
-        role_code: assignment.role_code,
-        notary_id: assignment.notary_id ?? null
-      }));
-
-      const updatedPayloadAssignments = checked
-        ? currentPayloadAssignments.filter((assignment) => {
-            return !(assignment.role_code === role.code && assignment.notary_id === targetNotaryId);
-          })
-        : [...currentPayloadAssignments, { role_code: role.code, notary_id: targetNotaryId }];
-
-      const payload = createUserPayload(sourceUser, updatedPayloadAssignments);
-      const updatedUser = await updateUser(user.id, payload);
-
-      setUsers((currentUsers) => currentUsers.map((candidate) => (candidate.id === updatedUser.id ? updatedUser : candidate)));
+      const normalized = normalizePermissions(
+        await updateRolePermissions(selectedRole.id, normalizePermissions(permissions))
+      );
+      setPermissions(normalized);
+      setInitialPermissions(normalized);
+      setPermissionsFeedback("Permisos guardados ✓");
     } catch (error) {
-      setUsers(previousUsers);
-      setRowErrors((current) => ({
-        ...current,
-        [user.id]: error instanceof Error ? error.message : "No fue posible actualizar esta asignación."
-      }));
+      setPermissionsError(error instanceof Error ? error.message : "No fue posible guardar los permisos.");
     } finally {
-      setLoadingCells((current) => {
-        const clone = { ...current };
-        delete clone[cellKey];
-        return clone;
-      });
+      setIsSavingPermissions(false);
     }
   }
 
@@ -296,8 +351,6 @@ export function RolesWorkspace() {
     setCreateRoleError(null);
 
     const code = newRole.code.trim().toLowerCase();
-    const scope = newRole.scope;
-
     if (isAdminNotary && code === "super_admin") {
       setCreateRoleError("Admin Notaría no puede crear el código super_admin.");
       return;
@@ -305,15 +358,26 @@ export function RolesWorkspace() {
 
     setIsCreatingRole(true);
     try {
-      await createRole({
+      const createdRole = await createRole({
         name: newRole.name.trim(),
         code,
-        scope,
+        scope: newRole.scope,
         description: newRole.description.trim()
       });
+
+      await updateRolePermissions(createdRole.id, getInitialPermissions());
       setShowCreateModal(false);
       setNewRole(EMPTY_NEW_ROLE);
-      await loadData();
+      await loadWorkspace(createdRole.id);
+
+      const selected = {
+        id: createdRole.id,
+        name: createdRole.name,
+        description: createdRole.description,
+        code: createdRole.code,
+        scope: createdRole.scope
+      };
+      selectRole(selected);
     } catch (error) {
       setCreateRoleError(error instanceof Error ? error.message : "No fue posible crear el rol.");
     } finally {
@@ -321,22 +385,17 @@ export function RolesWorkspace() {
     }
   }
 
-  function onSearchChange(value: string) {
-    setSearch(value);
-    setPage(1);
-  }
-
   if (isLoading) {
-    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Cargando roles y usuarios...</div>;
+    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Cargando catálogo de roles...</div>;
   }
 
   return (
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-[-0.03em] text-primary">Roles y permisos</h1>
-            <p className="mt-2 text-sm text-secondary">Matriz de usuarios y roles con asignación en tiempo real.</p>
+            <p className="mt-2 text-sm text-secondary">Catálogo de roles y configuración de permisos por módulo.</p>
           </div>
 
           {canManageRoles ? (
@@ -354,185 +413,193 @@ export function RolesWorkspace() {
           ) : null}
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <div className="ep-card-muted rounded-2xl p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Usuarios visibles</p>
-            <p className="mt-2 text-3xl font-semibold text-primary">{visibleUsers.length}</p>
-          </div>
-          <div className="ep-card-muted rounded-2xl p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Roles activos</p>
-            <p className="mt-2 text-3xl font-semibold text-primary">{roles.length}</p>
-          </div>
-          <div className="ep-card-soft rounded-2xl p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Asignaciones totales</p>
-            <p className="mt-2 text-3xl font-semibold text-primary">{totalAssignments}</p>
-          </div>
-          <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-secondary">Buscar usuario</label>
-            <input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Nombre o email"
-              className="ep-input h-12 w-full rounded-2xl px-4"
-            />
-          </div>
-        </div>
-
         {globalError ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{globalError}</div> : null}
-      </section>
 
-      <section className="ep-card rounded-[2rem] p-4 md:p-6">
-        <div className="overflow-x-auto">
+        <div className="mt-6 overflow-x-auto">
           <table className="min-w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                <th className="sticky left-0 z-20 min-w-[280px] border-b border-line bg-[var(--panel)] px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">
-                  Usuario
-                </th>
-                {roles.map((role) => {
-                  const roleIsBlocked = isAdminNotary && role.code.toLowerCase() === "super_admin";
-                  return (
-                    <th key={role.id} className="relative border-b border-line bg-[var(--panel)] px-4 py-3 text-left text-xs font-semibold text-primary">
-                      <button
-                        type="button"
-                        onClick={() => openRoleEditor(role)}
-                        className="rounded-lg px-1 py-1 text-left hover:bg-[var(--panel-soft)]"
-                      >
-                        <div className="text-sm font-semibold text-primary">{role.name}</div>
-                        <div className="text-[11px] uppercase tracking-[0.14em] text-secondary">{role.scope}</div>
-                      </button>
-
-                      {activeRoleEditorId === role.id ? (
-                        <div className="absolute right-2 top-14 z-30 w-72 rounded-2xl border border-line bg-[var(--panel)] p-4 shadow-panel">
-                          <div className="mb-3 flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-primary">Editar rol</p>
-                            <button
-                              type="button"
-                              onClick={() => setActiveRoleEditorId(null)}
-                              className="rounded-xl p-1 hover:bg-[var(--panel-soft)]"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-
-                          <div className="space-y-3">
-                            <div>
-                              <label className="mb-1 block text-xs text-secondary">Nombre</label>
-                              <input
-                                value={roleEditor.name}
-                                onChange={(event) => setRoleEditor((current) => ({ ...current, name: event.target.value }))}
-                                className="ep-input h-10 w-full rounded-xl px-3"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-xs text-secondary">Descripción</label>
-                              <textarea
-                                value={roleEditor.description}
-                                onChange={(event) => setRoleEditor((current) => ({ ...current, description: event.target.value }))}
-                                className="ep-input min-h-[84px] w-full rounded-xl px-3 py-2"
-                              />
-                            </div>
-
-                            {roleEditorError ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{roleEditorError}</div> : null}
-
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleSaveRole(role.id)}
-                                disabled={roleEditorLoading}
-                                className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-70"
-                              >
-                                {roleEditorLoading ? "Guardando..." : "Guardar"}
-                              </button>
-                              {isSuperAdmin ? (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleDeleteRole(role)}
-                                  disabled={roleDeleting || roleAssignedCount(role) > 0}
-                                  className="inline-flex items-center gap-1 rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-60"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Eliminar
-                                </button>
-                              ) : null}
-                            </div>
-
-                            {isSuperAdmin && roleAssignedCount(role) > 0 ? (
-                              <p className="text-[11px] text-secondary">No se puede eliminar: el rol tiene usuarios asignados.</p>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {roleIsBlocked ? <div className="mt-1 text-[10px] uppercase text-amber-600">Restringido para admin_notary</div> : null}
-                    </th>
-                  );
-                })}
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Nombre</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Código</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Ámbito</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Descripción</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Usuarios asignados</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {pagedUsers.map((user) => (
-                <tr key={user.id}>
-                  <td className="sticky left-0 z-10 border-b border-line bg-[var(--panel)] px-4 py-3 align-top">
-                    <div className="font-medium text-primary">{user.full_name}</div>
-                    <div className="text-xs text-secondary">{user.email}</div>
-                    <div className="text-xs text-secondary">{user.default_notary_label ?? "Sin notaría"}</div>
-                    {rowErrors[user.id] ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{rowErrors[user.id]}</div> : null}
-                  </td>
+              {roles.map((role) => {
+                const isSuperAdminRole = role.code.toLowerCase() === "super_admin";
+                const roleBlockedForAdminNotary = isAdminNotary && isSuperAdminRole;
+                const roleAssignedCount = countRoleAssignments(role);
 
-                  {roles.map((role) => {
-                    const checked = hasAssignment(user, role);
-                    const cellKey = getCellKey(user.id, role.code);
-                    const isBusy = Boolean(loadingCells[cellKey]);
-                    const isDisabledByRole = isAdminNotary && role.code.toLowerCase() === "super_admin";
-                    return (
-                      <td key={`${user.id}-${role.id}`} className="border-b border-line px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={isBusy || isDisabledByRole}
-                          onChange={() => void handleToggleCell(user, role, checked)}
-                          className="h-5 w-5 cursor-pointer rounded border-line text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-
-              {pagedUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={roles.length + 1} className="px-4 py-8 text-center text-sm text-secondary">
-                    No hay usuarios para mostrar con los filtros actuales.
-                  </td>
-                </tr>
-              ) : null}
+                return (
+                  <tr key={role.id}>
+                    <td className="border-b border-line px-4 py-4 text-sm font-semibold text-primary">{role.name}</td>
+                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.code}</td>
+                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.scope}</td>
+                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{role.description || "—"}</td>
+                    <td className="border-b border-line px-4 py-4 text-sm text-secondary">{roleAssignedCount}</td>
+                    <td className="border-b border-line px-4 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => selectRole(role)}
+                          className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-primary hover:bg-[var(--panel-soft)]"
+                        >
+                          Editar permisos
+                        </button>
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteRole(role)}
+                            disabled={isDeletingRole || roleAssignedCount > 0}
+                            className="inline-flex items-center gap-1 rounded-xl border border-rose-300/70 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Eliminar
+                          </button>
+                        ) : null}
+                      </div>
+                      {roleBlockedForAdminNotary ? (
+                        <p className="mt-2 text-xs text-amber-600">Edición restringida para admin_notary.</p>
+                      ) : null}
+                      {isSuperAdmin && roleAssignedCount > 0 ? (
+                        <p className="mt-2 text-xs text-secondary">No se puede eliminar: tiene usuarios asignados.</p>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-secondary">Página {page} de {totalPages}</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page <= 1}
-              className="rounded-xl border border-line px-3 py-2 text-sm text-primary disabled:opacity-50"
-            >
-              Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-line px-3 py-2 text-sm text-primary disabled:opacity-50"
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
       </section>
+
+      {selectedRole ? (
+        <section ref={editSectionRef} className="ep-card rounded-[2rem] p-6">
+          <div className="flex flex-col gap-3 border-b border-line pb-5 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Rol seleccionado</p>
+              <h2 className="mt-2 text-2xl font-semibold text-primary">{selectedRole.name}</h2>
+              <p className="mt-1 text-sm text-secondary">Gestiona los datos básicos y permisos por módulo.</p>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-6">
+            <div className="ep-card-muted rounded-2xl p-5">
+              <h3 className="text-lg font-semibold text-primary">Datos del rol</h3>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-primary">Nombre</label>
+                  <input
+                    value={roleEditor.name}
+                    disabled={!canEditSelectedRole || isSavingRole}
+                    onChange={(event) => setRoleEditor((current) => ({ ...current, name: event.target.value }))}
+                    className="ep-input h-12 w-full rounded-2xl px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-primary">Código</label>
+                  <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{selectedRole.code}</div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-primary">Ámbito</label>
+                  <div className="ep-card-soft rounded-2xl px-4 py-3 text-sm text-secondary">{selectedRole.scope}</div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-primary">Descripción</label>
+                  <textarea
+                    value={roleEditor.description}
+                    disabled={!canEditSelectedRole || isSavingRole}
+                    onChange={(event) => setRoleEditor((current) => ({ ...current, description: event.target.value }))}
+                    className="ep-input min-h-[120px] w-full rounded-2xl px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {!canEditSelectedRole ? (
+                <p className="mt-4 text-sm text-amber-700">admin_notary no puede editar el rol super_admin.</p>
+              ) : null}
+
+              {roleEditorError ? (
+                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{roleEditorError}</div>
+              ) : null}
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => void handleSaveRole()}
+                  disabled={!canEditSelectedRole || isSavingRole}
+                  className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingRole ? "Guardando..." : "Guardar cambios"}
+                </button>
+              </div>
+            </div>
+
+            <div className="ep-card-soft rounded-2xl p-5">
+              <h3 className="text-lg font-semibold text-primary">Permisos por módulo</h3>
+
+              {isLoadingPermissions ? <p className="mt-4 text-sm text-secondary">Cargando permisos del rol...</p> : null}
+
+              {!isLoadingPermissions ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-0">
+                    <thead>
+                      <tr>
+                        <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Módulo</th>
+                        <th className="border-b border-line px-3 py-2 text-left text-xs uppercase tracking-[0.18em] text-secondary">Acceso</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {permissions.map((item) => {
+                        const moduleCode = item.module_code as ModuleCode;
+                        return (
+                          <tr key={item.module_code}>
+                            <td className="border-b border-line px-3 py-3 text-sm text-primary">{MODULE_LABELS[moduleCode] ?? item.module_code}</td>
+                            <td className="border-b border-line px-3 py-3">
+                              <ToggleSwitch
+                                checked={item.can_access}
+                                disabled={!canEditSelectedRole || isSavingPermissions}
+                                onToggle={() => togglePermission(item.module_code)}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {!canEditSelectedRole ? (
+                <p className="mt-4 text-sm text-amber-700">admin_notary no puede editar permisos del rol super_admin.</p>
+              ) : null}
+
+              {permissionsFeedback ? <p className="mt-4 text-sm text-emerald-700">{permissionsFeedback}</p> : null}
+              {permissionsError ? <p className="mt-4 text-sm text-rose-700">{permissionsError}</p> : null}
+
+              {!isLoadingPermissions && hasPermissionChanges ? (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => void handleSavePermissions()}
+                    disabled={!canEditSelectedRole || isSavingPermissions}
+                    className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingPermissions ? "Guardando..." : "Guardar permisos"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {showCreateModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-8">
@@ -594,9 +661,7 @@ export function RolesWorkspace() {
               </div>
 
               <div className="ep-card-muted rounded-2xl p-4 text-xs text-secondary">
-                {isAdminNotary
-                  ? "Como admin_notary solo puedes crear roles de ámbito notary y no puedes usar super_admin."
-                  : "Define el alcance del rol para aplicarlo globalmente o por notaría."}
+                Permisos iniciales: Resumen y Minutas activos. Los demás módulos se crean sin acceso.
               </div>
 
               <div className="lg:col-span-2">

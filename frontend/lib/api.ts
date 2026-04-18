@@ -136,6 +136,11 @@ export type RoleCatalogItem = {
   description: string;
 };
 
+export type RolePermissionItem = {
+  module_code: string;
+  can_access: boolean;
+};
+
 export type UserAssignmentPayload = {
   role_code: string;
   notary_id: number | null;
@@ -564,5 +569,16 @@ export async function deleteRole(roleId: number): Promise<{ deleted: boolean }> 
   return apiFetch<{ deleted: boolean }>(`/api/v1/users/roles/${roleId}`, { method: "DELETE" });
 }
 
+export async function getRolePermissions(roleId: number): Promise<RolePermissionItem[]> {
+  return apiFetch<RolePermissionItem[]>(`/api/v1/users/roles/${roleId}/permissions`);
+}
+
+export async function updateRolePermissions(roleId: number, permissions: RolePermissionItem[]): Promise<RolePermissionItem[]> {
+  return apiFetch<RolePermissionItem[]>(`/api/v1/users/roles/${roleId}/permissions`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(permissions)
+  });
+}
 
 
