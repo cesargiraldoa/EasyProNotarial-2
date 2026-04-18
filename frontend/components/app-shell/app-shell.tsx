@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, HelpCircle, LogOut, Menu, MoonStar, Search, SunMedium, UserRound } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, LogOut, Menu, MoonStar, Search, SunMedium, UserRound } from "lucide-react";
 import { appNavigation } from "@/lib/navigation";
 import { defaultBranding } from "@/lib/branding";
 import { getCurrentUser, logout, type CurrentUser } from "@/lib/api";
@@ -32,8 +32,20 @@ export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const storedSidebarState = window.localStorage.getItem("sidebar_collapsed");
+    if (storedSidebarState !== null) {
+      setIsSidebarCollapsed(storedSidebarState === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("sidebar_collapsed", String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,10 +175,15 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="min-h-screen text-ink">
       <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col lg:flex-row">
-        <aside className="ep-sidebar ep-shell-divider-y hidden w-[292px] shrink-0 flex-col px-6 py-6 lg:flex">
-          <div className="flex items-center gap-4">
+        <aside
+          className={cn(
+            "ep-sidebar ep-shell-divider-y hidden shrink-0 flex-col py-6 transition-all duration-300 ease-in-out lg:flex",
+            isSidebarCollapsed ? "w-16 px-2" : "w-[292px] px-6",
+          )}
+        >
+          <div className={cn("flex items-center gap-4", isSidebarCollapsed && "justify-center")}>
             <LogoBadge initials={defaultBranding.logoInitials} compact />
-            <div className="min-w-0">
+            <div className={cn("min-w-0", isSidebarCollapsed && "hidden")}>
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/80">EasyPro 2</p>
               <p className="mt-1 text-xs text-secondary">{defaultBranding.officeLabel}</p>
             </div>
@@ -175,35 +192,63 @@ export function AppShell({ children }: AppShellProps) {
           <nav className="mt-10 space-y-2">
             {visibleNavigation.map(({ label, href, icon: Icon }) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
+              const navLabel = label === "Casos" ? "Minutas" : label === "Crear Caso" ? "Crear Minuta" : label;
               return (
                 <Link
                   key={label}
                   href={href}
+                  title={isSidebarCollapsed ? navLabel : undefined}
                   className={cn(
                     "ep-nav-item flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium leading-5 transition",
+                    isSidebarCollapsed && "justify-center gap-0 px-0",
                     isActive && "ep-nav-item-active",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0">{label === "Casos" ? "Minutas" : label === "Crear Caso" ? "Crear Minuta" : label}</span>
+                  {!isSidebarCollapsed ? <span className="min-w-0">{navLabel}</span> : null}
                 </Link>
               );
             })}
           </nav>
 
           <div className="mt-auto space-y-2 pt-8">
-            <Link href="/dashboard/ayuda" className="ep-nav-item flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition">
+            <Link
+              href="/dashboard/ayuda"
+              title={isSidebarCollapsed ? "Ayuda" : undefined}
+              className={cn(
+                "ep-nav-item flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                isSidebarCollapsed && "justify-center gap-0 px-0",
+              )}
+            >
               <HelpCircle className="h-4 w-4 shrink-0" />
-              <span>Ayuda</span>
+              {!isSidebarCollapsed ? <span>Ayuda</span> : null}
             </Link>
-            <button onClick={onLogout} className="ep-nav-item flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition">
+            <button
+              onClick={onLogout}
+              title={isSidebarCollapsed ? "Cerrar sesión" : undefined}
+              className={cn(
+                "ep-nav-item flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                isSidebarCollapsed && "justify-center gap-0 px-0",
+              )}
+            >
               <LogOut className="h-4 w-4 shrink-0" />
-              <span>Cerrar sesión</span>
+              {!isSidebarCollapsed ? <span>Cerrar sesión</span> : null}
             </button>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed((current) => !current)}
+                aria-label={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+                title={isSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+                className="ep-nav-item inline-flex h-10 w-10 items-center justify-center rounded-2xl transition"
+              >
+                {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         </aside>
 
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen flex-1 flex-col transition-all duration-300 ease-in-out">
           <header className="ep-topbar ep-shell-divider-x relative z-20 flex overflow-visible items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-10">
             <div className="flex min-w-0 items-center gap-3 lg:gap-5">
               <button className="ep-card-soft inline-flex h-11 w-11 items-center justify-center rounded-2xl lg:hidden">
