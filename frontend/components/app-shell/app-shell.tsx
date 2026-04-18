@@ -106,10 +106,40 @@ export function AppShell({ children }: AppShellProps) {
     "System Status": ["super_admin"],
     Configuración: ["super_admin", "admin_notary"],
   };
+  const navModuleCodesByLabel: Record<string, string[]> = {
+    Resumen: ["resumen"],
+    Comercial: ["comercial"],
+    Notarías: ["notarias"],
+    Usuarios: ["usuarios"],
+    Roles: ["roles"],
+    Minutas: ["minutas"],
+    Casos: ["minutas"],
+    "Crear Minuta": ["crear_minuta"],
+    "Crear Caso": ["crear_minuta"],
+    "Actos / Plantillas": ["actos_plantillas"],
+    Lotes: ["lotes"],
+    "System Status": ["system_status"],
+    Configuración: ["configuracion"],
+  };
+  const hasPermissions = Boolean(currentUser?.permissions?.length);
+  const allowedModuleCodes = new Set(
+    (currentUser?.permissions ?? [])
+      .filter((permission) => permission.can_access)
+      .map((permission) => permission.module_code.toLowerCase()),
+  );
 
   const visibleNavigation = appNavigation.filter(({ label }) => {
     if (label === "Ayuda") {
       return false;
+    }
+
+    if (hasPermissions) {
+      const allowedModuleCodesForLabel = navModuleCodesByLabel[label];
+      if (!allowedModuleCodesForLabel) {
+        return false;
+      }
+
+      return allowedModuleCodesForLabel.some((moduleCode) => allowedModuleCodes.has(moduleCode));
     }
 
     if (!hasRecognizedRole) {

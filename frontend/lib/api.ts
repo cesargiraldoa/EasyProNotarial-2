@@ -15,7 +15,7 @@ export type CurrentUser = {
   is_active: boolean;
   roles: string[];
   role_codes: string[];
-  permissions: string[];
+  permissions?: Array<{ module_code: string; can_access: boolean }>;
   default_notary?: string | null;
   assignments: Array<{
     id: number;
