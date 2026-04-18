@@ -91,8 +91,8 @@ function getInitialPermissions(): RolePermissionItem[] {
   }));
 }
 
-function ToggleSwitch({ checked, disabled, onToggle }: { checked: boolean; disabled: boolean; onToggle: () => void }) {
-  const isChecked = checked === true;
+function Toggle({ value, onChange, disabled = false }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  const isChecked = value === true;
   return (
     <div
       role="switch"
@@ -100,21 +100,17 @@ function ToggleSwitch({ checked, disabled, onToggle }: { checked: boolean; disab
       aria-disabled={disabled}
       onClick={() => {
         if (!disabled) {
-          onToggle();
+          onChange(!isChecked);
         }
       }}
-      className={`relative h-7 w-14 rounded-full border transition ${
-        disabled
-          ? "cursor-not-allowed border-line bg-[var(--panel-soft)] opacity-60"
-          : isChecked
-            ? "cursor-pointer border-primary bg-primary"
-            : "cursor-pointer border-line bg-[var(--panel-soft)]"
-      }`}
+      className={`relative h-6 w-11 rounded-full transition-[background-color] duration-200 ${
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+      } ${isChecked ? "bg-[#10B981]" : "bg-[#CBD5E1]"}`}
     >
       <div
-        className={`absolute top-0.5 h-5.5 w-5.5 rounded-full bg-white shadow transition-all ${
-          isChecked ? "left-8" : "left-0.5"
-        }`}
+        className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform duration-200 ease-in-out ${
+          isChecked ? "translate-x-[22px]" : "translate-x-[2px]"
+      }`}
       />
     </div>
   );
@@ -549,10 +545,10 @@ export function RolesWorkspace() {
                                                 {MODULE_LABELS[moduleCode] ?? item.module_code}
                                               </td>
                                               <td className="border-b border-line px-3 py-3">
-                                                <ToggleSwitch
-                                                  checked={item.can_access === true}
+                                                <Toggle
+                                                  value={item.can_access === true}
                                                   disabled={!canEditRole || isSavingPermissions}
-                                                  onToggle={() => togglePermission(item.module_code)}
+                                                  onChange={() => togglePermission(item.module_code)}
                                                 />
                                               </td>
                                             </tr>
