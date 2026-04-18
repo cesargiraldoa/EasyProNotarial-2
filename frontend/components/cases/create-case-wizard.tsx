@@ -171,7 +171,7 @@ export function CreateCaseWizard() {
 
   async function handleCreateCase() {
     if (!selectedTemplate || !generalForm.notary_id) {
-      throw new Error("Debes seleccionar la notaría y la plantilla para crear el caso.");
+      throw new Error("Debes seleccionar la notaría y la plantilla para crear la minuta.");
     }
     const created = await createDocumentCase({
       template_id: selectedTemplate.id,
@@ -195,7 +195,7 @@ export function CreateCaseWizard() {
     try {
       if (step === 0) {
         if (!selectedTemplate) {
-          throw new Error("No hay una plantilla activa disponible para iniciar el caso.");
+          throw new Error("No hay una plantilla activa disponible para iniciar la minuta.");
         }
       }
       if (step === 1 && !caseDetail) {
@@ -219,7 +219,7 @@ export function CreateCaseWizard() {
       if (step === 4 && caseDetail) {
         const updated = await generateCaseDraft(caseDetail.id, "Borrador generado desde el wizard de Crear Caso.");
         setCaseDetail(updated);
-        setFeedback("Caso creado y borrador Word v1 generado correctamente.");
+        setFeedback("Minuta creada y borrador Word v1 generado correctamente.");
         return;
       }
       setStep((current) => Math.min(current + 1, steps.length - 1));
@@ -237,15 +237,15 @@ export function CreateCaseWizard() {
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Crear Caso</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Crear Minuta</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">Wizard documental inicial para Poder General</h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
-              El alcance de hoy prioriza la prueba real: plantilla, creación del caso, intervinientes, datos del acto y generación del borrador Word.
+              El alcance de hoy prioriza la prueba real: plantilla, creación de la minuta, intervinientes, datos del acto y generación del borrador Word.
             </p>
           </div>
           {caseDetail ? (
             <Link href={`/dashboard/casos/${caseDetail.id}`} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white">
-              Abrir detalle del caso <ArrowRight className="h-4 w-4" />
+              Abrir detalle de la minuta <ArrowRight className="h-4 w-4" />
             </Link>
           ) : null}
         </div>
@@ -291,7 +291,7 @@ export function CreateCaseWizard() {
 
               {step === 1 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">2. Datos generales del caso</h2>
+                  <h2 className="text-2xl font-semibold text-primary">2. Datos generales de la minuta</h2>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
                     <SearchableSelect label="Responsable actual" value={generalForm.current_owner_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, current_owner_user_id: value }))} />
@@ -379,7 +379,7 @@ export function CreateCaseWizard() {
                   <div className="ep-card-soft rounded-[1.6rem] p-5 text-sm leading-6 text-secondary">
                     <p>Plantilla: <span className="font-semibold text-primary">{selectedTemplate?.name || "Sin plantilla"}</span></p>
                     <p className="mt-2">Intervinientes: {templateRoles.map((role) => role.label).filter(Boolean).join(", ") || "Poderdante y Apoderado(a)"}</p>
-                    <p className="mt-2">Número interno: <span className="font-semibold text-primary">{caseDetail?.internal_case_number || "Se generar? al crear el caso"}</span></p>
+                    <p className="mt-2">Número interno: <span className="font-semibold text-primary">{caseDetail?.internal_case_number || "Se generar? al crear la minuta"}</span></p>
                     <p className="mt-2">El usuario final nunca ver? placeholders; solo los datos amigables capturados en el wizard.</p>
                   </div>
                   <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
@@ -401,7 +401,7 @@ export function CreateCaseWizard() {
 
         <aside className="space-y-4">
           <div className="ep-card rounded-[1.8rem] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Caso activo</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Minuta activa</p>
             <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
             <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
             <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
@@ -421,6 +421,5 @@ export function CreateCaseWizard() {
     </div>
   );
 }
-
 
 

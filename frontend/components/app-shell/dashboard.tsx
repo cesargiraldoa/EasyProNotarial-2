@@ -236,7 +236,7 @@ export function DashboardOverview() {
   const pendingItems = [
     {
       label: "Cola madura",
-      detail: `${formatNumber(findKpi(dashboard, "elaborated"))} casos listos para revisión o cierre.`,
+      detail: `${formatNumber(findKpi(dashboard, "elaborated"))} minutas listas para revisión o cierre.`,
     },
     {
       label: "Firmados pendientes",
@@ -251,7 +251,7 @@ export function DashboardOverview() {
   const agendaItems = [
     {
       label: "Mover cuello de botella",
-      detail: topState ? `${topState.label} concentra ${formatNumber(topState.value)} casos y debe destrabarse primero.` : "No hay un estado dominante en este corte.",
+      detail: topState ? `${topState.label} concentra ${formatNumber(topState.value)} minutas y debe destrabarse primero.` : "No hay un estado dominante en este corte.",
     },
     {
       label: "Revisar capacidad",
@@ -266,7 +266,7 @@ export function DashboardOverview() {
   const operationalNotes = [
     {
       label: "Estado dominante",
-      detail: topState ? `${topState.label} concentra la mayor presión del flujo con ${formatNumber(topState.value)} casos.` : "Sin presión operativa dominante para este filtro.",
+      detail: topState ? `${topState.label} concentra la mayor presión del flujo con ${formatNumber(topState.value)} minutas.` : "Sin presión operativa dominante para este filtro.",
     },
     {
       label: "Responsable a reforzar",
@@ -373,13 +373,13 @@ export function DashboardOverview() {
                 <p className="text-xs uppercase tracking-[0.16em] text-secondary">Foco del día</p>
                 <h3 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">{topState?.label ?? "Sin estado dominante"}</h3>
                 <p className="mt-3 text-sm leading-7 text-secondary">
-                  {topState ? `${formatNumber(topState.value)} casos concentran la mayor presión operativa visible. Conviene revisar responsables, bloqueos y tiempo en cola antes de entrar al detalle individual.` : "No hay presión operativa registrada para el filtro actual."}
+                  {topState ? `${formatNumber(topState.value)} minutas concentran la mayor presión operativa visible. Conviene revisar responsables, bloqueos y tiempo en cola antes de entrar al detalle individual.` : "No hay presión operativa registrada para el filtro actual."}
                 </p>
                 <div className="mt-6 grid gap-3 md:grid-cols-3">
                   <div className="ep-card-muted rounded-[1.35rem] px-4 py-4">
                     <p className="text-xs uppercase tracking-[0.16em] text-secondary">Responsable con más carga</p>
                     <p className="mt-2 text-lg font-semibold text-primary">{topOwner?.label ?? "Sin responsable"}</p>
-                    <p className="mt-2 text-sm leading-6 text-secondary">{topOwner ? `${formatNumber(topOwner.value)} casos visibles en su carga.` : "Sin responsables activos en este filtro."}</p>
+                    <p className="mt-2 text-sm leading-6 text-secondary">{topOwner ? `${formatNumber(topOwner.value)} minutas visibles en su carga.` : "Sin responsables activos en este filtro."}</p>
                   </div>
                   <div className="ep-card-muted rounded-[1.35rem] px-4 py-4">
                     <p className="text-xs uppercase tracking-[0.16em] text-secondary">Notaría a observar</p>
@@ -389,12 +389,12 @@ export function DashboardOverview() {
                   <div className="ep-card-muted rounded-[1.35rem] px-4 py-4">
                     <p className="text-xs uppercase tracking-[0.16em] text-secondary">Siguiente decisión</p>
                     <p className="mt-2 text-lg font-semibold text-primary">Revisar cola y reasignación</p>
-                    <p className="mt-2 text-sm leading-6 text-secondary">Prioriza casos bloqueados, carga por responsable y pendientes de cierre.</p>
+                    <p className="mt-2 text-sm leading-6 text-secondary">Prioriza minutas bloqueadas, carga por responsable y pendientes de cierre.</p>
                   </div>
                 </div>
                 <div className="mt-6">
                   <a href="/dashboard/casos" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel">
-                    Abrir casos
+                    Abrir minutas
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </div>
@@ -402,7 +402,7 @@ export function DashboardOverview() {
 
               <div className="grid gap-4 xl:col-span-5">
                 <div className="ep-card-muted rounded-[1.5rem] px-5 py-5 shadow-soft">
-                  <div className="flex items-center gap-2 text-primary"><Clock3 className="h-4 w-4" /><p className="text-sm font-semibold">Casos en trámite</p></div>
+                  <div className="flex items-center gap-2 text-primary"><Clock3 className="h-4 w-4" /><p className="text-sm font-semibold">Minutas en trámite</p></div>
                   <p className="mt-3 text-3xl font-semibold text-primary">{formatNumber(findKpi(dashboard, "in_progress"))}</p>
                   <p className="mt-2 text-sm leading-6 text-secondary">Pulso general del tablero para iniciar la lectura.</p>
                 </div>
@@ -413,7 +413,7 @@ export function DashboardOverview() {
                 </div>
                 <div className="ep-card-muted rounded-[1.5rem] px-5 py-5 shadow-soft">
                   <div className="flex items-center gap-2 text-primary"><CalendarClock className="h-4 w-4" /><p className="text-sm font-semibold">Cierre del día</p></div>
-                  <p className="mt-3 text-lg font-semibold text-primary">{formatNumber(findKpi(dashboard, "finalized"))} casos finalizados</p>
+                  <p className="mt-3 text-lg font-semibold text-primary">{formatNumber(findKpi(dashboard, "finalized"))} minutas finalizadas</p>
                   <p className="mt-2 text-sm leading-6 text-secondary">Úsalo como referencia rápida de avance antes de revisar gráficos.</p>
                 </div>
               </div>
@@ -469,4 +469,3 @@ export function DashboardOverview() {
     </div>
   );
 }
-
