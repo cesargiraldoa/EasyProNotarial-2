@@ -1,5 +1,5 @@
-﻿import { NotariesCatalog } from "@/components/notaries/notaries-catalog";
+import { CommercialWorkspace } from "@/components/notaries/commercial-workspace";
 
 export default function CommercialPage() {
-  return <NotariesCatalog />;
+  return <CommercialWorkspace />;
 }
