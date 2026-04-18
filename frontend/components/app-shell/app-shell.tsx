@@ -123,7 +123,7 @@ export function AppShell({ children }: AppShellProps) {
             <p className="text-xs uppercase tracking-[0.22em] text-white/72">Capacidad prevista</p>
             <p className="mt-3 text-2xl font-semibold leading-tight">Operación por lotes</p>
             <p className="mt-3 text-sm leading-6 text-white/80">
-              Base preparada para creación y gestión masiva de casos, lotes y documentos con trazabilidad individual.
+              Base preparada para creación y gestión masiva de minutas, lotes y documentos con trazabilidad individual.
             </p>
           </div>
 
@@ -147,7 +147,7 @@ export function AppShell({ children }: AppShellProps) {
               </button>
               <div className="ep-card-soft hidden h-12 min-w-[320px] items-center gap-3 rounded-2xl px-4 lg:flex xl:min-w-[420px]">
                 <Search className="h-4 w-4 shrink-0 text-secondary" />
-                <span className="truncate text-sm text-secondary">Buscar casos, actos, plantillas, notarías o usuarios...</span>
+                <span className="truncate text-sm text-secondary">Buscar minutas, actos, plantillas, notarías o usuarios...</span>
               </div>
             </div>
 

@@ -54,7 +54,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
-      setError("El identificador del caso no es válido.");
+      setError("El identificador de la minuta no es válido.");
       setIsLoading(false);
       return;
     }
@@ -73,7 +73,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
       }
     } catch (issue) {
       setCaseDetail(null);
-      setError(issue instanceof Error ? issue.message : "No fue posible cargar el caso.");
+      setError(issue instanceof Error ? issue.message : "No fue posible cargar la minuta.");
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +177,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
   }
 
   if (isLoading) {
-    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Cargando caso...</div>;
+    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Cargando minuta...</div>;
   }
 
   if (error && !caseDetail) {
@@ -185,7 +185,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
   }
 
   if (!caseDetail) {
-    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos del caso todavía.</div>;
+    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos de la minuta todavía.</div>;
   }
 
   async function handleDownload(downloadUrl: string, filename: string) {
@@ -227,9 +227,9 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <Link href="/dashboard/casos" className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ArrowLeft className="h-4 w-4" />Volver a casos</Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle del caso</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Caso documental"}</h1>
+            <Link href="/dashboard/casos" className="inline-flex items-center gap-2 text-sm font-semibold text-primary"><ArrowLeft className="h-4 w-4" />Volver a minutas</Link>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Minuta documental"}</h1>
             <p className="mt-3 text-base text-secondary">{caseDetail.internal_case_number || "Sin número interno"} · {caseDetail.notary_label || "Sin notaría"}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:w-[430px]">
@@ -491,5 +491,4 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     </div>
   );
 }
-
 

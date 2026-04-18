@@ -26,7 +26,7 @@ const beforeItems = [
   "Plantillas Word con etiquetas manuales",
   "Errores de digitación sin validación",
   "Sin trazabilidad ni historial",
-  "Proceso lento caso a caso",
+  "Proceso lento minuta a minuta",
   "Sin control de calidad interno",
 ];
 
@@ -35,7 +35,7 @@ const afterItems = [
   "Validación automática de campos",
   "Flujo protocolista - revisor - aprobador - notario",
   "Generación del documento en segundos",
-  "Historial completo por caso e interviniente",
+  "Historial completo por minuta e interviniente",
 ];
 
 const features = [
@@ -61,7 +61,7 @@ const features = [
   },
   {
     title: "Trazabilidad completa",
-    description: "Historial por caso, interviniente y acto. Auditable en cualquier momento.",
+    description: "Historial por minuta, interviniente y acto. Auditable en cualquier momento.",
     icon: ShieldCheck,
   },
   {
@@ -80,7 +80,7 @@ const faqs = [
   {
     question: "¿Cuánto tiempo toma implementar EasyPro en mi notaría?",
     answer:
-      "La configuración inicial toma menos de un día. En 24 horas su equipo puede estar operando el primer caso real.",
+      "La configuración inicial toma menos de un día. En 24 horas su equipo puede estar operando la primera minuta real.",
   },
   {
     question: "¿Funciona para múltiples notarías?",
@@ -88,9 +88,9 @@ const faqs = [
       "Sí. EasyPro está diseñado para operar varias notarías desde una sola plataforma, con datos completamente separados entre sí.",
   },
   {
-    question: "¿Qué pasa con los casos que ya tenemos en proceso?",
+    question: "¿Qué pasa con las minutas que ya tenemos en proceso?",
     answer:
-      "Los casos anteriores pueden migrarse o continuar en el sistema anterior. EasyPro inicia con casos nuevos y crece con su operación.",
+      "Las minutas anteriores pueden migrarse o continuar en el sistema anterior. EasyPro inicia con minutas nuevas y crece con su operación.",
   },
   {
     question: "¿Es seguro?",
@@ -121,8 +121,8 @@ const successCases = [
     title: "Notaría Primera del Círculo de Bello",
     subtitle: "Bello, Antioquia  Colombia",
     description:
-      "Notaría piloto de referencia con acceso a demo guiada para validar el flujo, resolver dudas y revisar casos reales antes de salir a producción.",
-    tags: ["Entorno de demo", "Casos reales", "Acceso guiado"],
+      "Notaría piloto de referencia con acceso a demo guiada para validar el flujo, resolver dudas y revisar minutas reales antes de salir a producción.",
+    tags: ["Entorno de demo", "Minutas reales", "Acceso guiado"],
     href: "https://wa.me/573107932844",
     cta: "Solicitar demo",
     videoUrl: "https://www.youtube.com/embed/TODO_BELLO",
