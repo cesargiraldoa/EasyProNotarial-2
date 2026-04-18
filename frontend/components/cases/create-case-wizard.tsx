@@ -17,7 +17,7 @@ import {
   type PersonPayload,
   type TemplateRecord,
 } from "@/lib/document-flow";
-import { getNotaries, getUserOptions, type UserOption } from "@/lib/api";
+import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/lib/api";
 
 const steps = [
   "Seleccionar plantilla",
@@ -74,6 +74,7 @@ export function CreateCaseWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [canSelectNotary, setCanSelectNotary] = useState(true);
   const [generalForm, setGeneralForm] = useState({
     notary_id: "",
     client_user_id: "",
@@ -110,27 +111,34 @@ export function CreateCaseWizard() {
     setIsLoading(true);
     setError(null);
     try {
-      const [templateData, notaryData, userData] = await Promise.all([
+      const [templateData, notaryData, userData, currentUser] = await Promise.all([
         getActiveTemplates(),
         getNotaries(),
         getUserOptions(true),
+        getCurrentUser(),
       ]);
       const safeTemplates = Array.isArray(templateData) ? templateData : [];
       const safeNotaries = Array.isArray(notaryData) ? notaryData : [];
       const safeUsers = Array.isArray(userData) ? userData : [];
+      const notaryOptions = safeNotaries
+        .map((item) => ({
+          value: String(item.id ?? ""),
+          label: [safeString(item.notary_label), safeString(item.municipality)].filter(Boolean).join(" · ") || "Notaría sin nombre",
+        }))
+        .filter((item) => item.value);
+      const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
+      const defaultNotaryId = String((currentUser as { default_notary_id?: number | null })?.default_notary_id ?? "");
+      const defaultNotaryOption = defaultNotaryId ? notaryOptions.find((item) => item.value === defaultNotaryId) : null;
 
       setTemplates(safeTemplates);
       setSelectedTemplate(
         safeTemplates.find((item) => item.slug === "poder-general") ?? safeTemplates[0] ?? null,
       );
-      setNotaries(
-        safeNotaries
-          .map((item) => ({
-            value: String(item.id ?? ""),
-            label: [safeString(item.notary_label), safeString(item.municipality)].filter(Boolean).join(" · ") || "Notaría sin nombre",
-          }))
-          .filter((item) => item.value),
-      );
+      setNotaries(notaryOptions);
+      setCanSelectNotary(isSuperAdmin);
+      if (!isSuperAdmin && defaultNotaryOption) {
+        setGeneralForm((current) => ({ ...current, notary_id: defaultNotaryOption.value }));
+      }
       setUsers(safeUsers);
     } catch (loadError) {
       setTemplates([]);
@@ -293,7 +301,9 @@ export function CreateCaseWizard() {
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">2. Datos generales de la minuta</h2>
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
+                    {canSelectNotary ? (
+                      <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
+                    ) : null}
                     <SearchableSelect label="Responsable actual" value={generalForm.current_owner_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, current_owner_user_id: value }))} />
                     <SearchableSelect label="Protocolista" value={generalForm.protocolist_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, protocolist_user_id: value }))} />
                     <SearchableSelect label="Aprobador" value={generalForm.approver_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, approver_user_id: value }))} />
@@ -421,5 +431,4 @@ export function CreateCaseWizard() {
     </div>
   );
 }
-
 
