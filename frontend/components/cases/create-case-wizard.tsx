@@ -635,7 +635,7 @@ export function CreateCaseWizard() {
                       const isExpanded = expandedGeneralField === field.key;
                       const selectedLabel = userOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
                       return (
-                        <div key={field.key} className="ep-card-soft rounded-[1.6rem] p-4 space-y-3">
+                        <div key={field.key} className="ep-card-soft rounded-[1.6rem] p-4 space-y-3" style={{ position: "relative", zIndex: 0 }}>
                           <button
                             type="button"
                             onClick={() => setExpandedGeneralField((current) => (current === field.key ? null : field.key))}
