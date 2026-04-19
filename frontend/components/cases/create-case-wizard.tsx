@@ -63,6 +63,66 @@ function normalizeUserOptions(users: UserOption[]): SelectOption[] {
   })).filter((item) => item.value);
 }
 
+function sortByStepOrder<T extends { step_order?: number | null }>(items: T[]) {
+  return [...items].sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0));
+}
+
+function buildActDataFromTemplate(template: TemplateRecord | null) {
+  const fields = sortByStepOrder(Array.isArray(template?.fields) ? template.fields : []);
+  const initialData: Record<string, string> = {};
+  const today = new Date();
+  const commonValues = {
+    dia_elaboracion: String(today.getDate()),
+    mes_elaboracion: today.toLocaleDateString("es-CO", { month: "long" }),
+    ano_elaboracion: String(today.getFullYear()),
+  };
+
+  for (const field of fields) {
+    initialData[field.field_code] = "";
+  }
+
+  for (const [key, value] of Object.entries(commonValues)) {
+    if (key in initialData) {
+      initialData[key] = value;
+    }
+  }
+
+  return initialData;
+}
+
+function parseTemplateFieldOptions(optionsJson: string | null | undefined): SelectOption[] {
+  if (!optionsJson) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(optionsJson);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((item, index) => {
+        if (typeof item === "string") {
+          return { value: item, label: item };
+        }
+        if (item && typeof item === "object") {
+          const rawValue = safeString((item as { value?: unknown; label?: unknown }).value);
+          const rawLabel = safeString((item as { value?: unknown; label?: unknown }).label);
+          const value = rawValue || rawLabel;
+          const label = rawLabel || rawValue || `Opción ${index + 1}`;
+          if (value || label) {
+            return { value, label };
+          }
+        }
+        return null;
+      })
+      .filter((item): item is SelectOption => Boolean(item?.value));
+  } catch {
+    return [];
+  }
+}
+
 export function CreateCaseWizard() {
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
@@ -87,18 +147,7 @@ export function CreateCaseWizard() {
     metadata_json: JSON.stringify({ clase: "Poder General" }, null, 2),
   });
   const [participants, setParticipants] = useState<Record<string, PersonPayload>>({});
-  const [actData, setActData] = useState<Record<string, string>>({
-    dia_elaboracion: String(new Date().getDate()),
-    mes_elaboracion: "marzo",
-    ano_elaboracion: String(new Date().getFullYear()),
-    derechos_notariales: "185000",
-    iva: "35150",
-    aporte_superintendencia: "6500",
-    fondo_notariado: "5200",
-    consecutivos_hojas_papel_notarial: "",
-    extension: "",
-    clase_cuantia_acto: "Sin cuantía",
-  });
+  const [actData, setActData] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void load();
@@ -109,13 +158,15 @@ export function CreateCaseWizard() {
       return;
     }
     const nextParticipants = Object.fromEntries(
-      (Array.isArray(selectedTemplate.required_roles) ? selectedTemplate.required_roles : [])
-        .slice()
-        .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
+      sortByStepOrder(Array.isArray(selectedTemplate.required_roles) ? selectedTemplate.required_roles : [])
         .map((role) => [role.role_code, blankPerson()]),
     ) as Record<string, PersonPayload>;
     setParticipants(nextParticipants);
   }, [selectedTemplate, step]);
+
+  useEffect(() => {
+    setActData(buildActDataFromTemplate(selectedTemplate));
+  }, [selectedTemplate]);
 
   async function load() {
     setIsLoading(true);
@@ -162,6 +213,8 @@ export function CreateCaseWizard() {
   }
 
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
+  const templateRoles = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []), [selectedTemplate]);
+  const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
 
   function updateParticipant(role: string, field: keyof PersonPayload, value: string | boolean) {
     setParticipants((current) => ({
@@ -171,10 +224,7 @@ export function CreateCaseWizard() {
   }
 
   function validateParticipants() {
-    const requiredRoles = (Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : [])
-      .filter((role) => role.is_required)
-      .slice()
-      .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0));
+    const requiredRoles = templateRoles.filter((role) => role.is_required);
 
     for (const role of requiredRoles) {
       const item = participants[role.role_code] ?? blankPerson();
@@ -224,10 +274,7 @@ export function CreateCaseWizard() {
         }
         const updated = await saveCaseParticipants(
           caseDetail.id,
-          (Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : [])
-            .slice()
-            .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
-            .map((role) => ({
+          templateRoles.map((role) => ({
               role_code: role.role_code,
               role_label: role.label,
               person: participants[role.role_code] ?? blankPerson(),
@@ -236,6 +283,10 @@ export function CreateCaseWizard() {
         setCaseDetail(updated);
       }
       if (step === 3 && caseDetail) {
+        const missingRequiredField = templateFields.find((field) => field.is_required && !(actData[field.field_code] ?? "").trim());
+        if (missingRequiredField) {
+          throw new Error(`Completa el campo obligatorio ${missingRequiredField.label || missingRequiredField.field_code}.`);
+        }
         const updated = await saveCaseActData(caseDetail.id, { data_json: JSON.stringify(actData) });
         setCaseDetail(updated);
       }
@@ -252,8 +303,6 @@ export function CreateCaseWizard() {
       setIsSaving(false);
     }
   }
-
-  const templateRoles = Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : [];
 
   return (
     <div className="space-y-6">
@@ -380,22 +429,97 @@ export function CreateCaseWizard() {
               {step === 3 ? (
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">4. Datos del acto</h2>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {Object.entries({
-                      dia_elaboracion: "Día elaboración",
-                      mes_elaboracion: "Mes elaboración",
-                      ano_elaboracion: "Año elaboración",
-                      derechos_notariales: "Derechos notariales",
-                      iva: "IVA",
-                      aporte_superintendencia: "Aporte superintendencia",
-                      fondo_notariado: "Fondo notariado",
-                      consecutivos_hojas_papel_notarial: "Consecutivos hojas papel notarial",
-                      extension: "Extensión",
-                      clase_cuantia_acto: "Clase/cuantía del acto",
-                    }).map(([key, label]) => (
-                      <ValidatedInput key={key} label={label} value={actData[key] ?? ""} onChange={(value) => setActData((current) => ({ ...current, [key]: value }))} />
-                    ))}
-                  </div>
+                  {templateFields.length > 0 ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {templateFields.map((field) => {
+                        const label = `${field.label || field.field_code}${field.is_required ? " *" : ""}`;
+                        const value = actData[field.field_code] ?? "";
+
+                        if (field.field_type === "select") {
+                          return (
+                            <SearchableSelect
+                              key={field.field_code}
+                              label={label}
+                              value={value}
+                              options={parseTemplateFieldOptions(field.options_json)}
+                              onChange={(nextValue) => setActData((current) => ({ ...current, [field.field_code]: nextValue }))}
+                            />
+                          );
+                        }
+
+                        if (field.field_type === "textarea") {
+                          return (
+                            <label key={field.field_code} className="grid gap-2 text-sm font-medium text-primary">
+                              <span>{label}</span>
+                              <textarea
+                                value={value}
+                                onChange={(event) => setActData((current) => ({ ...current, [field.field_code]: event.target.value }))}
+                                placeholder={field.placeholder_key || ""}
+                                className="ep-input rounded-2xl px-4 py-3 w-full"
+                              />
+                            </label>
+                          );
+                        }
+
+                        if (field.field_type === "date") {
+                          return (
+                            <label key={field.field_code} className="grid gap-2 text-sm font-medium text-primary">
+                              <span>{label}</span>
+                              <input
+                                type="date"
+                                value={value}
+                                onChange={(event) => setActData((current) => ({ ...current, [field.field_code]: event.target.value }))}
+                                className="ep-input h-12 rounded-2xl px-4"
+                              />
+                            </label>
+                          );
+                        }
+
+                        if (field.field_type === "currency") {
+                          return (
+                            <label key={field.field_code} className="grid gap-2 text-sm font-medium text-primary">
+                              <span>{label}</span>
+                              <div className="relative">
+                                <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-secondary">$</span>
+                                <input
+                                  type="number"
+                                  value={value}
+                                  onChange={(event) => setActData((current) => ({ ...current, [field.field_code]: event.target.value }))}
+                                  placeholder={field.placeholder_key || ""}
+                                  className="ep-input h-12 rounded-2xl px-4 pl-8"
+                                />
+                              </div>
+                            </label>
+                          );
+                        }
+
+                        if (field.field_type === "number") {
+                          return (
+                            <ValidatedInput
+                              key={field.field_code}
+                              label={label}
+                              type="number"
+                              value={value}
+                              placeholder={field.placeholder_key || ""}
+                              onChange={(nextValue) => setActData((current) => ({ ...current, [field.field_code]: nextValue }))}
+                            />
+                          );
+                        }
+
+                        return (
+                          <ValidatedInput
+                            key={field.field_code}
+                            label={label}
+                            value={value}
+                            placeholder={field.placeholder_key || ""}
+                            onChange={(nextValue) => setActData((current) => ({ ...current, [field.field_code]: nextValue }))}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">La plantilla seleccionada no tiene campos configurados.</div>
+                  )}
                 </div>
               ) : null}
 
