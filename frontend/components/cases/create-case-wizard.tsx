@@ -219,8 +219,9 @@ export function CreateCaseWizard() {
         }))
         .filter((item) => item.value);
       const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
-      const rawDefaultNotaryId = (currentUser as { default_notary_id?: number | null })?.default_notary_id;
-      const defaultNotaryId = rawDefaultNotaryId != null ? String(rawDefaultNotaryId) : "";
+      const defaultNotaryRaw = (currentUser as { default_notary_id?: number | null } | null)?.default_notary_id;
+      const defaultNotaryId = String(defaultNotaryRaw ?? "");
+      console.log("notary_id seteado:", String(defaultNotaryRaw ?? ""));
 
       setTemplates(safeTemplates);
       setSelectedTemplate(
@@ -228,9 +229,16 @@ export function CreateCaseWizard() {
       );
       setNotaries(notaryOptions);
       setCanSelectNotary(isSuperAdmin);
-      if (!isSuperAdmin && defaultNotaryId) {
-        setGeneralForm((current) => ({ ...current, notary_id: defaultNotaryId }));
-      }
+      setGeneralForm((current) => ({
+        ...current,
+        notary_id: !isSuperAdmin ? defaultNotaryId : current.notary_id,
+        client_user_id: current.client_user_id,
+        current_owner_user_id: "",
+        protocolist_user_id: "",
+        approver_user_id: "",
+        titular_notary_user_id: "",
+        substitute_notary_user_id: "",
+      }));
       setUsers(safeUsers);
     } catch (loadError) {
       setTemplates([]);
