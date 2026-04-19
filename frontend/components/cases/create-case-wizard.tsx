@@ -1,10 +1,9 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, FileSignature } from "lucide-react";
 import { PersonLookup } from "@/components/persons/person-lookup";
-import { HybridAutocomplete } from "@/components/ui/hybrid-autocomplete";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import {
@@ -162,6 +161,195 @@ function CollapsibleSearchableSelect({
           placeholder={placeholder}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ParticipantTextField({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <div className="flex min-h-[80px] flex-col gap-1">
+      <span className="text-sm font-medium text-primary">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="ep-input h-12 rounded-2xl px-4"
+      />
+    </div>
+  );
+}
+
+function ParticipantAutocompleteField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  const [query, setQuery] = useState(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(
+    () => options.filter((item) => item.toLowerCase().includes(query.toLowerCase())),
+    [options, query],
+  );
+
+  return (
+    <div ref={rootRef} className="relative flex min-h-[80px] flex-col gap-1 overflow-visible">
+      <span className="text-sm font-medium text-primary">{label}</span>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen((current) => !current)}
+          className="flex h-12 w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-left text-sm font-medium text-primary"
+        >
+          <span className="truncate">{value || "Seleccionar"}</span>
+          <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
+        </button>
+        {isOpen ? (
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
+            <div className="border-b border-[var(--line)] p-3">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar..."
+                className="ep-input h-11 w-full rounded-xl px-4"
+              />
+            </div>
+            <div className="max-h-56 overflow-auto p-2">
+              {filtered.length === 0 ? (
+                <div className="rounded-xl px-3 py-2 text-sm text-secondary">Sin opciones.</div>
+              ) : (
+                filtered.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      onChange(item);
+                      setQuery(item);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${value === item ? "bg-primary text-white" : "text-primary hover:bg-[var(--panel-soft)]"}`}
+                  >
+                    <span className="truncate">{item}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ParticipantSelectField({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = "Buscar...",
+}: {
+  label: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const safeOptions = Array.isArray(options) ? options : [];
+  const selectedLabel = safeOptions.find((item) => item.value === value)?.label || value || "Seleccionar";
+  const filtered = useMemo(
+    () => safeOptions.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())),
+    [query, safeOptions],
+  );
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="relative flex min-h-[80px] flex-col gap-1 overflow-visible">
+      <span className="text-sm font-medium text-primary">{label}</span>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen((current) => !current)}
+          className="flex h-12 w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-left text-sm font-medium text-primary"
+        >
+          <span className="truncate">{selectedLabel}</span>
+          <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
+        </button>
+        {isOpen ? (
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
+            <div className="border-b border-[var(--line)] p-3">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={placeholder}
+                className="ep-input h-11 w-full rounded-xl px-4"
+              />
+            </div>
+            <div className="max-h-56 overflow-auto p-2">
+              {filtered.length === 0 ? (
+                <div className="rounded-xl px-3 py-2 text-sm text-secondary">Sin opciones.</div>
+              ) : (
+                filtered.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(item.value);
+                      setQuery(item.label);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${value === item.value ? "bg-primary text-white" : "text-primary hover:bg-[var(--panel-soft)]"}`}
+                  >
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -476,13 +664,13 @@ export function CreateCaseWizard() {
                         <button
                           type="button"
                           onClick={() => setExpandedParticipantRoles((current) => ({ ...current, [role.role_code]: !current[role.role_code] }))}
-                          className="flex w-full items-center justify-between gap-3 text-left"
+                          className="flex w-full min-h-12 items-center justify-between gap-3 rounded-[1.25rem] px-4 py-3 text-left"
                         >
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-accent">{role.label || role.role_code}</p>
-                            <h3 className="text-xl font-semibold text-primary">{roleStatus}</h3>
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-primary">{role.label || role.role_code}</p>
+                            <h3 className="text-sm font-medium text-secondary">{roleStatus}</h3>
                           </div>
-                          <span className="ep-pill rounded-full px-3 py-1 text-xs text-secondary">{isComplete ? "Completo" : "Incompleto"}</span>
+                          <span className="ep-pill rounded-full px-3 py-1 text-xs font-semibold text-secondary">{isComplete ? "Completo" : "Incompleto"}</span>
                         </button>
                         {isExpanded ? (
                           <div className="space-y-4">
@@ -499,22 +687,22 @@ export function CreateCaseWizard() {
                                 }))
                               }
                             />
-                            <div className="grid gap-4 lg:grid-cols-2">
-                              <CollapsibleSearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
-                              <ValidatedInput label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
-                              <ValidatedInput label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
-                              <CollapsibleSearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
-                              <CollapsibleSearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
-                              <CollapsibleSearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
-                              <HybridAutocomplete label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
-                              <ValidatedInput label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
-                              <ValidatedInput label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
-                              <ValidatedInput label="Email" type="email" value={person.email || ""} onChange={(value) => updateParticipant(role.role_code, "email", value)} />
+                            <div className="grid grid-cols-2 gap-4 items-start">
+                              <ParticipantSelectField label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
+                              <ParticipantTextField label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
+                              <ParticipantTextField label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
+                              <ParticipantSelectField label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
+                              <ParticipantSelectField label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
+                              <ParticipantSelectField label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
+                              <ParticipantAutocompleteField label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
+                              <ParticipantTextField label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
+                              <ParticipantTextField label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
+                              <ParticipantTextField label="Email" value={person.email || ""} type="email" onChange={(value) => updateParticipant(role.role_code, "email", value)} />
                             </div>
-                            <label className="grid gap-2 text-sm font-medium text-primary">
-                              <span>Dirección</span>
+                            <div className="flex min-h-[80px] flex-col gap-1">
+                              <span className="text-sm font-medium text-primary">Dirección</span>
                               <input value={person.address || ""} onChange={(event) => updateParticipant(role.role_code, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
-                            </label>
+                            </div>
                             <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
                               <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role.role_code, "is_transient", event.target.checked)} />
                               ¿Está de tránsito?
