@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 
@@ -8,11 +9,25 @@ type Option = { value: string; label: string };
 export function SearchableSelect({ label, value, options = [], onChange, placeholder = "Buscar..." }: { label: string; value: string; options?: Option[]; onChange: (value: string) => void; placeholder?: string }) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const safeOptions = Array.isArray(options) ? options : [];
   const filtered = useMemo(() => safeOptions.filter((item) => String(item?.label ?? "").toLowerCase().includes(query.toLowerCase())), [safeOptions, query]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!value) {
+      setQuery("");
+      return;
+    }
+    const match = safeOptions.find((item) => item.value === value);
+    setQuery(match?.label ?? "");
+  }, [safeOptions, value]);
 
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -49,19 +64,21 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const dropdown = isOpen && coords ? (
+  const dropdownEl = isOpen && coords && mounted ? createPortal(
     <div
       ref={dropdownRef}
       className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 shadow-lg"
       style={{
         position: "fixed",
-        top: coords.top + coords.height + 8,
+        top: coords.top + coords.height + 4,
         left: coords.left,
         width: coords.width,
         zIndex: 9999,
+        maxHeight: 220,
+        overflowY: "auto",
       }}
     >
-      <div className="max-h-[200px] space-y-1 overflow-y-auto">
+      <div className="space-y-1">
         {filtered.length === 0 ? <div className="rounded-xl px-3 py-2 text-sm text-secondary">Sin opciones.</div> : null}
         {filtered.map((item) => (
           <button
@@ -78,13 +95,14 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
           </button>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   ) : null;
 
   return (
     <div className="grid gap-2 text-sm font-medium text-primary">
       <span>{label}</span>
-      <div ref={triggerRef} className="relative overflow-visible ep-card-muted rounded-2xl p-3">
+      <div ref={triggerRef} className="ep-card-muted rounded-2xl p-3">
         <div
           role="button"
           tabIndex={0}
@@ -111,7 +129,7 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
           <ChevronDown className="h-4 w-4 text-secondary" />
         </div>
       </div>
-      {dropdown}
+      {dropdownEl}
     </div>
   );
 }
