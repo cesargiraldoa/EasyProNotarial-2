@@ -396,7 +396,7 @@ def generate_notarial_document(
             },
         ],
         temperature=0.2,
-        max_tokens=max_tokens,
+        max_tokens=max(max_tokens, 16000),
     )
 
     return response.choices[0].message.content or ""
@@ -689,7 +689,7 @@ def resolver_escritura_desde_template(template) -> dict:
     campos_requeridos = [
         f.field_code for f in (template.fields or []) if f.is_required
     ]
-    max_tokens = min(4000 + len(campos_requeridos) * 500, 8000)
+    max_tokens = 16000
     return {
         "variante_id": template.slug,
         "plantilla_id": template.slug,
