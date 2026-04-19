@@ -86,10 +86,7 @@ export function CreateCaseWizard() {
     requires_client_review: true,
     metadata_json: JSON.stringify({ clase: "Poder General" }, null, 2),
   });
-  const [participants, setParticipants] = useState<Record<string, PersonPayload>>({
-    poderdante: blankPerson(),
-    apoderado: blankPerson(),
-  });
+  const [participants, setParticipants] = useState<Record<string, PersonPayload>>({});
   const [actData, setActData] = useState<Record<string, string>>({
     dia_elaboracion: String(new Date().getDate()),
     mes_elaboracion: "marzo",
@@ -106,6 +103,19 @@ export function CreateCaseWizard() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (step !== 0 || !selectedTemplate) {
+      return;
+    }
+    const nextParticipants = Object.fromEntries(
+      (Array.isArray(selectedTemplate.required_roles) ? selectedTemplate.required_roles : [])
+        .slice()
+        .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
+        .map((role) => [role.role_code, blankPerson()]),
+    ) as Record<string, PersonPayload>;
+    setParticipants(nextParticipants);
+  }, [selectedTemplate, step]);
 
   async function load() {
     setIsLoading(true);
@@ -161,18 +171,16 @@ export function CreateCaseWizard() {
   }
 
   function validateParticipants() {
-    for (const role of ["poderdante", "apoderado"]) {
-      const item = participants[role] ?? blankPerson();
+    const requiredRoles = (Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : [])
+      .filter((role) => role.is_required)
+      .slice()
+      .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0));
+
+    for (const role of requiredRoles) {
+      const item = participants[role.role_code] ?? blankPerson();
       if (!item.document_number || !item.full_name || !item.marital_status || !item.municipality) {
-        return `Completa los datos obligatorios de ${role}.`;
+        return `Completa los datos obligatorios de ${role.label || role.role_code}.`;
       }
-    }
-    if (
-      participants.poderdante?.document_type === participants.apoderado?.document_type &&
-      participants.poderdante?.document_number &&
-      participants.poderdante.document_number === participants.apoderado?.document_number
-    ) {
-      return "Advertencia: poderdante y apoderado no deberían ser la misma persona.";
     }
     return null;
   }
@@ -214,10 +222,17 @@ export function CreateCaseWizard() {
         if (participantError) {
           throw new Error(participantError);
         }
-        const updated = await saveCaseParticipants(caseDetail.id, [
-          { role_code: "poderdante", role_label: "Poderdante", person: participants.poderdante ?? blankPerson() },
-          { role_code: "apoderado", role_label: "Apoderado(a)", person: participants.apoderado ?? blankPerson() },
-        ]);
+        const updated = await saveCaseParticipants(
+          caseDetail.id,
+          (Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : [])
+            .slice()
+            .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
+            .map((role) => ({
+              role_code: role.role_code,
+              role_label: role.label,
+              person: participants[role.role_code] ?? blankPerson(),
+            })),
+        );
         setCaseDetail(updated);
       }
       if (step === 3 && caseDetail) {
@@ -320,39 +335,40 @@ export function CreateCaseWizard() {
               {step === 2 ? (
                 <div className="space-y-6">
                   <h2 className="text-2xl font-semibold text-primary">3. Intervinientes</h2>
-                  {([
-                    ["poderdante", "Poderdante"],
-                    ["apoderado", "Apoderado(a)"],
-                  ] as const).map(([role, label]) => {
-                    const person = participants[role] ?? blankPerson();
+                  {(Array.isArray(templateRoles) ? templateRoles : [])
+                    .slice()
+                    .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
+                    .map((role) => {
+                    const person = participants[role.role_code] ?? blankPerson();
+                    const roleStatus = role.is_required ? "Bloque obligatorio" : "Bloque opcional";
                     return (
-                      <div key={role} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
+                      <div key={role.role_code} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-xs uppercase tracking-[0.2em] text-accent">{label}</p>
-                            <h3 className="text-xl font-semibold text-primary">Bloque obligatorio</h3>
+                            <p className="text-xs uppercase tracking-[0.2em] text-accent">{role.label || role.role_code}</p>
+                            <h3 className="text-xl font-semibold text-primary">{roleStatus}</h3>
                           </div>
                           <span className="ep-pill rounded-full px-3 py-1 text-xs text-secondary">{person.document_number && person.full_name ? "Completo" : "Incompleto"}</span>
                         </div>
-                        <PersonLookup onPick={(selected) => setParticipants((current) => ({ ...current, [role]: { ...blankPerson(), ...current[role], ...selected, metadata_json: current[role]?.metadata_json || "{}" } }))} />
+                        <PersonLookup onPick={(selected) => setParticipants((current) => ({ ...current, [role.role_code]: { ...blankPerson(), ...current[role.role_code], ...selected, metadata_json: current[role.role_code]?.metadata_json || "{}" } }))} />
                         <div className="grid gap-4 lg:grid-cols-2">
-                          <SearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role, "document_type", value)} />
-                          <ValidatedInput label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role, "document_number", value)} />
-                          <ValidatedInput label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role, "full_name", value)} />
-                          <SearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role, "sex", value)} />
-                          <SearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role, "nationality", value)} />
-                          <SearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role, "marital_status", value)} />
-                          <HybridAutocomplete label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role, "profession", value)} />
-                          <ValidatedInput label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role, "municipality", value)} />
-                          <ValidatedInput label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role, "phone", value)} />
-                          <ValidatedInput label="Email" type="email" value={person.email || ""} onChange={(value) => updateParticipant(role, "email", value)} />
+                          <SearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
+                          <ValidatedInput label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
+                          <ValidatedInput label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
+                          <SearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
+                          <SearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
+                          <SearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
+                          <HybridAutocomplete label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
+                          <ValidatedInput label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
+                          <ValidatedInput label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
+                          <ValidatedInput label="Email" type="email" value={person.email || ""} onChange={(value) => updateParticipant(role.role_code, "email", value)} />
                         </div>
                         <label className="grid gap-2 text-sm font-medium text-primary">
                           <span>Dirección</span>
-                          <input value={person.address || ""} onChange={(event) => updateParticipant(role, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
+                          <input value={person.address || ""} onChange={(event) => updateParticipant(role.role_code, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
                         </label>
                         <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
-                          <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role, "is_transient", event.target.checked)} />
+                          <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role.role_code, "is_transient", event.target.checked)} />
                           ¿Está de tránsito?
                         </label>
                       </div>
