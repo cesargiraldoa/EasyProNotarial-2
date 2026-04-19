@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, FileSignature } from "lucide-react";
 import { PersonLookup } from "@/components/persons/person-lookup";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -32,6 +32,8 @@ const maritalStatusOptions = ["Soltero(a)", "Casado(a)", "Unión marital", "Divo
 const professionSuggestions = ["Abogado", "Comerciante", "Administrador", "Ingeniero", "Contador", "Docente"];
 
 type SelectOption = { value: string; label: string };
+
+type SearchableOption = { value: string; label: string };
 
 function blankPerson(): PersonPayload {
   return {
@@ -122,49 +124,6 @@ function parseTemplateFieldOptions(optionsJson: string | null | undefined): Sele
   }
 }
 
-function CollapsibleSearchableSelect({
-  label,
-  value,
-  options,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  options?: SelectOption[];
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="grid gap-2">
-      <button
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-        className="inline-flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-3 text-left text-sm font-medium text-primary"
-      >
-        <span>{label}</span>
-        <span className="text-xs font-semibold text-secondary">
-          {options?.find((item) => item.value === value)?.label || value || "Seleccionar"} · {isOpen ? "Ocultar" : "Abrir"}
-        </span>
-      </button>
-      {isOpen ? (
-        <SearchableSelect
-          label={label}
-          value={value}
-          options={options}
-          onChange={(nextValue) => {
-            onChange(nextValue);
-            setIsOpen(false);
-          }}
-          placeholder={placeholder}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 function ParticipantTextField({
   label,
   value,
@@ -189,170 +148,6 @@ function ParticipantTextField({
   );
 }
 
-function ParticipantAutocompleteField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  const [query, setQuery] = useState(value);
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filtered = useMemo(
-    () => options.filter((item) => item.toLowerCase().includes(query.toLowerCase())),
-    [options, query],
-  );
-
-  return (
-    <div ref={rootRef} className="relative flex min-h-[80px] flex-col gap-1 overflow-visible">
-      <span className="text-sm font-medium text-primary">{label}</span>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setIsOpen((current) => !current)}
-          className="flex h-12 w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-left text-sm font-medium text-primary"
-        >
-          <span className="truncate">{value || "Seleccionar"}</span>
-          <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
-        </button>
-        {isOpen ? (
-          <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
-            <div className="border-b border-[var(--line)] p-3">
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar..."
-                className="ep-input h-11 w-full rounded-xl px-4"
-              />
-            </div>
-            <div className="max-h-56 overflow-auto p-2">
-              {filtered.length === 0 ? (
-                <div className="rounded-xl px-3 py-2 text-sm text-secondary">Sin opciones.</div>
-              ) : (
-                filtered.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => {
-                      onChange(item);
-                      setQuery(item);
-                      setIsOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${value === item ? "bg-primary text-white" : "text-primary hover:bg-[var(--panel-soft)]"}`}
-                  >
-                    <span className="truncate">{item}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function ParticipantSelectField({
-  label,
-  value,
-  options,
-  onChange,
-  placeholder = "Buscar...",
-}: {
-  label: string;
-  value: string;
-  options: SelectOption[];
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  const [query, setQuery] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const safeOptions = Array.isArray(options) ? options : [];
-  const selectedLabel = safeOptions.find((item) => item.value === value)?.label || value || "Seleccionar";
-  const filtered = useMemo(
-    () => safeOptions.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())),
-    [query, safeOptions],
-  );
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={rootRef} className="relative flex min-h-[80px] flex-col gap-1 overflow-visible">
-      <span className="text-sm font-medium text-primary">{label}</span>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setIsOpen((current) => !current)}
-          className="flex h-12 w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--input)] px-4 text-left text-sm font-medium text-primary"
-        >
-          <span className="truncate">{selectedLabel}</span>
-          <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
-        </button>
-        {isOpen ? (
-          <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-lg">
-            <div className="border-b border-[var(--line)] p-3">
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={placeholder}
-                className="ep-input h-11 w-full rounded-xl px-4"
-              />
-            </div>
-            <div className="max-h-56 overflow-auto p-2">
-              {filtered.length === 0 ? (
-                <div className="rounded-xl px-3 py-2 text-sm text-secondary">Sin opciones.</div>
-              ) : (
-                filtered.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      onChange(item.value);
-                      setQuery(item.label);
-                      setIsOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${value === item.value ? "bg-primary text-white" : "text-primary hover:bg-[var(--panel-soft)]"}`}
-                  >
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
 
 export function CreateCaseWizard() {
   const [step, setStep] = useState(0);
@@ -571,7 +366,7 @@ export function CreateCaseWizard() {
 
   return (
     <div className="space-y-6">
-      <section className="ep-card rounded-[2rem] p-6">
+      <section className="ep-card z-0 rounded-[2rem] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
@@ -586,7 +381,7 @@ export function CreateCaseWizard() {
         </div>
       </section>
 
-      <section className="ep-card rounded-[2rem] p-6">
+      <section className="ep-card z-0 rounded-[2rem] p-6">
         <div className="grid gap-3 xl:grid-cols-5">
           {steps.map((item, index) => (
             <div key={item} className={`rounded-[1.35rem] border px-4 py-4 ${index === step ? "border-primary/30 bg-primary text-white" : index < step ? "border-emerald-500/20 bg-emerald-500/10" : "border-[var(--line)] bg-[var(--panel-soft)]"}`}>
@@ -602,10 +397,10 @@ export function CreateCaseWizard() {
       </section>
 
       <section className={`grid gap-6 ${showAside ? "xl:grid-cols-[minmax(0,1.2fr)_360px]" : "xl:grid-cols-1"}`}>
-        <div className="ep-card rounded-[2rem] p-6 space-y-6">
-          {isLoading ? <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Cargando plantillas, notarías y usuarios...</div> : null}
-          {!isLoading && error && templates.length === 0 ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
-          {!isLoading && !error && templates.length === 0 ? <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">No hay plantillas activas todavía.</div> : null}
+        <div className="ep-card z-0 rounded-[2rem] p-6 space-y-6">
+          {isLoading ? <div className="ep-card-muted z-0 rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Cargando plantillas, notarías y usuarios...</div> : null}
+          {!isLoading && error && templates.length === 0 ? <div className="ep-kpi-critical z-0 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
+          {!isLoading && !error && templates.length === 0 ? <div className="ep-card-muted z-0 rounded-[1.5rem] px-4 py-6 text-sm text-secondary">No hay plantillas activas todavía.</div> : null}
 
           {!isLoading && templates.length > 0 ? (
             <>
@@ -635,7 +430,7 @@ export function CreateCaseWizard() {
                       const isExpanded = expandedGeneralField === field.key;
                       const selectedLabel = userOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
                       return (
-                        <div key={field.key} className="ep-card-soft rounded-[1.6rem] p-4 space-y-3" style={{ position: "relative", zIndex: 0 }}>
+                        <div key={field.key} className="ep-card-soft z-0 rounded-[1.6rem] p-4 space-y-3" style={{ position: "relative", zIndex: "auto" }}>
                           <button
                             type="button"
                             onClick={() => setExpandedGeneralField((current) => (current === field.key ? null : field.key))}
@@ -657,7 +452,7 @@ export function CreateCaseWizard() {
                     })}
                     {showSubstituteNotary ? (
                       <div className="space-y-3">
-                        <CollapsibleSearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
+                        <SearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
                         <button
                           type="button"
                           onClick={() => setShowSubstituteNotary(false)}
@@ -719,14 +514,16 @@ export function CreateCaseWizard() {
                                 }))
                               }
                             />
-                            <div className="grid grid-cols-2 gap-4 items-start">
-                              <ParticipantSelectField label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
+                            <div className="space-y-4">
+                              <SearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
+                              <SearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
+                              <SearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
+                              <SearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
+                              <SearchableSelect label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                               <ParticipantTextField label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
                               <ParticipantTextField label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
-                              <ParticipantSelectField label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
-                              <ParticipantSelectField label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
-                              <ParticipantSelectField label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
-                              <ParticipantAutocompleteField label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
                               <ParticipantTextField label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
                               <ParticipantTextField label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
                               <ParticipantTextField label="Email" value={person.email || ""} type="email" onChange={(value) => updateParticipant(role.role_code, "email", value)} />
@@ -751,20 +548,21 @@ export function CreateCaseWizard() {
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">4. Datos del acto</h2>
                   {templateFields.length > 0 ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4">
                       {templateFields.map((field) => {
                         const label = `${field.label || field.field_code}${field.is_required ? " *" : ""}`;
                         const value = actData[field.field_code] ?? "";
 
                         if (field.field_type === "select") {
                           return (
-                            <SearchableSelect
-                              key={field.field_code}
-                              label={label}
-                              value={value}
-                              options={parseTemplateFieldOptions(field.options_json)}
-                              onChange={(nextValue) => setActData((current) => ({ ...current, [field.field_code]: nextValue }))}
-                            />
+                            <div key={field.field_code} className="w-full">
+                              <SearchableSelect
+                                label={label}
+                                value={value}
+                                options={parseTemplateFieldOptions(field.options_json)}
+                                onChange={(nextValue) => setActData((current) => ({ ...current, [field.field_code]: nextValue }))}
+                              />
+                            </div>
                           );
                         }
 
@@ -839,7 +637,7 @@ export function CreateCaseWizard() {
                       })}
                     </div>
                   ) : (
-                    <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">La plantilla seleccionada no tiene campos configurados.</div>
+                    <div className="ep-card-muted z-0 rounded-[1.5rem] px-4 py-6 text-sm text-secondary">La plantilla seleccionada no tiene campos configurados.</div>
                   )}
                 </div>
               ) : null}
@@ -847,7 +645,7 @@ export function CreateCaseWizard() {
               {step === 4 ? (
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">5. Revisión y generar borrador</h2>
-                  <div className="ep-card-soft rounded-[1.6rem] p-5 text-sm leading-6 text-secondary">
+                  <div className="ep-card-soft z-0 rounded-[1.6rem] p-5 text-sm leading-6 text-secondary">
                     <p>Plantilla: <span className="font-semibold text-primary">{selectedTemplate?.name || "Sin plantilla"}</span></p>
                     <p className="mt-2">Intervinientes: {templateRoles.map((role) => role.label).filter(Boolean).join(", ") || "Poderdante y Apoderado(a)"}</p>
                     <p className="mt-2">Número interno: <span className="font-semibold text-primary">{caseDetail?.internal_case_number || "Se generar? al crear la minuta"}</span></p>
@@ -872,14 +670,14 @@ export function CreateCaseWizard() {
 
         {showAside ? (
           <aside className="space-y-4">
-            <div className="ep-card rounded-[1.8rem] p-5">
+            <div className="ep-card z-0 rounded-[1.8rem] p-5">
               <p className="text-xs uppercase tracking-[0.2em] text-secondary">Minuta activa</p>
               <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
               <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
               <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
               <p className="mt-2 text-sm text-secondary">Escritura oficial: {caseDetail?.official_deed_number || "Pendiente de aprobación"}</p>
             </div>
-            <div className="ep-card rounded-[1.8rem] p-5">
+            <div className="ep-card z-0 rounded-[1.8rem] p-5">
               <p className="text-xs uppercase tracking-[0.2em] text-secondary">Reglas funcionales</p>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary">
                 <li>La plantilla define el trámite.</li>

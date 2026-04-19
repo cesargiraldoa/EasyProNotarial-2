@@ -22,6 +22,23 @@ class RoleCatalogItem(BaseModel):
     description: str
 
 
+class RoleCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=50)
+    name: str = Field(min_length=2, max_length=80)
+    scope: str = Field(min_length=2, max_length=30)
+    description: str = Field(default="", max_length=255)
+
+
+class RoleUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    description: str = Field(default="", max_length=255)
+
+
+class RolePermissionItem(BaseModel):
+    module_code: str = Field(min_length=1, max_length=80)
+    can_access: bool
+
+
 class UserRoleAssignmentInput(BaseModel):
     role_code: str = Field(min_length=2, max_length=50)
     notary_id: int | None = None

@@ -22,47 +22,55 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const safeOptions = Array.isArray(options) ? options : [];
-  const selected = safeOptions.find((o) => o.value === value) ?? null;
+  const selected = safeOptions.find((option) => option.value === value) ?? null;
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return safeOptions;
-    return safeOptions.filter((o) => o.label.toLowerCase().includes(term));
-  }, [safeOptions, query]);
-
-  useEffect(() => {
-    function handleOutside(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+    if (!term) {
+      return safeOptions;
     }
-
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
+    return safeOptions.filter((option) => option.label.toLowerCase().includes(term));
+  }, [safeOptions, query]);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
+
+    setQuery("");
     const timer = window.setTimeout(() => {
-      dropdownRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, 50);
+      searchInputRef.current?.focus();
+    }, 0);
+
     return () => window.clearTimeout(timer);
   }, [isOpen]);
 
-  function select(opt: Option) {
-    onChange(opt.value);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    function handleOutsideClick(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  function select(option: Option) {
+    onChange(option.value);
     setIsOpen(false);
     setQuery("");
   }
 
-  function clear(e: { stopPropagation: () => void }) {
-    e.stopPropagation();
+  function clear(event: React.MouseEvent | React.KeyboardEvent) {
+    event.stopPropagation();
     onChange("");
     setIsOpen(false);
     setQuery("");
@@ -70,16 +78,11 @@ export function SearchableSelect({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span>{label}</span>
-      <div ref={containerRef} className="relative">
+      <span className="text-sm font-medium text-primary">{label}</span>
+      <div ref={containerRef} className="z-0">
         <button
           type="button"
-          onClick={() => {
-            const rect = containerRef.current?.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - (rect?.bottom ?? 0);
-            setOpenUpward(spaceBelow < 250);
-            setIsOpen((prev) => !prev);
-          }}
+          onClick={() => setIsOpen((current) => !current)}
           className="flex w-full items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3 py-2 text-left"
         >
           <span className="truncate text-sm text-primary">{selected?.label ?? placeholder}</span>
@@ -89,8 +92,10 @@ export function SearchableSelect({
                 role="button"
                 tabIndex={0}
                 onClick={clear}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") clear(e);
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    clear(event);
+                  }
                 }}
                 aria-label="Limpiar selección"
                 className="rounded p-0.5 text-secondary hover:bg-[var(--panel)]"
@@ -103,41 +108,33 @@ export function SearchableSelect({
         </button>
 
         {isOpen ? (
-          <div
-            ref={dropdownRef}
-            className="absolute left-0 right-0 mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl"
-            style={{
-              zIndex: 9999,
-              top: openUpward ? "auto" : "calc(100% + 4px)",
-              bottom: openUpward ? "calc(100% + 4px)" : "auto",
-            }}
-          >
+          <div className="mt-2 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl">
             <div className="border-b border-[var(--line)] p-2">
               <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--input)] px-2 py-1.5">
                 <Search className="h-4 w-4 text-secondary" />
                 <input
-                  autoFocus
+                  ref={searchInputRef}
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(event) => setQuery(event.target.value)}
                   placeholder="Buscar..."
                   className="w-full bg-transparent text-sm text-primary outline-none placeholder:text-secondary"
                 />
               </div>
             </div>
-            <div className="max-h-56 overflow-auto p-1">
+            <div className="max-h-[240px] overflow-y-auto p-1">
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-secondary">Sin opciones.</div>
               ) : (
-                filtered.map((opt) => (
+                filtered.map((option) => (
                   <button
-                    key={opt.value}
+                    key={option.value}
                     type="button"
-                    onClick={() => select(opt)}
+                    onClick={() => select(option)}
                     className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
-                      value === opt.value ? "bg-primary text-white" : "text-primary hover:bg-[var(--input)]"
+                      value === option.value ? "bg-primary text-white" : "text-primary hover:bg-[var(--input)]"
                     }`}
                   >
-                    {opt.label}
+                    {option.label}
                   </button>
                 ))
               )}

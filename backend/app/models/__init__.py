@@ -16,6 +16,7 @@ from app.models.numbering_sequence import NumberingSequence
 from app.models.person import Person
 from app.models.role import Role
 from app.models.role_assignment import RoleAssignment
+from app.models.role_permission import RolePermission
 from app.models.template_field import TemplateField
 from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User

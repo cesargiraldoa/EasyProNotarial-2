@@ -14,3 +14,4 @@ class Role(TimestampMixin, Base):
     description: Mapped[str] = mapped_column(String(255), default="")
 
     assignments: Mapped[list["RoleAssignment"]] = relationship(back_populates="role")
+    permissions: Mapped[list["RolePermission"]] = relationship(back_populates="role")

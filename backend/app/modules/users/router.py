@@ -1,14 +1,18 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user, get_db, get_role_codes, require_roles
+from app.core.deps import get_current_user, get_db, get_role_codes, has_role, require_roles
 from app.core.security import get_password_hash
 from app.models.notary import Notary
 from app.models.role import Role
 from app.models.role_assignment import RoleAssignment
+from app.models.role_permission import RolePermission
 from app.models.user import User
 from app.schemas.user import (
+    RoleCreate,
     RoleCatalogItem,
+    RolePermissionItem,
+    RoleUpdate,
     UserCreate,
     UserDetail,
     UserOption,
@@ -22,6 +26,19 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 ROLE_ORDER = ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]
+MODULE_CODES = [
+    "resumen",
+    "comercial",
+    "notarias",
+    "usuarios",
+    "roles",
+    "minutas",
+    "crear_minuta",
+    "actos_plantillas",
+    "lotes",
+    "system_status",
+    "configuracion",
+]
 
 
 def serialize_assignment(assignment: RoleAssignment) -> UserRoleAssignmentSummary:
@@ -79,6 +96,33 @@ def get_assignable_roles(db: Session, current_user: User) -> list[Role]:
     return sorted(roles, key=lambda role: ROLE_ORDER.index(role.code) if role.code in ROLE_ORDER else 999)
 
 
+def load_role_or_404(db: Session, role_id: int) -> Role:
+    role = (
+        db.query(Role)
+        .options(joinedload(Role.permissions))
+        .filter(Role.id == role_id)
+        .first()
+    )
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rol no encontrado.")
+    return role
+
+
+def serialize_role_permissions(role: Role) -> list[RolePermissionItem]:
+    permission_map = {permission.module_code: permission.can_access for permission in role.permissions}
+    ordered_module_codes = list(MODULE_CODES)
+    for module_code in sorted(permission_map):
+        if module_code not in ordered_module_codes:
+            ordered_module_codes.append(module_code)
+    return [
+        RolePermissionItem(
+            module_code=module_code,
+            can_access=permission_map.get(module_code, False),
+        )
+        for module_code in ordered_module_codes
+    ]
+
+
 def ensure_assignment_permissions(current_user: User, role: Role, notary_id: int | None) -> None:
     manageable_notary_ids = get_manageable_notary_ids(current_user)
     if role.code == "super_admin" and not has_role(current_user, "super_admin"):
@@ -124,6 +168,106 @@ def list_roles(db: Session = Depends(get_db), current_user: User = Depends(requi
     return get_assignable_roles(db, current_user)
 
 
+@router.post("/roles", response_model=RoleCatalogItem, status_code=status.HTTP_201_CREATED)
+def create_role(payload: RoleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
+    code = payload.code.strip()
+    name = payload.name.strip()
+    scope = payload.scope.strip()
+    description = payload.description.strip()
+
+    if code == "super_admin" and not has_role(current_user, "super_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo SuperAdmin puede crear ese rol.")
+    if db.query(Role.id).filter(Role.code == code).first() is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ya existe un rol con ese code.")
+    if db.query(Role.id).filter(Role.name == name).first() is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ya existe un rol con ese nombre.")
+    role = Role(
+        code=code,
+        name=name,
+        scope=scope,
+        description=description,
+    )
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
+
+
+@router.patch("/roles/{role_id}", response_model=RoleCatalogItem)
+def update_role(role_id: int, payload: RoleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rol no encontrado.")
+    if role.code == "super_admin" and not has_role(current_user, "super_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo SuperAdmin puede editar ese rol.")
+    duplicate_name = db.query(Role.id).filter(Role.name == payload.name.strip(), Role.id != role.id).first()
+    if duplicate_name is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Ya existe un rol con ese nombre.")
+    role.name = payload.name.strip()
+    role.description = payload.description.strip()
+    db.commit()
+    db.refresh(role)
+    return role
+
+
+@router.delete("/roles/{role_id}")
+def delete_role(role_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin"))):
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rol no encontrado.")
+    if role.code == "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No se puede eliminar el rol super_admin.")
+    if db.query(RoleAssignment.id).filter(RoleAssignment.role_id == role.id).first() is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No se puede eliminar un rol con usuarios asignados.")
+    db.delete(role)
+    db.commit()
+    return {"deleted": True}
+
+
+@router.get("/roles/{role_id}/permissions", response_model=list[RolePermissionItem])
+def get_role_permissions(
+    role_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("super_admin", "admin_notary")),
+):
+    role = load_role_or_404(db, role_id)
+    return serialize_role_permissions(role)
+
+
+@router.put("/roles/{role_id}/permissions", response_model=list[RolePermissionItem])
+def update_role_permissions(
+    role_id: int,
+    payload: list[RolePermissionItem],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("super_admin", "admin_notary")),
+):
+    role = load_role_or_404(db, role_id)
+    if role.code == "super_admin" and not has_role(current_user, "super_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo SuperAdmin puede modificar esos permisos.")
+
+    existing_permissions = {permission.module_code: permission for permission in role.permissions}
+    normalized_payload: dict[str, RolePermissionItem] = {}
+    for item in payload:
+        normalized_payload[item.module_code] = item
+
+    for item in normalized_payload.values():
+        current_permission = existing_permissions.get(item.module_code)
+        if current_permission is None:
+            db.add(
+                RolePermission(
+                    role_id=role.id,
+                    module_code=item.module_code,
+                    can_access=item.can_access,
+                )
+            )
+        else:
+            current_permission.can_access = item.can_access
+
+    db.commit()
+    role = load_role_or_404(db, role.id)
+    return serialize_role_permissions(role)
+
+
 @router.get("/options", response_model=list[UserOption])
 def list_user_options(
     active_only: bool = Query(default=True),
@@ -159,7 +303,7 @@ def list_user_options(
 
 
 @router.get("", response_model=list[UserSummary])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "notary"))):
     role_codes = get_role_codes(current_user)
     query = (
         db.query(User)
