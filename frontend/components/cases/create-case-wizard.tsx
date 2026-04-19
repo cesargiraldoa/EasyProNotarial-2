@@ -123,6 +123,36 @@ function parseTemplateFieldOptions(optionsJson: string | null | undefined): Sele
   }
 }
 
+function CollapsibleSearchableSelect({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  options?: SelectOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="grid gap-2">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="inline-flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-3 text-left text-sm font-medium text-primary"
+      >
+        <span>{label}</span>
+        <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
+      </button>
+      {isOpen ? <SearchableSelect label={label} value={value} options={options} onChange={onChange} placeholder={placeholder} /> : null}
+    </div>
+  );
+}
+
 export function CreateCaseWizard() {
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
@@ -135,6 +165,7 @@ export function CreateCaseWizard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [canSelectNotary, setCanSelectNotary] = useState(true);
+  const [showSubstituteNotary, setShowSubstituteNotary] = useState(false);
   const [generalForm, setGeneralForm] = useState({
     notary_id: "",
     client_user_id: "",
@@ -215,6 +246,7 @@ export function CreateCaseWizard() {
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
   const templateRoles = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []), [selectedTemplate]);
   const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
+  const showAside = step >= 2;
 
   function updateParticipant(role: string, field: keyof PersonPayload, value: string | boolean) {
     setParticipants((current) => ({
@@ -309,10 +341,8 @@ export function CreateCaseWizard() {
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Crear Minuta</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">Wizard documental inicial para Poder General</h1>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
-              El alcance de hoy prioriza la prueba real: plantilla, creación de la minuta, intervinientes, datos del acto y generación del borrador Word.
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
+              {caseDetail?.internal_case_number ? `Crear Minuta · ${caseDetail.internal_case_number}` : "Crear Minuta"}
             </p>
           </div>
           {caseDetail ? (
@@ -338,7 +368,7 @@ export function CreateCaseWizard() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+      <section className={`grid gap-6 ${showAside ? "xl:grid-cols-[minmax(0,1.2fr)_360px]" : "xl:grid-cols-1"}`}>
         <div className="ep-card rounded-[2rem] p-6 space-y-6">
           {isLoading ? <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Cargando plantillas, notarías y usuarios...</div> : null}
           {!isLoading && error && templates.length === 0 ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
@@ -364,15 +394,34 @@ export function CreateCaseWizard() {
               {step === 1 ? (
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">2. Datos generales de la minuta</h2>
-                  <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="grid gap-4">
                     {canSelectNotary ? (
                       <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
                     ) : null}
-                    <SearchableSelect label="Responsable actual" value={generalForm.current_owner_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, current_owner_user_id: value }))} />
-                    <SearchableSelect label="Protocolista" value={generalForm.protocolist_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, protocolist_user_id: value }))} />
-                    <SearchableSelect label="Aprobador" value={generalForm.approver_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, approver_user_id: value }))} />
-                    <SearchableSelect label="Notario titular" value={generalForm.titular_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, titular_notary_user_id: value }))} />
-                    <SearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
+                    <CollapsibleSearchableSelect label="Responsable actual" value={generalForm.current_owner_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, current_owner_user_id: value }))} />
+                    <CollapsibleSearchableSelect label="Protocolista" value={generalForm.protocolist_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, protocolist_user_id: value }))} />
+                    <CollapsibleSearchableSelect label="Aprobador" value={generalForm.approver_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, approver_user_id: value }))} />
+                    <CollapsibleSearchableSelect label="Notario titular" value={generalForm.titular_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, titular_notary_user_id: value }))} />
+                    {showSubstituteNotary ? (
+                      <div className="space-y-3">
+                        <CollapsibleSearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
+                        <button
+                          type="button"
+                          onClick={() => setShowSubstituteNotary(false)}
+                          className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                        >
+                          - Ocultar notario suplente
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowSubstituteNotary(true)}
+                        className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                      >
+                        + Agregar notario suplente
+                      </button>
+                    )}
                   </div>
                   <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
                     <input type="checkbox" checked={generalForm.requires_client_review} onChange={(event) => setGeneralForm((current) => ({ ...current, requires_client_review: event.target.checked }))} />
@@ -549,24 +598,26 @@ export function CreateCaseWizard() {
           ) : null}
         </div>
 
-        <aside className="space-y-4">
-          <div className="ep-card rounded-[1.8rem] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Minuta activa</p>
-            <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
-            <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
-            <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
-            <p className="mt-2 text-sm text-secondary">Escritura oficial: {caseDetail?.official_deed_number || "Pendiente de aprobación"}</p>
-          </div>
-          <div className="ep-card rounded-[1.8rem] p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-secondary">Reglas funcionales</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary">
-              <li>La plantilla define el trámite.</li>
-              <li>El número oficial no se asigna al crear.</li>
-              <li>Poderdante y apoderado son obligatorios.</li>
-              <li>Las personas se reutilizan por tipo y número.</li>
-            </ul>
-          </div>
-        </aside>
+        {showAside ? (
+          <aside className="space-y-4">
+            <div className="ep-card rounded-[1.8rem] p-5">
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Minuta activa</p>
+              <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
+              <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
+              <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
+              <p className="mt-2 text-sm text-secondary">Escritura oficial: {caseDetail?.official_deed_number || "Pendiente de aprobación"}</p>
+            </div>
+            <div className="ep-card rounded-[1.8rem] p-5">
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Reglas funcionales</p>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary">
+                <li>La plantilla define el trámite.</li>
+                <li>El número oficial no se asigna al crear.</li>
+                <li>Poderdante y apoderado son obligatorios.</li>
+                <li>Las personas se reutilizan por tipo y número.</li>
+              </ul>
+            </div>
+          </aside>
+        ) : null}
       </section>
     </div>
   );
