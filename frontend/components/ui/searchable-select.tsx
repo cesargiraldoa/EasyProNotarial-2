@@ -1,6 +1,5 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 
@@ -8,8 +7,8 @@ type Option = { value: string; label: string };
 
 export function SearchableSelect({ label, value, options = [], onChange, placeholder = "Buscar..." }: { label: string; value: string; options?: Option[]; onChange: (value: string) => void; placeholder?: string }) {
   const [query, setQuery] = useState("");
-  const [isOpen, setIsOpen] = useState(true);
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const safeOptions = Array.isArray(options) ? options : [];
@@ -21,7 +20,8 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
     }
     const updatePosition = () => {
       if (triggerRef.current) {
-        setAnchorRect(triggerRef.current.getBoundingClientRect());
+        const rect = triggerRef.current.getBoundingClientRect();
+        setCoords({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
       }
     };
     updatePosition();
@@ -34,6 +34,9 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
   }, [isOpen]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
       const clickedTrigger = Boolean(triggerRef.current && triggerRef.current.contains(target));
@@ -46,15 +49,16 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const portalTarget = typeof document !== "undefined" ? document.body : null;
-  const dropdown = isOpen && anchorRect && portalTarget ? createPortal(
+  const dropdown = isOpen && coords ? (
     <div
       ref={dropdownRef}
-      className="fixed z-[9999] rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 shadow-lg"
+      className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-2 shadow-lg"
       style={{
-        top: anchorRect.bottom + 8,
-        left: anchorRect.left,
-        width: anchorRect.width,
+        position: "fixed",
+        top: coords.top + coords.height + 8,
+        left: coords.left,
+        width: coords.width,
+        zIndex: 9999,
       }}
     >
       <div className="max-h-[200px] space-y-1 overflow-y-auto">
@@ -63,15 +67,18 @@ export function SearchableSelect({ label, value, options = [], onChange, placeho
           <button
             key={item.value}
             type="button"
-            onClick={() => { onChange(item.value); setQuery(item.label); setIsOpen(false); }}
+            onClick={() => {
+              onChange(item.value);
+              setQuery(item.label);
+              setIsOpen(false);
+            }}
             className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${value === item.value ? "bg-primary text-white" : "hover:bg-[var(--panel)] text-primary"}`}
           >
             <span>{item.label}</span>
           </button>
         ))}
       </div>
-    </div>,
-    portalTarget,
+    </div>
   ) : null;
 
   return (
