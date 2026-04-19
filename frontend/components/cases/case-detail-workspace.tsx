@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, FileSignature, MessageSquareText, NotebookTabs, Sparkles, Upload } from "lucide-react";
-import { addClientComment, addInternalNote, exportDocumentCase, generateWithGari, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addClientComment, addInternalNote, approveDocumentCase, exportDocumentCase, generateWithGari, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { formatDateTime } from "@/lib/datetime";
 
 const flowSteps = [
@@ -45,6 +45,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
   const [finalFile, setFinalFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isGeneratingGari, setIsGeneratingGari] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [gariText, setGariText] = useState<string | null>(null);
   const [reviewerMode, setReviewerMode] = useState(false);
   const [correctionNote, setCorrectionNote] = useState("");
@@ -87,6 +88,8 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
   const internalNotes = Array.isArray(caseDetail?.internal_notes) ? caseDetail.internal_notes : [];
   const workflowEvents = Array.isArray(caseDetail?.workflow_events) ? caseDetail.workflow_events : [];
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
+  const hasDraftVersion = Boolean(draftDocument && Array.isArray(draftDocument.versions) && draftDocument.versions.length > 0);
+  const canShowApproveButton = caseDetail?.current_state !== "aprobado_notario" && caseDetail?.current_state !== "cerrado";
 
   useEffect(() => {
     const text = caseDetail?.act_data?.gari_draft_text ?? null;
@@ -173,6 +176,23 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
       setError(issue instanceof Error ? issue.message : "No fue posible generar el documento con Gari.");
     } finally {
       setIsGeneratingGari(false);
+    }
+  }
+
+  async function handleApproveDocument() {
+    setError(null);
+    setFeedback(null);
+    setIsApproving(true);
+    try {
+      await approveDocumentCase(caseId, "approver", "Documento aprobado");
+      const updated = await getDocumentCase(caseId);
+      setCaseDetail(updated);
+      setGariText(updated?.act_data?.gari_draft_text ?? null);
+      setFeedback("Documento revisado. Listo para firma del notario.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Error al aprobar.");
+    } finally {
+      setIsApproving(false);
     }
   }
 
@@ -445,24 +465,22 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                         </div>
                       )}
 
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const { approveDocumentCase } = await import("@/lib/document-flow");
-                            await approveDocumentCase(caseId, "approver", "Documento aprobado");
-                            setFeedback("Documento aprobado. Listo para firma del notario.");
-                            const updated = await getDocumentCase(caseId);
-                            setCaseDetail(updated);
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : "Error al aprobar.");
-                          }
-                        }}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:opacity-90 transition"
-                      >
-                        <FileSignature className="h-4 w-4" />
-                        Aprobar documento
-                      </button>
+                      {canShowApproveButton && hasDraftVersion ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleApproveDocument()}
+                          disabled={isApproving}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <FileSignature className="h-4 w-4" />
+                          {isApproving ? "Aprobando..." : "Aprobar documento"}
+                        </button>
+                      ) : null}
+                      {canShowApproveButton && !hasDraftVersion ? (
+                        <div className="ep-card-muted rounded-xl px-4 py-3 text-sm text-secondary">
+                          Debes generar al menos un borrador antes de aprobar
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
