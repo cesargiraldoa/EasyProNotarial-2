@@ -563,6 +563,24 @@ def resolver_escritura(
     }
 
 
+def resolver_escritura_desde_template(template) -> dict:
+    """
+    Reemplaza resolver_escritura(). Recibe el objeto DocumentTemplate de BD.
+    Retorna variante_id, campos_requeridos y max_tokens sin hardcodear nada.
+    """
+    campos_requeridos = [
+        f.field_code for f in (template.fields or []) if f.is_required
+    ]
+    max_tokens = min(4000 + len(campos_requeridos) * 500, 8000)
+    return {
+        "variante_id": template.slug,
+        "plantilla_id": template.slug,
+        "campos_requeridos": campos_requeridos,
+        "campos_faltantes": [],   # se valida en el endpoint
+        "max_tokens_estimado": max_tokens,
+    }
+
+
 if __name__ == "__main__":
     ejemplo_aragua = resolver_escritura(
         proyecto="aragua",
