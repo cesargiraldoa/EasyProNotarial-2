@@ -24,6 +24,7 @@ export function SearchableSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   const safeOptions = Array.isArray(options) ? options : [];
   const selected = safeOptions.find((o) => o.value === value) ?? null;
@@ -43,6 +44,16 @@ export function SearchableSelect({
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      dropdownRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
 
   function select(opt: Option) {
     onChange(opt.value);
@@ -93,6 +104,7 @@ export function SearchableSelect({
 
         {isOpen ? (
           <div
+            ref={dropdownRef}
             className="absolute left-0 right-0 mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl"
             style={{
               zIndex: 9999,
