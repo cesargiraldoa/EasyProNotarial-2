@@ -219,7 +219,7 @@ export function CreateCaseWizard() {
         }))
         .filter((item) => item.value);
       const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
-      const defaultNotaryRaw = (currentUser as { default_notary_id?: number | null } | null)?.default_notary_id;
+      const defaultNotaryRaw = currentUser?.default_notary_id;
       const defaultNotaryId = String(defaultNotaryRaw ?? "");
       console.log("notary_id seteado:", String(defaultNotaryRaw ?? ""));
 

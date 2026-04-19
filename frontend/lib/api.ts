@@ -1,4 +1,5 @@
 import { cleanNullableText, cleanText, repairText, sanitizeTextDeep } from "@/lib/text";
+import { getToken } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
 const SESSION_KEY = "easypro2_session";
@@ -17,6 +18,7 @@ export type CurrentUser = {
   role_codes: string[];
   permissions?: Array<{ module_code: string; can_access: boolean }>;
   default_notary?: string | null;
+  default_notary_id?: number | null;
   assignments: Array<{
     id: number;
     role_id: number;
@@ -519,7 +521,39 @@ export function logout() {
   }
 }
 
-export async function getCurrentUser(): Promise<CurrentUser> { return apiFetch<CurrentUser>("/api/v1/auth/me"); }
+function decodeJwtPayload(token: string | null): Record<string, unknown> {
+  if (!token) {
+    return {};
+  }
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return {};
+  }
+  try {
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    const raw = typeof atob === "function"
+      ? atob(padded)
+      : Buffer.from(padded, "base64").toString("binary");
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const currentUser = await apiFetch<CurrentUser>("/api/v1/auth/me");
+  const tokenPayload = decodeJwtPayload(getToken());
+  const tokenNotaryId = typeof tokenPayload.notary_id === "number"
+    ? tokenPayload.notary_id
+    : typeof tokenPayload.notary_id === "string"
+      ? Number(tokenPayload.notary_id)
+      : null;
+  return {
+    ...currentUser,
+    default_notary_id: currentUser.default_notary_id ?? (Number.isFinite(tokenNotaryId as number) ? (tokenNotaryId as number) : null),
+  };
+}
 export async function getNotaries(filters: NotaryFilters = {}): Promise<NotaryRecord[]> { return normalizeNotaryResponse(await apiFetch<NotaryRecord[]>(`/api/v1/notaries${buildQuery(filters)}`)); }
 export async function getNotaryFilterOptions(): Promise<NotaryFilterOptions> { return apiFetch<NotaryFilterOptions>("/api/v1/notaries/filters"); }
 export async function getNotary(id: number): Promise<NotaryDetail> { return apiFetch<NotaryDetail>(`/api/v1/notaries/${id}`); }
