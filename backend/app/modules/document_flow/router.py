@@ -748,6 +748,24 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
     storage = version.storage_path or ""
     if storage.startswith("http://") or storage.startswith("https://"):
+        # Intentar regenerar signed URL desde Supabase
+        try:
+            from app.services.gari_document_service import get_supabase_client
+            import re
+
+            # Extraer el path relativo del storage_path original
+            # El path en Supabase es: cases/case-{id}/draft/...
+            match = re.search(r"(cases/.*)", storage)
+            if match:
+                supabase_path = match.group(1).split("?")[0]
+                supabase = get_supabase_client()
+                result = supabase.storage.from_("documentos").create_signed_url(
+                    supabase_path, 300
+                )
+                new_url = result.get("signedURL") or result.get("signedUrl") or storage
+                return RedirectResponse(url=new_url, status_code=302)
+        except Exception:
+            pass
         return RedirectResponse(url=storage, status_code=302)
     path = Path(storage)
     if not path.exists():
