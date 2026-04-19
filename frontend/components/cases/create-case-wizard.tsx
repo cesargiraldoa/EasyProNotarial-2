@@ -12,6 +12,7 @@ import {
   getActiveTemplates,
   saveCaseActData,
   saveCaseParticipants,
+  type PersonRecord,
   type DocumentFlowCase,
   type PersonPayload,
   type TemplateRecord,
@@ -34,24 +35,7 @@ const professionSuggestions = ["Abogado", "Comerciante", "Administrador", "Ingen
 type SelectOption = { value: string; label: string };
 
 type SearchableOption = { value: string; label: string };
-
-function blankPerson(): PersonPayload {
-  return {
-    document_type: "CC",
-    document_number: "",
-    full_name: "",
-    sex: "",
-    nationality: "Colombiana",
-    marital_status: "",
-    profession: "",
-    municipality: "",
-    is_transient: false,
-    phone: "",
-    address: "",
-    email: "",
-    metadata_json: "{}",
-  };
-}
+type ParticipantAssignment = { person_id: number | null; person: PersonPayload | null };
 
 function safeString(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -124,31 +108,6 @@ function parseTemplateFieldOptions(optionsJson: string | null | undefined): Sele
   }
 }
 
-function ParticipantTextField({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
-  return (
-    <div className="flex min-h-[80px] flex-col gap-1">
-      <span className="text-sm font-medium text-primary">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="ep-input h-12 rounded-2xl px-4"
-      />
-    </div>
-  );
-}
-
-
 export function CreateCaseWizard() {
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
@@ -175,7 +134,8 @@ export function CreateCaseWizard() {
     requires_client_review: true,
     metadata_json: JSON.stringify({ clase: "Poder General" }, null, 2),
   });
-  const [participants, setParticipants] = useState<Record<string, PersonPayload>>({});
+  const [participants, setParticipants] = useState<Record<string, ParticipantAssignment>>({});
+  const [participantDetails, setParticipantDetails] = useState<Record<string, PersonPayload | null>>({});
   const [actData, setActData] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -183,14 +143,15 @@ export function CreateCaseWizard() {
   }, []);
 
   useEffect(() => {
-    if (step !== 0 || !selectedTemplate) {
+    if (!selectedTemplate) {
       return;
     }
     const nextParticipants = Object.fromEntries(
       sortByStepOrder(Array.isArray(selectedTemplate.required_roles) ? selectedTemplate.required_roles : [])
-        .map((role) => [role.role_code, blankPerson()]),
-    ) as Record<string, PersonPayload>;
+        .map((role) => [role.role_code, { person_id: null, person: null }]),
+    ) as Record<string, ParticipantAssignment>;
     setParticipants(nextParticipants);
+    setParticipantDetails(Object.fromEntries(Object.keys(nextParticipants).map((roleCode) => [roleCode, null])) as Record<string, PersonPayload | null>);
   }, [selectedTemplate, step]);
 
   useEffect(() => {
@@ -271,11 +232,58 @@ export function CreateCaseWizard() {
     { key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id },
   ], [generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.approver_user_id, generalForm.titular_notary_user_id]);
 
-  function updateParticipant(role: string, field: keyof PersonPayload, value: string | boolean) {
+  function assignExistingParticipant(role: string, person: PersonRecord) {
+    const summary: PersonPayload = {
+      document_type: person.document_type || "CC",
+      document_number: person.document_number || "",
+      full_name: person.full_name || "",
+      sex: person.sex || "",
+      nationality: person.nationality || "",
+      marital_status: person.marital_status || "",
+      profession: person.profession || "",
+      municipality: person.municipality || "",
+      is_transient: Boolean(person.is_transient),
+      phone: person.phone || "",
+      address: person.address || "",
+      email: person.email || "",
+      metadata_json: person.metadata_json || "{}",
+    };
     setParticipants((current) => ({
       ...current,
-      [role]: { ...(current[role] ?? blankPerson()), [field]: value },
+      [role]: { person_id: person.id, person: null },
     }));
+    setParticipantDetails((current) => ({ ...current, [role]: summary }));
+  }
+
+  function assignNewParticipant(role: string, person: PersonPayload) {
+    const nextPerson: PersonPayload = {
+      document_type: person.document_type || "CC",
+      document_number: person.document_number || "",
+      full_name: person.full_name || "",
+      sex: person.sex || "",
+      nationality: person.nationality || "",
+      marital_status: person.marital_status || "",
+      profession: person.profession || "",
+      municipality: person.municipality || "",
+      is_transient: Boolean(person.is_transient),
+      phone: person.phone || "",
+      address: person.address || "",
+      email: person.email || "",
+      metadata_json: person.metadata_json || "{}",
+    };
+    setParticipants((current) => ({
+      ...current,
+      [role]: { person_id: null, person: nextPerson },
+    }));
+    setParticipantDetails((current) => ({ ...current, [role]: nextPerson }));
+  }
+
+  function clearParticipant(role: string) {
+    setParticipants((current) => ({
+      ...current,
+      [role]: { person_id: null, person: null },
+    }));
+    setParticipantDetails((current) => ({ ...current, [role]: null }));
   }
 
   function updateGeneralManager(field: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id", value: string) {
@@ -287,9 +295,9 @@ export function CreateCaseWizard() {
     const requiredRoles = templateRoles.filter((role) => role.is_required);
 
     for (const role of requiredRoles) {
-      const item = participants[role.role_code] ?? blankPerson();
-      if (!item.document_number || !item.full_name || !item.marital_status || !item.municipality) {
-        return `Completa los datos obligatorios de ${role.label || role.role_code}.`;
+      const item = participants[role.role_code] ?? { person_id: null, person: null };
+      if (item.person_id == null && item.person == null) {
+        return `Selecciona o crea la persona para ${role.label || role.role_code}.`;
       }
     }
     return null;
@@ -337,7 +345,8 @@ export function CreateCaseWizard() {
           templateRoles.map((role) => ({
               role_code: role.role_code,
               role_label: role.label,
-              person: participants[role.role_code] ?? blankPerson(),
+              person_id: participants[role.role_code]?.person_id ?? null,
+              person: participants[role.role_code]?.person ?? null,
             })),
         );
         setCaseDetail(updated);
@@ -482,10 +491,11 @@ export function CreateCaseWizard() {
                 <div className="space-y-6">
                   <h2 className="text-2xl font-semibold text-primary">3. Intervinientes</h2>
                   {templateRoles.map((role) => {
-                    const person = participants[role.role_code] ?? blankPerson();
+                    const assignment = participants[role.role_code] ?? { person_id: null, person: null };
+                    const displayPerson = participantDetails[role.role_code] ?? assignment.person;
                     const roleStatus = role.is_required ? "Bloque obligatorio" : "Bloque opcional";
                     const isExpanded = Boolean(expandedParticipantRoles[role.role_code]);
-                    const isComplete = Boolean(person.document_number && person.full_name);
+                    const isComplete = Boolean(displayPerson?.document_number && displayPerson?.full_name);
                     return (
                       <div key={role.role_code} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
                         <button
@@ -498,44 +508,34 @@ export function CreateCaseWizard() {
                             <h3 className="text-sm font-medium text-secondary">{roleStatus}</h3>
                           </div>
                           <span className="ep-pill rounded-full px-3 py-1 text-xs font-semibold text-secondary">{isComplete ? "Completo" : "Incompleto"}</span>
-                        </button>
+                          </button>
                         {isExpanded ? (
                           <div className="space-y-4">
-                            <PersonLookup
-                              onPick={(selected) =>
-                                setParticipants((current) => ({
-                                  ...current,
-                                  [role.role_code]: {
-                                    ...blankPerson(),
-                                    ...current[role.role_code],
-                                    ...selected,
-                                    metadata_json: current[role.role_code]?.metadata_json || "{}",
-                                  },
-                                }))
-                              }
-                            />
-                            <div className="space-y-4">
-                              <SearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
-                              <SearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
-                              <SearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
-                              <SearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
-                              <SearchableSelect label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <ParticipantTextField label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
-                              <ParticipantTextField label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
-                              <ParticipantTextField label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
-                              <ParticipantTextField label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
-                              <ParticipantTextField label="Email" value={person.email || ""} type="email" onChange={(value) => updateParticipant(role.role_code, "email", value)} />
-                            </div>
-                            <div className="flex min-h-[80px] flex-col gap-1">
-                              <span className="text-sm font-medium text-primary">Dirección</span>
-                              <input value={person.address || ""} onChange={(event) => updateParticipant(role.role_code, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
-                            </div>
-                            <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
-                              <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role.role_code, "is_transient", event.target.checked)} />
-                              ¿Está de tránsito?
-                            </label>
+                            {assignment.person_id !== null || assignment.person !== null ? (
+                              <div className="rounded-[1.35rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-primary">{displayPerson?.full_name || "Persona asignada"}</p>
+                                    <p className="mt-1 text-sm text-secondary">
+                                      {displayPerson?.document_type || "DOC"} {displayPerson?.document_number || "Sin número"} · {displayPerson?.municipality || "Sin municipio"}
+                                    </p>
+                                  </div>
+                                  <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => clearParticipant(role.role_code)}
+                                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                >
+                                  Cambiar
+                                </button>
+                              </div>
+                            ) : (
+                              <PersonLookup
+                                onPick={(selected) => assignExistingParticipant(role.role_code, selected)}
+                                onNotFound={(person) => assignNewParticipant(role.role_code, person)}
+                              />
+                            )}
                           </div>
                         ) : null}
                       </div>

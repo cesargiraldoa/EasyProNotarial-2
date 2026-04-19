@@ -484,8 +484,12 @@ def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], 
     db.flush()
     person_ids: list[int] = []
     for item in payload:
-        person = db.query(Person).filter(Person.id == item.person_id).first() if item.person_id else None
-        if person is None and item.person is not None:
+        person = None
+        if item.person_id is not None:
+            person = db.query(Person).filter(Person.id == item.person_id).first()
+            if person is None:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"No existe la persona seleccionada para {item.role_label}.")
+        elif item.person is not None:
             person = resolve_or_create_person(db, item.person)
         if person is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Debes seleccionar o crear la persona para {item.role_label}.")
