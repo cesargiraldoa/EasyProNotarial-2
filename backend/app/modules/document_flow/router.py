@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
@@ -545,6 +545,7 @@ def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Sessi
 
 @router.post("/cases/{case_id}/generate-with-gari", response_model=CaseDetail)
 def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+    db.execute(text("SET LOCAL statement_timeout = '120000'"))
     case = load_case_or_404(db, case_id)
     if case.act_data is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador con Gari.")
