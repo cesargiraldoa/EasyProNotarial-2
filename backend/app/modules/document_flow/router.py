@@ -53,7 +53,7 @@ from app.services.document_generation import build_case_text_snapshot, extract_t
 from app.services.gari_document_service import (
     build_gari_docx_buffer,
     generate_notarial_document,
-    resolver_escritura,
+    resolver_escritura_desde_template,
     save_gari_document_as_docx,
 )
 from app.services.storage import next_case_file_path, save_base64_file
@@ -579,23 +579,17 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
             template_reference_text = None
 
     campos_caso = {k: v for k, v in act_data.items() if v not in (None, "", [])}
-    es_escritura_vis = act_data.get("proyecto") is not None
 
-    if es_escritura_vis:
-        try:
-            resolucion = resolver_escritura(
-                proyecto=act_data.get("proyecto", "aragua"),
-                tipo_inmueble=act_data.get("tipo_inmueble", "apartamento"),
-                num_compradores=act_data.get("num_compradores") or len(case.participants),
-                banco_hipotecante=act_data.get("banco_hipotecante"),
-                campos_caso=campos_caso,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        if resolucion["campos_faltantes"]:
+    if case.template:
+        resolucion = resolver_escritura_desde_template(case.template)
+        campos_faltantes = [
+            c for c in resolucion["campos_requeridos"]
+            if not campos_caso.get(c)
+        ]
+        if campos_faltantes:
             raise HTTPException(
                 status_code=422,
-                detail=f"Faltan campos requeridos para generar la escritura: {', '.join(resolucion['campos_faltantes'])}"
+                detail=f"Faltan campos requeridos: {', '.join(campos_faltantes)}"
             )
         max_tokens = resolucion["max_tokens_estimado"]
         variante_id = resolucion["variante_id"]
