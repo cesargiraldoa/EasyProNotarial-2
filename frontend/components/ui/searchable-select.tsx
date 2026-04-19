@@ -22,6 +22,7 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const safeOptions = Array.isArray(options) ? options : [];
@@ -62,7 +63,12 @@ export function SearchableSelect({
       <div ref={containerRef} className="relative">
         <button
           type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
+          onClick={() => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - (rect?.bottom ?? 0);
+            setOpenUpward(spaceBelow < 250);
+            setIsOpen((prev) => !prev);
+          }}
           className="flex w-full items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--input)] px-3 py-2 text-left"
         >
           <span className="truncate text-sm text-primary">{selected?.label ?? placeholder}</span>
@@ -87,8 +93,12 @@ export function SearchableSelect({
 
         {isOpen ? (
           <div
-            className="absolute left-0 right-0 top-full mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl"
-            style={{ zIndex: 9999 }}
+            className="absolute left-0 right-0 mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl"
+            style={{
+              zIndex: 9999,
+              top: openUpward ? "auto" : "calc(100% + 4px)",
+              bottom: openUpward ? "calc(100% + 4px)" : "auto",
+            }}
           >
             <div className="border-b border-[var(--line)] p-2">
               <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--input)] px-2 py-1.5">
