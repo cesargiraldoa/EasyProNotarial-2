@@ -367,6 +367,7 @@ export function CreateCaseWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [canSelectNotary, setCanSelectNotary] = useState(true);
   const [showSubstituteNotary, setShowSubstituteNotary] = useState(false);
+  const [expandedGeneralField, setExpandedGeneralField] = useState<string | null>(null);
   const [expandedParticipantRoles, setExpandedParticipantRoles] = useState<Record<string, boolean>>({});
   const [generalForm, setGeneralForm] = useState({
     notary_id: "",
@@ -468,12 +469,23 @@ export function CreateCaseWizard() {
   const templateRoles = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []), [selectedTemplate]);
   const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
   const showAside = step >= 3;
+  const generalManagerFields = useMemo<Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }>>(() => [
+    { key: "current_owner_user_id", label: "Responsable actual", value: generalForm.current_owner_user_id },
+    { key: "protocolist_user_id", label: "Protocolista", value: generalForm.protocolist_user_id },
+    { key: "approver_user_id", label: "Aprobador", value: generalForm.approver_user_id },
+    { key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id },
+  ], [generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.approver_user_id, generalForm.titular_notary_user_id]);
 
   function updateParticipant(role: string, field: keyof PersonPayload, value: string | boolean) {
     setParticipants((current) => ({
       ...current,
       [role]: { ...(current[role] ?? blankPerson()), [field]: value },
     }));
+  }
+
+  function updateGeneralManager(field: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id", value: string) {
+    setGeneralForm((current) => ({ ...current, [field]: value }));
+    setExpandedGeneralField(null);
   }
 
   function validateParticipants() {
@@ -619,10 +631,30 @@ export function CreateCaseWizard() {
                     {canSelectNotary ? (
                       <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
                     ) : null}
-                    <CollapsibleSearchableSelect label="Responsable actual" value={generalForm.current_owner_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, current_owner_user_id: value }))} />
-                    <CollapsibleSearchableSelect label="Protocolista" value={generalForm.protocolist_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, protocolist_user_id: value }))} />
-                    <CollapsibleSearchableSelect label="Aprobador" value={generalForm.approver_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, approver_user_id: value }))} />
-                    <CollapsibleSearchableSelect label="Notario titular" value={generalForm.titular_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, titular_notary_user_id: value }))} />
+                    {generalManagerFields.map((field) => {
+                      const isExpanded = expandedGeneralField === field.key;
+                      const selectedLabel = userOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
+                      return (
+                        <div key={field.key} className="ep-card-soft rounded-[1.6rem] p-4 space-y-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedGeneralField((current) => (current === field.key ? null : field.key))}
+                            className="flex w-full items-center justify-between gap-3 rounded-[1.1rem] px-4 py-3 text-left"
+                          >
+                            <span className="text-sm font-medium text-primary">{field.label}</span>
+                            <span className="text-sm font-medium text-secondary">{selectedLabel}</span>
+                          </button>
+                          {isExpanded ? (
+                            <SearchableSelect
+                              label={field.label}
+                              value={field.value}
+                              options={userOptions}
+                              onChange={(value) => updateGeneralManager(field.key, value)}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })}
                     {showSubstituteNotary ? (
                       <div className="space-y-3">
                         <CollapsibleSearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
