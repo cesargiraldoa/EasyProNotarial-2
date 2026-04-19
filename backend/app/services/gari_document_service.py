@@ -6,7 +6,7 @@ from pathlib import Path
 
 from docx import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Cm
+from docx.shared import Cm, Pt
 from openai import OpenAI
 from supabase import Client, create_client
 
@@ -21,9 +21,10 @@ IDENTIDAD Y ROL:
 - Solo produces el texto del documento. Nunca incluyes explicaciones, comentarios ni metadata.
 
 REGLAS DE FORMATO NOTARIAL OBLIGATORIAS:
-- Usa guiones SOLO al final de cada párrafo para completar la línea, máximo 20 guiones por línea: "texto del párrafo - - - - - - - - - - - - - - -"
-- NUNCA uses líneas enteras de solo guiones sin texto
-- NUNCA uses más de 3 líneas consecutivas de guiones
+- NO uses guiones de relleno (- - - - -) en el cuerpo del documento
+- El sistema los agregará automáticamente al formatear
+- Solo usa saltos de línea entre secciones
+- Separa cada acto con una línea en blanco
 - Números siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintiséis (2026)"
 - Valores monetarios: "$6.000.000" Y "seis millones de pesos colombianos ($6.000.000)"
 - Negrilla para títulos de actos: **PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA**
@@ -433,6 +434,10 @@ def build_gari_docx_buffer(text: str) -> io.BytesIO:
         if line.startswith("- - -") or line.startswith("---"):
             run = p.runs[0] if p.runs else p.add_run(line)
             run.bold = True
+        if line and not line.startswith("**"):
+            p_close = doc.add_paragraph()
+            run_close = p_close.add_run("- " * 20)
+            run_close.font.size = Pt(10)
 
     buffer = io.BytesIO()
     doc.save(buffer)
