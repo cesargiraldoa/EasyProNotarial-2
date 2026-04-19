@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
@@ -107,9 +107,9 @@ def detail_query(db: Session):
 
 
 def load_case_or_404(db: Session, case_id: int) -> Case:
-    case = detail_query(db).filter(Case.id == case_id).first()
+    case = db.query(Case).filter(Case.id == case_id).first()
     if case is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caso no encontrado.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Minuta no encontrada.")
     return case
 
 
@@ -198,12 +198,13 @@ def serialize_document_version(case_id: int, document_id: int, version: CaseDocu
 
 
 def serialize_document(case_id: int, document: CaseDocument) -> CaseDocumentSummary:
+    latest = max(document.versions, key=lambda version: version.version_number, default=None)
     return CaseDocumentSummary(
         id=document.id,
         category=document.category,
         title=document.title,
         current_version_number=document.current_version_number,
-        versions=[serialize_document_version(case_id, document.id, version) for version in document.versions],
+        versions=[serialize_document_version(case_id, document.id, latest)] if latest else [],
     )
 
 
@@ -474,7 +475,6 @@ def get_case_detail(case_id: int, db: Session = Depends(get_db), current_user: U
 
 @router.put("/cases/{case_id}/participants", response_model=CaseDetail)
 def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     required_roles = {item.role_code for item in case.template.required_roles if item.is_required} if case.template else set()
     provided_roles = {item.role_code for item in payload}
@@ -506,7 +506,6 @@ def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], 
 
 @router.put("/cases/{case_id}/act-data", response_model=CaseDetail)
 def save_case_act_data(case_id: int, payload: CaseActDataPayload, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     if case.act_data is None:
         case.act_data = CaseActData(case_id=case.id, data_json="{}")
@@ -521,7 +520,6 @@ def save_case_act_data(case_id: int, payload: CaseActDataPayload, db: Session = 
 
 @router.post("/cases/{case_id}/client-comments", response_model=CaseDetail)
 def add_client_comment(case_id: int, payload: CaseCommentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     db.add(CaseClientComment(case_id=case.id, created_by_user_id=current_user.id, comment=payload.comment.strip()))
     append_workflow(db, case, current_user, "client_comment_added", actor_role_code="client" if "client" in get_role_codes(current_user) else None, comment=payload.comment.strip())
@@ -531,7 +529,6 @@ def add_client_comment(case_id: int, payload: CaseCommentCreate, db: Session = D
 
 @router.post("/cases/{case_id}/internal-notes", response_model=CaseDetail)
 def add_internal_note(case_id: int, payload: CaseInternalNoteCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     db.add(CaseInternalNote(case_id=case.id, created_by_user_id=current_user.id, note=payload.note.strip()))
     append_workflow(db, case, current_user, "internal_note_added", comment=payload.note.strip())
@@ -541,7 +538,6 @@ def add_internal_note(case_id: int, payload: CaseInternalNoteCreate, db: Session
 
 @router.post("/cases/{case_id}/generate-draft", response_model=CaseDetail)
 def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     generate_draft_for_case(db, case, current_user, payload.comment)
     db.commit()
@@ -550,7 +546,6 @@ def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Sessi
 
 @router.post("/cases/{case_id}/generate-with-gari", response_model=CaseDetail)
 def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
-    db.execute(text("SET LOCAL statement_timeout = '120000'"))
     case = load_case_or_404(db, case_id)
     if case.act_data is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador con Gari.")
@@ -659,7 +654,6 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
 
 @router.post("/cases/{case_id}/approve", response_model=CaseDetail)
 def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     if payload.role_code not in {"approver", "titular_notary", "substitute_notary"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role_code debe ser approver, titular_notary o substitute_notary.")
@@ -699,7 +693,6 @@ def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(g
 
 @router.post("/cases/{case_id}/export", response_model=CaseDetail)
 def export_case_document(case_id: int, payload: ExportRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     latest_draft = latest_document_version(case, "draft", "docx")
     if latest_draft is None:
@@ -719,7 +712,6 @@ def export_case_document(case_id: int, payload: ExportRequest, db: Session = Dep
 
 @router.post("/cases/{case_id}/final-upload", response_model=CaseDetail)
 def upload_final_document(case_id: int, payload: FinalUploadRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary"))):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     extension = Path(payload.filename).suffix.lstrip(".") or "pdf"
     target = next_case_file_path(case.id, "final_signed", 1, extension, payload.filename)
@@ -737,14 +729,12 @@ def upload_final_document(case_id: int, payload: FinalUploadRequest, db: Session
 
 @router.get("/cases/{case_id}/documents", response_model=list[CaseDocumentSummary])
 def list_case_documents(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     return [serialize_document(case.id, item) for item in case.documents]
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/download")
 def download_case_document(case_id: int, document_id: int, version_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     version = None
     for document in case.documents:
@@ -785,7 +775,6 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
 
 @router.get("/cases/{case_id}/gari-download")
 def download_gari_document(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     gari_text = (case.act_data.gari_draft_text if case.act_data else None) or ""
     if not gari_text.strip():
@@ -802,7 +791,6 @@ def download_gari_document(case_id: int, db: Session = Depends(get_db), current_
 
 @router.post("/cases/{case_id}/timeline-events", response_model=CaseDetail)
 def add_case_timeline_event(case_id: int, payload: CaseTimelineEventCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    db.execute(text("SET LOCAL statement_timeout = '60000'"))
     case = load_case_or_404(db, case_id)
     metadata = json.loads(payload.metadata_json) if payload.metadata_json else None
     append_timeline(db, case.id, current_user.id, "comment_added", case.current_state, case.current_state, payload.comment, metadata)
