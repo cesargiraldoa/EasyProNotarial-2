@@ -41,18 +41,6 @@ def build_gari_prompt(
     previous_draft: str | None = None,
 ) -> str:
     """Construye el prompt para Gari con todos los datos del acto notarial."""
-    ROLES_LABEL = {
-        "comprador_1": "COMPRADOR(A) 1",
-        "comprador_2": "COMPRADOR(A) 2",
-        "comprador_3": "COMPRADOR(A) 3",
-        "apoderado_fideicomiso": "APODERADO(A) DEL FIDEICOMISO (VENDEDOR)",
-        "apoderado_fideicomitente": "APODERADO(A) DEL FIDEICOMITENTE (CONSTRUCTOR/VENDEDOR)",
-        "apoderado_banco_libera": "APODERADO(A) DEL BANCO QUE LIBERA HIPOTECA",
-        "apoderado_banco_hipoteca": "APODERADO(A) DEL BANCO HIPOTECANTE (NUEVO CRÉDITO)",
-        "poderdante": "PODERDANTE",
-        "apoderado": "APODERADO(A)",
-    }
-
     ORDEN_ACTOS_POR_VARIANTE = {
         "aragua_apto_1c": [
             "LIBERACIÓN PARCIAL DE HIPOTECA",
@@ -134,14 +122,12 @@ def build_gari_prompt(
         grouped_participants.setdefault(role_code, []).append(participant)
 
     participants_text = ""
-    ordered_role_codes = list(ROLES_LABEL.keys()) + [
-        code for code in grouped_participants if code not in ROLES_LABEL
-    ]
+    ordered_role_codes = list(grouped_participants.keys())
     for role_code in ordered_role_codes:
         for p in grouped_participants.get(role_code, []):
             role_label = p.get("role_label", "") or p.get("role_code", "")
             participants_text += (
-                f"\n- ROL: {ROLES_LABEL.get(role_code, str(role_label).upper())}"
+                f"\n- ROL: {str(p.get('role_label', role_code)).upper()}"
             )
             participants_text += f"\n  Nombre completo: {p.get('full_name', '')}"
             participants_text += f"\n  Tipo documento: {p.get('document_type', '')}"
