@@ -165,6 +165,47 @@ def build_gari_prompt(
         role_code = participant.get("role_code", "") or ""
         grouped_participants.setdefault(role_code, []).append(participant)
 
+    ACTOS_POR_VARIANTE = {
+        "aragua-parq-1c": [
+            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Bancolombia libera. Acreedor: Bancolombia S.A. NIT 890.903.938-8. Deudor: Fideicomiso P.A. Aragua de Primavera / Fiduciaria Bancolombia S.A. NIT 830.054.539-0. Valor: $100.000)",
+            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Aragua / Fiduciaria Bancolombia NIT 830.054.539-0 y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
+            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Aragua. Comprador(es): los intervinientes con rol comprador_1, comprador_2, comprador_3. Valor: el campo valor_de_la_venta)",
+            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso P.A. Aragua y los compradores. Sin cuantía)",
+            "QUINTO ACTO: CANCELACIÓN DE COMODATO PRECARIO (Otorgantes: Fideicomiso P.A. Aragua y Constructora Contex. Sin cuantía)",
+            "SEXTO ACTO: PODER ESPECIAL (Poderdante(s): los compradores. Apoderado: Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
+        ],
+        "aragua-parq-2c": [],
+        "aragua-parq-3c": [],
+        "torre6-contado": [
+            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Banco Davivienda S.A. NIT 860.034.313-7 libera. Deudor: Fideicomiso P.A. Aragua / Fiduciaria Bancolombia NIT 830.054.539-0)",
+            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Aragua y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
+            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Aragua. Comprador: rol comprador_1. Valor: campo valor_de_la_venta)",
+            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso y comprador. Sin cuantía)",
+            "QUINTO ACTO: CANCELACIÓN DE COMODATO PRECARIO (Otorgantes: Fideicomiso y Constructora Contex. Sin cuantía)",
+            "SEXTO ACTO: CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE (Otorgante: comprador_1. Sin cuantía)",
+            "SÉPTIMO ACTO: PODER ESPECIAL (Poderdante: comprador_1. Apoderado: Constructora Contex S.A.S. BIC. Sin cuantía)",
+        ],
+        "jaggua-bogota-1c": [
+            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Fondo Nacional del Ahorro NIT 899.999.284-4 libera. Deudor: Fideicomiso P.A. Jaggua / Fiduciaria Bancolombia NIT 830.054.539-0)",
+            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Jaggua y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
+            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Jaggua. Comprador: rol comprador_1. Valor: campo valor_de_la_venta)",
+            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso y comprador_1. Sin cuantía)",
+            "QUINTO ACTO: CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO (Deudor hipotecante: comprador_1. Acreedor: Banco de Bogotá S.A. NIT 860.002.964-4. Valor: campo valor_del_acto_hipoteca)",
+            "SEXTO ACTO: CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE (Otorgante: comprador_1. Sin cuantía)",
+            "SÉPTIMO ACTO: PODER ESPECIAL (Poderdante: comprador_1. Apoderado: Constructora Contex S.A.S. BIC. Sin cuantía)",
+        ],
+        "jaggua-bogota-2c": [],
+        "correccion-registro-civil": [
+            "ÚNICO ACTO: CORRECCIÓN DE REGISTRO CIVIL DE NACIMIENTO (Compareciente: rol inscrito. Obra en nombre propio.)",
+        ],
+        "salida-del-pais": [
+            "ÚNICO ACTO: PERMISO PERMANENTE DE SALIDA DEL PAÍS (Otorgante: rol otorgante  padre. Aceptante: rol aceptante  madre. A favor de: rol menor.)",
+        ],
+    }
+    ACTOS_POR_VARIANTE["aragua-parq-2c"] = ACTOS_POR_VARIANTE["aragua-parq-1c"]
+    ACTOS_POR_VARIANTE["aragua-parq-3c"] = ACTOS_POR_VARIANTE["aragua-parq-1c"]
+    ACTOS_POR_VARIANTE["jaggua-bogota-2c"] = ACTOS_POR_VARIANTE["jaggua-bogota-1c"]
+
     participants_text = ""
     ordered_role_codes = list(grouped_participants.keys())
     for role_code in ordered_role_codes:
@@ -208,6 +249,21 @@ El rol del interviniente indica quÃ© entidad representa:
     act_data_text = ""
     for key, value in act_data.items():
         act_data_text += f"\n- {key}: {value}"
+
+    instruccion_section = ""
+    actos_lista = ACTOS_POR_VARIANTE.get(variante_id or "", [])
+    if actos_lista:
+        actos_texto = "\n".join(f"{idx + 1}. {acto}" for idx, acto in enumerate(actos_lista))
+        instruccion_section = f"""
+INSTRUCCIÓN DE GENERACIÓN  OBLIGATORIO:
+Debes generar EXACTAMENTE estos actos en este orden. Cada acto en su propia sección con título en negrilla:
+{actos_texto}
+
+Para cada acto:
+- Redacta la comparecencia completa del interviniente mencionando la entidad que representa
+- Incluye las declaraciones y cláusulas del acto
+- Termina con la aceptación del interviniente
+"""
 
     reference_section = ""
     if template_reference_text:
@@ -263,6 +319,8 @@ TIPO DE ACTO: {act_type}
 INTERVINIENTES:{participants_text}
 
 {entidades_section}
+
+{instruccion_section}
 
 DATOS DEL ACTO:{act_data_text}
 
