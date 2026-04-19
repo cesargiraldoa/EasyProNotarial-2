@@ -146,9 +146,22 @@ function CollapsibleSearchableSelect({
         className="inline-flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-3 text-left text-sm font-medium text-primary"
       >
         <span>{label}</span>
-        <span className="text-xs font-semibold text-secondary">{isOpen ? "Ocultar" : "Abrir"}</span>
+        <span className="text-xs font-semibold text-secondary">
+          {options?.find((item) => item.value === value)?.label || value || "Seleccionar"} · {isOpen ? "Ocultar" : "Abrir"}
+        </span>
       </button>
-      {isOpen ? <SearchableSelect label={label} value={value} options={options} onChange={onChange} placeholder={placeholder} /> : null}
+      {isOpen ? (
+        <SearchableSelect
+          label={label}
+          value={value}
+          options={options}
+          onChange={(nextValue) => {
+            onChange(nextValue);
+            setIsOpen(false);
+          }}
+          placeholder={placeholder}
+        />
+      ) : null}
     </div>
   );
 }
@@ -166,6 +179,7 @@ export function CreateCaseWizard() {
   const [isSaving, setIsSaving] = useState(false);
   const [canSelectNotary, setCanSelectNotary] = useState(true);
   const [showSubstituteNotary, setShowSubstituteNotary] = useState(false);
+  const [expandedParticipantRoles, setExpandedParticipantRoles] = useState<Record<string, boolean>>({});
   const [generalForm, setGeneralForm] = useState({
     notary_id: "",
     client_user_id: "",
@@ -198,6 +212,17 @@ export function CreateCaseWizard() {
   useEffect(() => {
     setActData(buildActDataFromTemplate(selectedTemplate));
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (step !== 2) {
+      return;
+    }
+    const roles = sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []);
+    const nextExpanded = Object.fromEntries(
+      roles.map((role, index) => [role.role_code, index === 0 || Number(role.step_order ?? 0) === 1]),
+    ) as Record<string, boolean>;
+    setExpandedParticipantRoles(nextExpanded);
+  }, [selectedTemplate, step]);
 
   async function load() {
     setIsLoading(true);
@@ -254,7 +279,7 @@ export function CreateCaseWizard() {
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
   const templateRoles = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []), [selectedTemplate]);
   const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
-  const showAside = step >= 2;
+  const showAside = step >= 3;
 
   function updateParticipant(role: string, field: keyof PersonPayload, value: string | boolean) {
     setParticipants((current) => ({
@@ -441,42 +466,61 @@ export function CreateCaseWizard() {
               {step === 2 ? (
                 <div className="space-y-6">
                   <h2 className="text-2xl font-semibold text-primary">3. Intervinientes</h2>
-                  {(Array.isArray(templateRoles) ? templateRoles : [])
-                    .slice()
-                    .sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0))
-                    .map((role) => {
+                  {templateRoles.map((role) => {
                     const person = participants[role.role_code] ?? blankPerson();
                     const roleStatus = role.is_required ? "Bloque obligatorio" : "Bloque opcional";
+                    const isExpanded = Boolean(expandedParticipantRoles[role.role_code]);
+                    const isComplete = Boolean(person.document_number && person.full_name);
                     return (
                       <div key={role.role_code} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
-                        <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedParticipantRoles((current) => ({ ...current, [role.role_code]: !current[role.role_code] }))}
+                          className="flex w-full items-center justify-between gap-3 text-left"
+                        >
                           <div>
                             <p className="text-xs uppercase tracking-[0.2em] text-accent">{role.label || role.role_code}</p>
                             <h3 className="text-xl font-semibold text-primary">{roleStatus}</h3>
                           </div>
-                          <span className="ep-pill rounded-full px-3 py-1 text-xs text-secondary">{person.document_number && person.full_name ? "Completo" : "Incompleto"}</span>
-                        </div>
-                        <PersonLookup onPick={(selected) => setParticipants((current) => ({ ...current, [role.role_code]: { ...blankPerson(), ...current[role.role_code], ...selected, metadata_json: current[role.role_code]?.metadata_json || "{}" } }))} />
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <SearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
-                          <ValidatedInput label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
-                          <ValidatedInput label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
-                          <SearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
-                          <SearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
-                          <SearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
-                          <HybridAutocomplete label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
-                          <ValidatedInput label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
-                          <ValidatedInput label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
-                          <ValidatedInput label="Email" type="email" value={person.email || ""} onChange={(value) => updateParticipant(role.role_code, "email", value)} />
-                        </div>
-                        <label className="grid gap-2 text-sm font-medium text-primary">
-                          <span>Dirección</span>
-                          <input value={person.address || ""} onChange={(event) => updateParticipant(role.role_code, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
-                        </label>
-                        <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
-                          <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role.role_code, "is_transient", event.target.checked)} />
-                          ¿Está de tránsito?
-                        </label>
+                          <span className="ep-pill rounded-full px-3 py-1 text-xs text-secondary">{isComplete ? "Completo" : "Incompleto"}</span>
+                        </button>
+                        {isExpanded ? (
+                          <div className="space-y-4">
+                            <PersonLookup
+                              onPick={(selected) =>
+                                setParticipants((current) => ({
+                                  ...current,
+                                  [role.role_code]: {
+                                    ...blankPerson(),
+                                    ...current[role.role_code],
+                                    ...selected,
+                                    metadata_json: current[role.role_code]?.metadata_json || "{}",
+                                  },
+                                }))
+                              }
+                            />
+                            <div className="grid gap-4 lg:grid-cols-2">
+                              <CollapsibleSearchableSelect label="Tipo de documento" value={person.document_type} options={documentTypes.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "document_type", value)} />
+                              <ValidatedInput label="Número de documento" value={person.document_number || ""} onChange={(value) => updateParticipant(role.role_code, "document_number", value)} />
+                              <ValidatedInput label="Nombre completo" value={person.full_name || ""} onChange={(value) => updateParticipant(role.role_code, "full_name", value)} />
+                              <CollapsibleSearchableSelect label="Sexo" value={person.sex || ""} options={sexOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "sex", value)} />
+                              <CollapsibleSearchableSelect label="Nacionalidad" value={person.nationality || ""} options={nationalityOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "nationality", value)} />
+                              <CollapsibleSearchableSelect label="Estado civil" value={person.marital_status || ""} options={maritalStatusOptions.map((item) => ({ value: item, label: item }))} onChange={(value) => updateParticipant(role.role_code, "marital_status", value)} />
+                              <HybridAutocomplete label="Profesión u oficio" value={person.profession || ""} options={professionSuggestions} onChange={(value) => updateParticipant(role.role_code, "profession", value)} />
+                              <ValidatedInput label="Municipio de domicilio" value={person.municipality || ""} onChange={(value) => updateParticipant(role.role_code, "municipality", value)} />
+                              <ValidatedInput label="Teléfono" value={person.phone || ""} onChange={(value) => updateParticipant(role.role_code, "phone", value)} />
+                              <ValidatedInput label="Email" type="email" value={person.email || ""} onChange={(value) => updateParticipant(role.role_code, "email", value)} />
+                            </div>
+                            <label className="grid gap-2 text-sm font-medium text-primary">
+                              <span>Dirección</span>
+                              <input value={person.address || ""} onChange={(event) => updateParticipant(role.role_code, "address", event.target.value)} className="ep-input h-12 rounded-2xl px-4" />
+                            </label>
+                            <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
+                              <input type="checkbox" checked={Boolean(person.is_transient)} onChange={(event) => updateParticipant(role.role_code, "is_transient", event.target.checked)} />
+                              ¿Está de tránsito?
+                            </label>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
