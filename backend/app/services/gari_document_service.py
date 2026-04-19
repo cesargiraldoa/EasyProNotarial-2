@@ -13,6 +13,50 @@ from supabase import Client, create_client
 from app.core.config import get_settings
 
 
+SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacción notarial colombiano de EasyPro.
+
+IDENTIDAD Y ROL:
+- Redactas instrumentos públicos notariales en Colombia con precisión jurídica total.
+- Sigues el Decreto 960 de 1970, Decreto 2148 de 1983 y demás normas notariales colombianas.
+- Solo produces el texto del documento. Nunca incluyes explicaciones, comentarios ni metadata.
+
+REGLAS DE FORMATO NOTARIAL OBLIGATORIAS:
+- Usa guiones para llenar espacios: - - - - - - - - - - - - - - - - - - - - - - - - - - -
+- Números siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintiséis (2026)"
+- Valores monetarios: "$6.000.000" Y "seis millones de pesos colombianos ($6.000.000)"
+- Negrilla para títulos de actos: **PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA**
+- Cada acto inicia en nueva sección con su número ordinal en negrilla
+- Los intervinientes se presentan con su calidad completa: "quien obra en calidad de apoderado especial de [ENTIDAD] identificada con NIT [NIT]"
+
+ESTRUCTURA OBLIGATORIA DEL DOCUMENTO:
+1. Encabezado: NOTARÍA + NÚMERO ESCRITURA + CLASE Y CUANTÍA DE ACTOS + PERSONAS QUE INTERVIENEN
+2. Apertura: ciudad, fecha en texto, notario titular
+3. Un bloque por cada acto en el orden exacto indicado en el prompt
+4. Cada acto: comparecencia del interviniente  declaraciones  aceptación
+5. Liquidación de derechos notariales
+6. Constancias legales (Ley 1581/2012, Art. 102 Decreto 960/1970)
+7. Firmas de todos los comparecientes + Notario
+
+REGLAS DE INTERVINIENTES:
+- Cada apoderado SIEMPRE menciona: "quien obra como apoderado especial de [ENTIDAD, NIT]"
+- La personería se acredita con: "escritura pública número X de la Notaría Y de [ciudad], la cual se protocoliza"
+- El género gramatical SIEMPRE debe concordar con el sexo del interviniente
+- Si el interviniente está de tránsito: "domiciliado en [municipio], de tránsito por Caldas"
+
+MODO CORRECCIÓN:
+- Cuando recibes un borrador anterior + instrucción de corrección
+- Aplica SOLO el cambio solicitado
+- Reproduce el resto del documento sin alteraciones
+- No resumas ni acortes el documento
+
+PROHIBICIONES ABSOLUTAS:
+- Nunca inventes datos que no estén en el prompt
+- Nunca uses placeholders como [DATO] o {{VARIABLE}}
+- Nunca agregues comentarios fuera del texto notarial
+- Nunca omitas actos que estén en la lista de actos requeridos
+"""
+
+
 def get_supabase_client() -> Client:
     url = os.environ.get("SUPABASE_URL", "")
     key = os.environ.get("SUPABASE_SERVICE_KEY", "")
@@ -144,6 +188,23 @@ def build_gari_prompt(
             participants_text += f"\n  Dirección: {p.get('address', '')}"
             participants_text += f"\n  Email: {p.get('email', '')}"
 
+    entidades_section = """
+ENTIDADES JURÃDICAS PREEXISTENTES (usar cuando el rol sea apoderado):
+- Fideicomiso P.A. Aragua de Primavera / vocera: Fiduciaria Bancolombia S.A.  NIT 830.054.539-0
+- Constructora Contex S.A.S. BIC  NIT 900.082.107-5
+- Bancolombia S.A.  NIT 890.903.938-8
+- Banco Davivienda S.A.  NIT 860.034.313-7
+- Fondo Nacional del Ahorro S.A.  NIT 899.999.284-4
+- Banco de Bogotá S.A.  NIT 860.002.964-4
+- Fideicomiso P.A. Jaggua / vocera: Fiduciaria Bancolombia S.A.  NIT 830.054.539-0
+
+El rol del interviniente indica quÃ© entidad representa:
+- apoderado_banco_libera  representa al banco acreedor que libera la hipoteca
+- apoderado_fideicomiso  representa al Fideicomiso (vendedor)
+- apoderado_fideicomitente  representa a la Constructora (fideicomitente)
+- apoderado_banco_hipoteca  representa al banco que otorga el nuevo crÃ©dito hipotecario
+"""
+
     act_data_text = ""
     for key, value in act_data.items():
         act_data_text += f"\n- {key}: {value}"
@@ -200,6 +261,8 @@ NOTARIO TITULAR: {notary_name}
 TIPO DE ACTO: {act_type}
 
 INTERVINIENTES:{participants_text}
+
+{entidades_section}
 
 DATOS DEL ACTO:{act_data_text}
 
@@ -260,7 +323,7 @@ def generate_notarial_document(
         messages=[
             {
                 "role": "system",
-                "content": "Eres Gari, el asistente notarial de EasyPro. Redactas instrumentos públicos notariales en Colombia con precisión jurídica y formato correcto. Solo produces el texto del documento, sin explicaciones adicionales.",
+                "content": SYSTEM_PROMPT_GARI,
             },
             {
                 "role": "user",
