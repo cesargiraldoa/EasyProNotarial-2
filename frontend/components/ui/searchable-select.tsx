@@ -86,7 +86,10 @@ export function SearchableSelect({
         </button>
 
         {isOpen ? (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl">
+          <div
+            className="absolute left-0 right-0 top-full mt-1 rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-xl"
+            style={{ zIndex: 9999 }}
+          >
             <div className="border-b border-[var(--line)] p-2">
               <div className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--input)] px-2 py-1.5">
                 <Search className="h-4 w-4 text-secondary" />
