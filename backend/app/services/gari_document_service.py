@@ -150,10 +150,14 @@ def build_gari_prompt(
 
     reference_section = ""
     if template_reference_text:
+        _REF_MAX_CHARS = 14_000
+        _ref_text = template_reference_text[:_REF_MAX_CHARS]
+        _truncated = len(template_reference_text) > _REF_MAX_CHARS
         reference_section = f"""
-PLANTILLA DE REFERENCIA DEL ACTO (usar como guía de estructura y redacción):
+PLANTILLA DE REFERENCIA DEL ACTO (usar como guía de estructura y redacción notarial colombiana):
+{"[NOTA: texto de referencia truncado por longitud — mantener estructura y estilo del fragmento mostrado]" if _truncated else ""}
 ---
-{template_reference_text[:6000]}
+{_ref_text}
 ---
 """
 
