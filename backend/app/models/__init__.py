@@ -1,4 +1,6 @@
+from app.models.act_catalog import ActCatalog
 from app.models.case import Case
+from app.models.case_act import CaseAct
 from app.models.case_act_data import CaseActData
 from app.models.case_client_comment import CaseClientComment
 from app.models.case_document import CaseDocument
@@ -9,6 +11,8 @@ from app.models.case_state_definition import CaseStateDefinition
 from app.models.case_timeline_event import CaseTimelineEvent
 from app.models.case_workflow_event import CaseWorkflowEvent
 from app.models.document_template import DocumentTemplate
+from app.models.legal_entity import LegalEntity
+from app.models.legal_entity_representative import LegalEntityRepresentative
 from app.models.notary import Notary
 from app.models.notary_commercial_activity import NotaryCommercialActivity
 from app.models.notary_crm_audit_log import NotaryCrmAuditLog

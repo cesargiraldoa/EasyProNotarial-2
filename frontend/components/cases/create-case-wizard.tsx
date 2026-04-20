@@ -4,14 +4,19 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, FileSignature } from "lucide-react";
 import { PersonLookup } from "@/components/persons/person-lookup";
+import { LegalEntityLookup, type LegalEntityPayload, type LegalEntityRecord } from "@/components/persons/legal-entity-lookup";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import {
   createDocumentCase,
   generateCaseDraft,
+  getActCatalog,
   getActiveTemplates,
   saveCaseActData,
+  saveCaseActs,
   saveCaseParticipants,
+  type ActCatalogItem,
+  type CaseActItem,
   type PersonRecord,
   type DocumentFlowCase,
   type PersonPayload,
@@ -20,11 +25,11 @@ import {
 import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/lib/api";
 
 const steps = [
-  "Seleccionar plantilla",
+  "Tipo y actos",
   "Datos generales",
   "Intervinientes",
   "Datos del acto",
-  "Revisión y generar borrador",
+  "Revisión",
 ];
 const documentTypes = ["CC", "CE", "TI", "PP", "NIT"];
 const sexOptions = ["F", "M", "No especifica"];
@@ -34,8 +39,94 @@ const professionSuggestions = ["Abogado", "Comerciante", "Administrador", "Ingen
 
 type SelectOption = { value: string; label: string };
 
-type SearchableOption = { value: string; label: string };
-type ParticipantAssignment = { person_id: number | null; person: PersonPayload | null };
+type ParticipantItem = {
+  uid: string;
+  kind: "person" | "entity";
+  roleCode: string;
+  roleLabel: string;
+  personId: number | null;
+  person: PersonPayload | null;
+  legalEntityId: number | null;
+  legalEntity: LegalEntityPayload | null;
+  representative: PersonRecord | PersonPayload | null;
+  representativeId: number | null;
+  isComplete: boolean;
+};
+
+const entityRoleOptions: SelectOption[] = [
+  { value: "apoderado_banco_libera", label: "Banco que libera hipoteca" },
+  { value: "apoderado_fideicomiso", label: "Fideicomiso / vendedor" },
+  { value: "apoderado_fideicomitente", label: "Fideicomitente / constructora" },
+  { value: "apoderado_banco_hipoteca", label: "Banco hipotecante" },
+  { value: "apoderado_otro", label: "Otra entidad" },
+];
+
+const entityRoleLabelMap: Record<string, string> = {
+  apoderado_banco_libera: "Banco que libera hipoteca",
+  apoderado_fideicomiso: "Fideicomiso / vendedor",
+  apoderado_fideicomitente: "Fideicomitente / constructora",
+  apoderado_banco_hipoteca: "Banco hipotecante",
+  apoderado_otro: "Otra entidad",
+};
+
+const ESCRITURA_TYPES = [
+  {
+    code: "compraventa_vis_contado",
+    label: "Compraventa VIS  Contado",
+    description: "Sin crédito hipotecario nuevo",
+    defaultActs: ["liberacion_hipoteca", "protocolizacion_cto", "compraventa_vis", "renuncia_resolutoria", "cancelacion_comodato", "patrimonio_familia", "poder_especial"],
+    templateSlug: "aragua-parq-1c",
+  },
+  {
+    code: "compraventa_vis_hipoteca",
+    label: "Compraventa VIS  Con crédito hipotecario",
+    description: "Con constitución de hipoteca nueva",
+    defaultActs: ["liberacion_hipoteca", "protocolizacion_cto", "compraventa_vis", "renuncia_resolutoria", "cancelacion_comodato", "constitucion_hipoteca", "patrimonio_familia", "poder_especial"],
+    templateSlug: "jaggua-bogota-1c",
+  },
+  {
+    code: "correccion_rc",
+    label: "Corrección de Registro Civil",
+    description: "Corrección de acta de nacimiento",
+    defaultActs: ["correccion_rc"],
+    templateSlug: "correccion-registro-civil",
+  },
+  {
+    code: "salida_pais",
+    label: "Permiso de salida del país",
+    description: "Autorización para menor de edad",
+    defaultActs: ["salida_pais"],
+    templateSlug: "salida-del-pais",
+  },
+  {
+    code: "poder_general",
+    label: "Poder general",
+    description: "Otorgamiento de poder",
+    defaultActs: ["poder_general"],
+    templateSlug: "poder-general",
+  },
+];
+
+const ROLE_PARTICIPANT_MAP: Record<string, { kind: "person" | "entity"; roleCode: string; roleLabel: string }> = {
+  compradores: { kind: "person", roleCode: "comprador_1", roleLabel: "Comprador(a)" },
+  fideicomiso: { kind: "entity", roleCode: "apoderado_fideicomiso", roleLabel: "Fideicomiso / Vendedor" },
+  banco_libera: { kind: "entity", roleCode: "apoderado_banco_libera", roleLabel: "Banco que libera hipoteca" },
+  constructora: { kind: "entity", roleCode: "apoderado_fideicomitente", roleLabel: "Constructora" },
+  banco_hipoteca: { kind: "entity", roleCode: "apoderado_banco_hipoteca", roleLabel: "Banco hipotecante" },
+  inscrito: { kind: "person", roleCode: "inscrito", roleLabel: "Inscrito(a) / Compareciente" },
+  padre_otorgante: { kind: "person", roleCode: "padre_otorgante", roleLabel: "Padre otorgante" },
+  madre_aceptante: { kind: "person", roleCode: "madre_aceptante", roleLabel: "Madre aceptante" },
+  menor: { kind: "person", roleCode: "menor", roleLabel: "Menor de edad" },
+  poderdante: { kind: "person", roleCode: "poderdante", roleLabel: "Poderdante" },
+  apoderado: { kind: "person", roleCode: "apoderado", roleLabel: "Apoderado(a)" },
+};
+
+interface ActWizardItem {
+  uid: string;
+  code: string;
+  label: string;
+  roles: string[];
+}
 
 function safeString(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -50,6 +141,18 @@ function normalizeUserOptions(users: UserOption[]): SelectOption[] {
 
 function sortByStepOrder<T extends { step_order?: number | null }>(items: T[]) {
   return [...items].sort((a, b) => Number(a.step_order ?? 0) - Number(b.step_order ?? 0));
+}
+
+function hasEntitySelection(item: ParticipantItem) {
+  return item.legalEntityId !== null || item.legalEntity !== null;
+}
+
+function hasRepresentativeSelection(item: ParticipantItem) {
+  return item.representativeId !== null || item.representative !== null;
+}
+
+function computeEntityComplete(item: ParticipantItem) {
+  return hasEntitySelection(item) && hasRepresentativeSelection(item);
 }
 
 function buildActDataFromTemplate(template: TemplateRecord | null) {
@@ -112,6 +215,10 @@ export function CreateCaseWizard() {
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord | null>(null);
+  const [escrituraType, setEscrituraType] = useState<string | null>(null);
+  const [actWizardItems, setActWizardItems] = useState<ActWizardItem[]>([]);
+  const [actCatalog, setActCatalog] = useState<ActCatalogItem[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [notaries, setNotaries] = useState<SelectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
@@ -122,7 +229,7 @@ export function CreateCaseWizard() {
   const [canSelectNotary, setCanSelectNotary] = useState(true);
   const [showSubstituteNotary, setShowSubstituteNotary] = useState(false);
   const [expandedGeneralField, setExpandedGeneralField] = useState<string | null>(null);
-  const [expandedParticipantRoles, setExpandedParticipantRoles] = useState<Record<string, boolean>>({});
+  const [expandedParticipantItems, setExpandedParticipantItems] = useState<Record<string, boolean>>({});
   const [generalForm, setGeneralForm] = useState({
     notary_id: "",
     client_user_id: "",
@@ -134,8 +241,7 @@ export function CreateCaseWizard() {
     requires_client_review: true,
     metadata_json: JSON.stringify({ clase: "Poder General" }, null, 2),
   });
-  const [participants, setParticipants] = useState<Record<string, ParticipantAssignment>>({});
-  const [participantDetails, setParticipantDetails] = useState<Record<string, PersonPayload | null>>({});
+  const [participantItems, setParticipantItems] = useState<ParticipantItem[]>([]);
   const [actData, setActData] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -143,41 +249,53 @@ export function CreateCaseWizard() {
   }, []);
 
   useEffect(() => {
-    if (!selectedTemplate) {
-      return;
-    }
-    const nextParticipants = Object.fromEntries(
-      sortByStepOrder(Array.isArray(selectedTemplate.required_roles) ? selectedTemplate.required_roles : [])
-        .map((role) => [role.role_code, { person_id: null, person: null }]),
-    ) as Record<string, ParticipantAssignment>;
-    setParticipants(nextParticipants);
-    setParticipantDetails(Object.fromEntries(Object.keys(nextParticipants).map((roleCode) => [roleCode, null])) as Record<string, PersonPayload | null>);
-  }, [selectedTemplate, step]);
+    setParticipantItems([]);
+  }, [selectedTemplate]);
 
   useEffect(() => {
     setActData(buildActDataFromTemplate(selectedTemplate));
   }, [selectedTemplate]);
 
-  useEffect(() => {
-    if (step !== 2) {
-      return;
+  function deriveParticipantsFromActs(acts: ActWizardItem[]): ParticipantItem[] {
+    const seenRoles = new Set<string>();
+    const derived: ParticipantItem[] = [];
+
+    for (const act of acts) {
+      for (const role of act.roles) {
+        if (role === "compradores") continue;
+        if (seenRoles.has(role)) continue;
+        seenRoles.add(role);
+        const mapping = ROLE_PARTICIPANT_MAP[role];
+        if (!mapping) continue;
+        derived.push({
+          uid: crypto.randomUUID(),
+          kind: mapping.kind,
+          roleCode: mapping.roleCode,
+          roleLabel: mapping.roleLabel,
+          personId: null,
+          person: null,
+          legalEntityId: null,
+          legalEntity: null,
+          representative: null,
+          representativeId: null,
+          isComplete: false,
+        });
+      }
     }
-    const roles = sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []);
-    const nextExpanded = Object.fromEntries(
-      roles.map((role, index) => [role.role_code, index === 0 || Number(role.step_order ?? 0) === 1]),
-    ) as Record<string, boolean>;
-    setExpandedParticipantRoles(nextExpanded);
-  }, [selectedTemplate, step]);
+
+    return derived;
+  }
 
   async function load() {
     setIsLoading(true);
     setError(null);
     try {
-      const [templateData, notaryData, userData, currentUser] = await Promise.all([
+      const [templateData, notaryData, userData, currentUser, catalogData] = await Promise.all([
         getActiveTemplates(),
         getNotaries(),
         getUserOptions(true),
         getCurrentUser(),
+        getActCatalog(),
       ]);
       const safeTemplates = Array.isArray(templateData) ? templateData : [];
       const safeNotaries = Array.isArray(notaryData) ? notaryData : [];
@@ -198,6 +316,7 @@ export function CreateCaseWizard() {
         safeTemplates.find((item) => item.slug === "poder-general") ?? safeTemplates[0] ?? null,
       );
       setNotaries(notaryOptions);
+      setActCatalog(Array.isArray(catalogData) ? catalogData : []);
       setCanSelectNotary(isSuperAdmin);
       setGeneralForm((current) => ({
         ...current,
@@ -224,6 +343,8 @@ export function CreateCaseWizard() {
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
   const templateRoles = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.required_roles) ? selectedTemplate.required_roles : []), [selectedTemplate]);
   const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
+  const buyerParticipantItems = useMemo(() => participantItems.filter((item) => item.kind === "person"), [participantItems]);
+  const entityParticipantItems = useMemo(() => participantItems.filter((item) => item.kind === "entity"), [participantItems]);
   const showAside = step >= 3;
   const generalManagerFields = useMemo<Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }>>(() => [
     { key: "current_owner_user_id", label: "Responsable actual", value: generalForm.current_owner_user_id },
@@ -232,72 +353,209 @@ export function CreateCaseWizard() {
     { key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id },
   ], [generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.approver_user_id, generalForm.titular_notary_user_id]);
 
-  function assignExistingParticipant(role: string, person: PersonRecord) {
-    const summary: PersonPayload = {
-      document_type: person.document_type || "CC",
-      document_number: person.document_number || "",
-      full_name: person.full_name || "",
-      sex: person.sex || "",
-      nationality: person.nationality || "",
-      marital_status: person.marital_status || "",
-      profession: person.profession || "",
-      municipality: person.municipality || "",
-      is_transient: Boolean(person.is_transient),
-      phone: person.phone || "",
-      address: person.address || "",
-      email: person.email || "",
-      metadata_json: person.metadata_json || "{}",
-    };
-    setParticipants((current) => ({
-      ...current,
-      [role]: { person_id: person.id, person: null },
-    }));
-    setParticipantDetails((current) => ({ ...current, [role]: summary }));
-  }
-
-  function assignNewParticipant(role: string, person: PersonPayload) {
-    const nextPerson: PersonPayload = {
-      document_type: person.document_type || "CC",
-      document_number: person.document_number || "",
-      full_name: person.full_name || "",
-      sex: person.sex || "",
-      nationality: person.nationality || "",
-      marital_status: person.marital_status || "",
-      profession: person.profession || "",
-      municipality: person.municipality || "",
-      is_transient: Boolean(person.is_transient),
-      phone: person.phone || "",
-      address: person.address || "",
-      email: person.email || "",
-      metadata_json: person.metadata_json || "{}",
-    };
-    setParticipants((current) => ({
-      ...current,
-      [role]: { person_id: null, person: nextPerson },
-    }));
-    setParticipantDetails((current) => ({ ...current, [role]: nextPerson }));
-  }
-
-  function clearParticipant(role: string) {
-    setParticipants((current) => ({
-      ...current,
-      [role]: { person_id: null, person: null },
-    }));
-    setParticipantDetails((current) => ({ ...current, [role]: null }));
-  }
-
   function updateGeneralManager(field: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id", value: string) {
     setGeneralForm((current) => ({ ...current, [field]: value }));
     setExpandedGeneralField(null);
   }
 
-  function validateParticipants() {
-    const requiredRoles = templateRoles.filter((role) => role.is_required);
+  function toPersonPayload(person: PersonRecord | PersonPayload): PersonPayload {
+    return {
+      document_type: person.document_type || "CC",
+      document_number: person.document_number || "",
+      full_name: person.full_name || "",
+      sex: person.sex || "",
+      nationality: person.nationality || "",
+      marital_status: person.marital_status || "",
+      profession: person.profession || "",
+      municipality: person.municipality || "",
+      is_transient: Boolean(person.is_transient),
+      phone: person.phone || "",
+      address: person.address || "",
+      email: person.email || "",
+      metadata_json: person.metadata_json || "{}",
+    };
+  }
 
-    for (const role of requiredRoles) {
-      const item = participants[role.role_code] ?? { person_id: null, person: null };
-      if (item.person_id == null && item.person == null) {
-        return `Selecciona o crea la persona para ${role.label || role.role_code}.`;
+  function normalizeParticipantItems(items: ParticipantItem[]) {
+    const buyers = items.filter((item) => item.kind === "person");
+    const entities = items.filter((item) => item.kind === "entity");
+    const renumberedBuyers = buyers.map((item, index) => ({
+      ...item,
+      roleCode: `comprador_${index + 1}`,
+      roleLabel: `Comprador(a) ${index + 1}`,
+      isComplete: Boolean(item.personId || item.person),
+    }));
+    return [...renumberedBuyers, ...entities.map((item) => ({
+      ...item,
+      isComplete: Boolean(item.legalEntityId && item.representativeId && item.legalEntity && item.representative),
+    }))];
+  }
+
+  function makeBuyerItem(index: number): ParticipantItem {
+    return {
+      uid: crypto.randomUUID(),
+      kind: "person",
+      roleCode: `comprador_${index}`,
+      roleLabel: `Comprador(a) ${index}`,
+      personId: null,
+      person: null,
+      legalEntityId: null,
+      legalEntity: null,
+      representative: null,
+      representativeId: null,
+      isComplete: false,
+    };
+  }
+
+  function makeEntityItem(): ParticipantItem {
+    return {
+      uid: crypto.randomUUID(),
+      kind: "entity",
+      roleCode: "apoderado_otro",
+      roleLabel: entityRoleLabelMap.apoderado_otro,
+      personId: null,
+      person: null,
+      legalEntityId: null,
+      legalEntity: null,
+      representative: null,
+      representativeId: null,
+      isComplete: false,
+    };
+  }
+
+  function updateParticipantItem(uid: string, updater: (current: ParticipantItem) => ParticipantItem) {
+    setParticipantItems((current) => normalizeParticipantItems(current.map((item) => (item.uid === uid ? updater(item) : item))));
+  }
+
+  function updateBuyerPerson(uid: string, person: PersonRecord | PersonPayload, personId: number | null) {
+    updateParticipantItem(uid, (current) => {
+      const nextPerson = toPersonPayload(person);
+      return {
+        ...current,
+        personId,
+        person: nextPerson,
+        isComplete: true,
+      };
+    });
+  }
+
+  function updateBuyerNewPerson(uid: string, person: PersonPayload) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      personId: null,
+      person: toPersonPayload(person),
+      isComplete: true,
+    }));
+  }
+
+  function clearBuyer(uid: string) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      personId: null,
+      person: null,
+      isComplete: false,
+    }));
+  }
+
+  function updateEntityRole(uid: string, roleCode: string) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      roleCode,
+      roleLabel: entityRoleLabelMap[roleCode] || "Otra entidad",
+    }));
+  }
+
+  function updateEntityLegal(uid: string, entity: LegalEntityRecord | LegalEntityPayload, entityId: number | null) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      legalEntityId: entityId,
+      legalEntity: {
+        nit: entity.nit || "",
+        name: entity.name || "",
+        legal_representative: entity.legal_representative || "",
+        municipality: entity.municipality || "",
+        address: entity.address || "",
+        phone: entity.phone || "",
+        email: entity.email || "",
+      },
+      isComplete: computeEntityComplete({
+        ...current,
+        legalEntityId: entityId,
+        legalEntity: {
+          nit: entity.nit || "",
+          name: entity.name || "",
+          legal_representative: entity.legal_representative || "",
+          municipality: entity.municipality || "",
+          address: entity.address || "",
+          phone: entity.phone || "",
+          email: entity.email || "",
+        },
+      }),
+    }));
+  }
+
+  function updateEntityRepresentative(uid: string, person: PersonRecord | PersonPayload, personId: number | null) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      representativeId: personId,
+      representative: person,
+      isComplete: computeEntityComplete({
+        ...current,
+        representativeId: personId,
+        representative: person,
+      }),
+    }));
+  }
+
+  function clearEntityLegal(uid: string) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      legalEntityId: null,
+      legalEntity: null,
+      isComplete: false,
+    }));
+  }
+
+  function clearEntityRepresentative(uid: string) {
+    updateParticipantItem(uid, (current) => ({
+      ...current,
+      representativeId: null,
+      representative: null,
+      isComplete: false,
+    }));
+  }
+
+  function addBuyer() {
+    const nextItem = makeBuyerItem(participantItems.filter((item) => item.kind === "person").length + 1);
+    setParticipantItems((current) => normalizeParticipantItems([...current, nextItem]));
+    setExpandedParticipantItems((current) => ({ ...current, [nextItem.uid]: true }));
+  }
+
+  function addEntity() {
+    const nextItem = makeEntityItem();
+    setParticipantItems((current) => normalizeParticipantItems([...current, nextItem]));
+    setExpandedParticipantItems((current) => ({ ...current, [nextItem.uid]: true }));
+  }
+
+  function removeParticipant(uid: string) {
+    setParticipantItems((current) => normalizeParticipantItems(current.filter((item) => item.uid !== uid)));
+    setExpandedParticipantItems((current) => {
+      const next = { ...current };
+      delete next[uid];
+      return next;
+    });
+  }
+
+  function validateParticipants() {
+    const buyers = participantItems.filter((item) => item.kind === "person");
+    const entities = participantItems.filter((item) => item.kind === "entity");
+    if (!buyers.some((item) => item.isComplete && (item.personId !== null || item.person !== null))) {
+      return "Debes agregar al menos 1 comprador completo.";
+    }
+    for (const entity of entities) {
+      const entityReady = hasEntitySelection(entity) && hasRepresentativeSelection(entity);
+      if (!entityReady) {
+        return "Cada entidad agregada debe tener entidad y apoderado completos.";
       }
     }
     return null;
@@ -320,6 +578,7 @@ export function CreateCaseWizard() {
       metadata_json: generalForm.metadata_json,
     });
     setCaseDetail(created);
+    return created;
   }
 
   async function continueStep() {
@@ -327,42 +586,69 @@ export function CreateCaseWizard() {
     setFeedback(null);
     setIsSaving(true);
     try {
+      let activeCase = caseDetail;
       if (step === 0) {
-        if (!selectedTemplate) {
-          throw new Error("No hay una plantilla activa disponible para iniciar la minuta.");
+        if (!escrituraType || actWizardItems.length === 0) {
+          throw new Error("Selecciona el tipo de escritura y confirma los actos antes de continuar.");
         }
+        if (!selectedTemplate) {
+          throw new Error("No hay plantilla base disponible. Contacta al administrador.");
+        }
+        const derived = deriveParticipantsFromActs(actWizardItems);
+        setParticipantItems(derived);
       }
-      if (step === 1 && !caseDetail) {
-        await handleCreateCase();
+      if (step === 1 && !activeCase) {
+        activeCase = await handleCreateCase();
       }
-      if (step === 2 && caseDetail) {
+      if (step === 1 && activeCase) {
+  const actsPayload = actWizardItems.map((a, idx) => ({
+    code: a.code,
+    label: a.label,
+    act_order: idx + 1,
+    roles_json: Array.isArray(a.roles) ? JSON.stringify(a.roles) : (a.roles ?? "[]"),
+  }));
+        await saveCaseActs(activeCase.id, actsPayload);
+      }
+      if (step === 2 && activeCase) {
         const participantError = validateParticipants();
         if (participantError) {
           throw new Error(participantError);
         }
+        const payload = participantItems.map((item) =>
+          item.kind === "person"
+            ? {
+                role_code: item.roleCode,
+                role_label: item.roleLabel,
+                person_id: item.personId,
+                person: item.person,
+              }
+            : {
+                role_code: item.roleCode,
+                role_label: item.roleLabel,
+                person_id: item.representativeId,
+                person: item.representative,
+                legal_entity_id: item.legalEntityId,
+                legal_entity: item.legalEntity,
+              },
+        );
         const updated = await saveCaseParticipants(
-          caseDetail.id,
-          templateRoles.map((role) => ({
-              role_code: role.role_code,
-              role_label: role.label,
-              person_id: participants[role.role_code]?.person_id ?? null,
-              person: participants[role.role_code]?.person ?? null,
-            })),
+          activeCase.id,
+          payload as any,
         );
         setCaseDetail(updated);
       }
-      if (step === 3 && caseDetail) {
+      if (step === 3 && activeCase) {
         const missingRequiredField = templateFields.find((field) => field.is_required && !(actData[field.field_code] ?? "").trim());
         if (missingRequiredField) {
           throw new Error(`Completa el campo obligatorio ${missingRequiredField.label || missingRequiredField.field_code}.`);
         }
-        const updated = await saveCaseActData(caseDetail.id, { data_json: JSON.stringify(actData) });
+        const updated = await saveCaseActData(activeCase.id, { data_json: JSON.stringify(actData) });
         setCaseDetail(updated);
       }
       if (step === 4 && caseDetail) {
-        const updated = await generateCaseDraft(caseDetail.id, "Borrador generado desde el wizard de Crear Caso.");
+        const updated = await generateCaseDraft(caseDetail.id, "Generado con Gari desde el wizard.");
         setCaseDetail(updated);
-        setFeedback("Minuta creada y borrador Word v1 generado correctamente.");
+        window.location.href = `/dashboard/casos/${caseDetail.id}?tab=documento-gari`;
         return;
       }
       setStep((current) => Math.min(current + 1, steps.length - 1));
@@ -414,17 +700,132 @@ export function CreateCaseWizard() {
           {!isLoading && templates.length > 0 ? (
             <>
               {step === 0 ? (
-                <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">1. Seleccionar plantilla</h2>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {templates.map((item) => (
-                      <button key={item.id} type="button" onClick={() => setSelectedTemplate(item)} className={`rounded-[1.5rem] border p-5 text-left ${selectedTemplate?.id === item.id ? "border-primary/30 bg-primary/8" : "border-[var(--line)]"}`}>
-                        <p className="text-lg font-semibold text-primary">{item.name || "Plantilla sin nombre"}</p>
-                        <p className="mt-2 text-sm text-secondary">{item.document_type || "Sin tipo documental"}</p>
-                        <p className="mt-3 text-xs text-secondary">Roles: {(Array.isArray(item.required_roles) ? item.required_roles : []).map((role) => role.label).filter(Boolean).join(", ") || "Sin roles configurados"}</p>
-                      </button>
-                    ))}
-                  </div>
+                <div className="space-y-6">
+                  {!escrituraType ? (
+                    <div className="space-y-5">
+                      <div>
+                        <h2 className="text-2xl font-semibold text-primary">1. Tipo de escritura</h2>
+                        <p className="mt-1 text-sm text-secondary">Selecciona la operación que vas a escriturar.</p>
+                      </div>
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        {ESCRITURA_TYPES.map((tipo) => (
+                          <button
+                            key={tipo.code}
+                            type="button"
+                            onClick={() => {
+                              setEscrituraType(tipo.code);
+                              const matched = tipo.defaultActs.map((actCode) => {
+                                const found = actCatalog.find((a) => a.code === actCode);
+                                if (!found) return null;
+                                return {
+                                  uid: crypto.randomUUID(),
+                                  code: found.code,
+                                  label: found.label,
+                                  roles: JSON.parse(found.roles_json || "[]"),
+                                } as ActWizardItem;
+                              }).filter(Boolean) as ActWizardItem[];
+                              setActWizardItems(matched);
+                              const tmpl = templates.find((t) => t.slug === tipo.templateSlug) ?? templates[0] ?? null;
+                              setSelectedTemplate(tmpl);
+                            }}
+                            className="rounded-[1.5rem] border p-5 text-left hover:border-primary/30 hover:bg-primary/5 transition-colors border-[var(--line)]"
+                          >
+                            <p className="text-lg font-semibold text-primary">{tipo.label}</p>
+                            <p className="mt-2 text-sm text-secondary">{tipo.description}</p>
+                            <p className="mt-3 text-xs text-secondary">{tipo.defaultActs.length} acto{tipo.defaultActs.length !== 1 ? "s" : ""} sugeridos</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h2 className="text-2xl font-semibold text-primary">1. Actos de la escritura</h2>
+                          <p className="mt-1 text-sm text-secondary">
+                            {ESCRITURA_TYPES.find((t) => t.code === escrituraType)?.label} · Reordena arrastrando, quita o agrega actos según el caso.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setEscrituraType(null); setActWizardItems([]); }}
+                          className="text-sm font-semibold text-primary underline"
+                        >
+                          Cambiar tipo
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {actWizardItems.map((act, index) => (
+                          <div
+                            key={act.uid}
+                            draggable
+                            onDragStart={() => setDragIndex(index)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              if (dragIndex === null || dragIndex === index) return;
+                              const reordered = [...actWizardItems];
+                              const [moved] = reordered.splice(dragIndex, 1);
+                              reordered.splice(index, 0, moved);
+                              setActWizardItems(reordered);
+                              setDragIndex(null);
+                            }}
+                            onDragEnd={() => setDragIndex(null)}
+                            className={`flex items-center gap-3 rounded-[1.4rem] border bg-[var(--panel)] px-4 py-3 cursor-grab active:cursor-grabbing transition-opacity ${dragIndex === index ? "opacity-40" : "opacity-100"} border-[var(--line)]`}
+                          >
+                            <span className="text-secondary select-none text-lg leading-none"></span>
+                            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                              {index + 1}
+                            </span>
+                            <span className="flex-1 text-sm font-medium text-primary">{act.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => setActWizardItems((prev) => prev.filter((a) => a.uid !== act.uid))}
+                              className="text-rose-500 text-xs font-semibold px-3 py-1 rounded-xl hover:bg-rose-50 transition-colors"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {actCatalog.filter((a) => !actWizardItems.some((item) => item.code === a.code)).length > 0 ? (
+                        <div className="space-y-3">
+                          <p className="text-sm font-semibold text-primary">+ Agregar acto</p>
+                          <div className="grid gap-2 lg:grid-cols-2">
+                            {actCatalog
+                              .filter((a) => !actWizardItems.some((item) => item.code === a.code))
+                              .map((a) => (
+                                <button
+                                  key={a.code}
+                                  type="button"
+                                  onClick={() =>
+                                    setActWizardItems((prev) => [
+                                      ...prev,
+                                      {
+                                        uid: crypto.randomUUID(),
+                                        code: a.code,
+                                        label: a.label,
+                                        roles: JSON.parse(a.roles_json || "[]"),
+                                      },
+                                    ])
+                                  }
+                                  className="rounded-[1.2rem] border border-dashed border-[var(--line)] px-4 py-2 text-left text-sm text-secondary hover:border-primary/30 hover:text-primary transition-colors"
+                                >
+                                  + {a.label}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {actWizardItems.length === 0 ? (
+                        <div className="ep-card-muted rounded-[1.5rem] px-4 py-5 text-sm text-secondary">
+                          Agrega al menos un acto para continuar.
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -490,57 +891,238 @@ export function CreateCaseWizard() {
               {step === 2 ? (
                 <div className="space-y-6">
                   <h2 className="text-2xl font-semibold text-primary">3. Intervinientes</h2>
-                  {templateRoles.map((role) => {
-                    const assignment = participants[role.role_code] ?? { person_id: null, person: null };
-                    const displayPerson = participantDetails[role.role_code] ?? assignment.person;
-                    const roleStatus = role.is_required ? "Bloque obligatorio" : "Bloque opcional";
-                    const isExpanded = Boolean(expandedParticipantRoles[role.role_code]);
-                    const isComplete = Boolean(displayPerson?.document_number && displayPerson?.full_name);
-                    return (
-                      <div key={role.role_code} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedParticipantRoles((current) => ({ ...current, [role.role_code]: !current[role.role_code] }))}
-                          className="flex w-full min-h-12 items-center justify-between gap-3 rounded-[1.25rem] px-4 py-3 text-left"
-                        >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-primary">{role.label || role.role_code}</p>
-                            <h3 className="text-sm font-medium text-secondary">{roleStatus}</h3>
-                          </div>
-                          <span className="ep-pill rounded-full px-3 py-1 text-xs font-semibold text-secondary">{isComplete ? "Completo" : "Incompleto"}</span>
-                          </button>
-                        {isExpanded ? (
-                          <div className="space-y-4">
-                            {assignment.person_id !== null || assignment.person !== null ? (
-                              <div className="rounded-[1.35rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-semibold text-primary">{displayPerson?.full_name || "Persona asignada"}</p>
-                                    <p className="mt-1 text-sm text-secondary">
-                                      {displayPerson?.document_type || "DOC"} {displayPerson?.document_number || "Sin número"} · {displayPerson?.municipality || "Sin municipio"}
-                                    </p>
+                  <p className="mt-1 text-sm text-secondary">
+                    El sistema identificó los intervinientes requeridos según los actos seleccionados. Completa cada uno y agrega los compradores.
+                  </p>
+
+                  <section className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-xl font-semibold text-primary">Compradores</h3>
+                        <p className="text-sm text-secondary">Agrega una o varias personas naturales compradoras.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addBuyer}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        + Agregar comprador
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {buyerParticipantItems.length > 0 ? buyerParticipantItems.map((item) => {
+                        const isExpanded = Boolean(expandedParticipantItems[item.uid]);
+                        const displayPerson = item.personId !== null || item.person ? item.person : null;
+                        return (
+                          <div key={item.uid} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedParticipantItems((current) => ({ ...current, [item.uid]: !current[item.uid] }))}
+                              className="flex w-full min-h-12 items-center justify-between gap-3 rounded-[1.25rem] px-4 py-3 text-left"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-primary">{item.roleLabel}</p>
+                                <h3 className="text-sm font-medium text-secondary">Comprador natural</h3>
+                              </div>
+                              <span className={`ep-pill rounded-full px-3 py-1 text-xs font-semibold ${item.isComplete ? "bg-emerald-500/10 text-emerald-700" : "text-secondary"}`}>
+                                {item.isComplete ? "Completo" : "Incompleto"}
+                              </span>
+                            </button>
+                            {isExpanded ? (
+                              <div className="space-y-4">
+                                {item.isComplete && displayPerson ? (
+                                  <div className="rounded-[1.35rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-semibold text-primary">{displayPerson.full_name || "Comprador asignado"}</p>
+                                        <p className="mt-1 text-sm text-secondary">
+                                          {displayPerson.document_type || "DOC"} {displayPerson.document_number || "Sin número"} · {displayPerson.municipality || "Sin municipio"}
+                                        </p>
+                                      </div>
+                                      <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                    </div>
+                                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => clearBuyer(item.uid)}
+                                        className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                      >
+                                        Cambiar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeParticipant(item.uid)}
+                                        className="inline-flex items-center gap-2 text-sm font-semibold text-rose-600"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
                                   </div>
-                                  <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                ) : (
+                                  <PersonLookup
+                                    onPick={(selected) => updateBuyerPerson(item.uid, selected, selected.id)}
+                                    onNotFound={(person) => updateBuyerNewPerson(item.uid, person)}
+                                  />
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      }) : (
+                        <div className="ep-card-muted rounded-[1.5rem] px-4 py-5 text-sm text-secondary">
+                          Todavía no hay compradores agregados.
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-xl font-semibold text-primary">Entidades y apoderados</h3>
+                        <p className="text-sm text-secondary">Agrega bancos, fiducias o constructoras con su apoderado.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addEntity}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        + Agregar entidad
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {entityParticipantItems.length > 0 ? entityParticipantItems.map((item) => {
+                        const isExpanded = Boolean(expandedParticipantItems[item.uid]);
+                        const entitySummary = item.legalEntity;
+                        const representativeSummary = item.representative;
+                        return (
+                          <div key={item.uid} className="ep-card-soft rounded-[1.8rem] p-5 space-y-4">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedParticipantItems((current) => ({ ...current, [item.uid]: !current[item.uid] }))}
+                              className="flex w-full min-h-12 items-center justify-between gap-3 rounded-[1.25rem] px-4 py-3 text-left"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-primary">{item.roleLabel}</p>
+                                <h3 className="text-sm font-medium text-secondary">Entidad y apoderado</h3>
+                              </div>
+                              <span className={`ep-pill rounded-full px-3 py-1 text-xs font-semibold ${item.isComplete ? "bg-emerald-500/10 text-emerald-700" : "text-secondary"}`}>
+                                {item.isComplete ? "Completo" : "Incompleto"}
+                              </span>
+                            </button>
+
+                            {isExpanded ? (
+                              <div className="space-y-4">
+                                <div className="space-y-3 rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-primary">Rol de la entidad</p>
+                                  </div>
+                                  <label className="grid gap-2 text-sm font-medium text-primary">
+                                    <span>Rol</span>
+                                    <select
+                                      value={item.roleCode}
+                                      onChange={(event) => updateEntityRole(item.uid, event.target.value)}
+                                      className="ep-select h-11 rounded-2xl px-4"
+                                    >
+                                      {entityRoleOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
                                 </div>
+
+                                <div className="space-y-3 rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-semibold text-primary">Entidad</p>
+                                    {item.legalEntity && item.legalEntityId ? (
+                                      <span className="ep-pill rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700">Completo</span>
+                                    ) : null}
+                                  </div>
+                                {hasEntitySelection(item) ? (
+                                  <div className="rounded-[1.35rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-semibold text-primary">{entitySummary?.name || "Entidad asignada"}</p>
+                                          <p className="mt-1 text-sm text-secondary">
+                                            {entitySummary?.nit || "Sin NIT"}{entitySummary?.municipality ? ` · ${entitySummary.municipality}` : ""}
+                                          </p>
+                                        </div>
+                                        <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => clearEntityLegal(item.uid)}
+                                        className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                      >
+                                        Cambiar
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <LegalEntityLookup
+                                      onPick={(entity) => updateEntityLegal(item.uid, entity, entity.id)}
+                                      onNotFound={(entity) => updateEntityLegal(item.uid, entity, null)}
+                                    />
+                                  )}
+                                </div>
+
+                                {hasEntitySelection(item) ? (
+                                  <div className="space-y-3 rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-semibold text-primary">Apoderado</p>
+                                      {hasRepresentativeSelection(item) ? (
+                                        <span className="ep-pill rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700">Completo</span>
+                                      ) : null}
+                                    </div>
+                                    {hasRepresentativeSelection(item) ? (
+                                      <div className="rounded-[1.35rem] border border-emerald-500/20 bg-emerald-500/10 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div>
+                                            <p className="text-sm font-semibold text-primary">{representativeSummary?.full_name || "Apoderado asignado"}</p>
+                                            <p className="mt-1 text-sm text-secondary">
+                                              {representativeSummary?.document_type || "DOC"} {representativeSummary?.document_number || "Sin número"} · {representativeSummary?.municipality || "Sin municipio"}
+                                            </p>
+                                          </div>
+                                          <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => clearEntityRepresentative(item.uid)}
+                                          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                        >
+                                          Cambiar
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <PersonLookup
+                                        onPick={(selected) => updateEntityRepresentative(item.uid, selected, selected.id)}
+                                        onNotFound={(person) => updateEntityRepresentative(item.uid, person, null)}
+                                      />
+                                    )}
+                                  </div>
+                                ) : null}
+
                                 <button
                                   type="button"
-                                  onClick={() => clearParticipant(role.role_code)}
-                                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary"
+                                  onClick={() => removeParticipant(item.uid)}
+                                  className="inline-flex items-center gap-2 text-sm font-semibold text-rose-600"
                                 >
-                                  Cambiar
+                                  Eliminar
                                 </button>
                               </div>
-                            ) : (
-                              <PersonLookup
-                                onPick={(selected) => assignExistingParticipant(role.role_code, selected)}
-                                onNotFound={(person) => assignNewParticipant(role.role_code, person)}
-                              />
-                            )}
+                            ) : null}
                           </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                        );
+                      }) : (
+                        <div className="ep-card-muted rounded-[1.5rem] px-4 py-5 text-sm text-secondary">
+                          Todavía no hay entidades agregadas.
+                        </div>
+                      )}
+                    </div>
+                  </section>
                 </div>
               ) : null}
 
@@ -644,16 +1226,24 @@ export function CreateCaseWizard() {
 
               {step === 4 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">5. Revisión y generar borrador</h2>
-                  <div className="ep-card-soft z-0 rounded-[1.6rem] p-5 text-sm leading-6 text-secondary">
-                    <p>Plantilla: <span className="font-semibold text-primary">{selectedTemplate?.name || "Sin plantilla"}</span></p>
-                    <p className="mt-2">Intervinientes: {templateRoles.map((role) => role.label).filter(Boolean).join(", ") || "Poderdante y Apoderado(a)"}</p>
-                    <p className="mt-2">Número interno: <span className="font-semibold text-primary">{caseDetail?.internal_case_number || "Se generar? al crear la minuta"}</span></p>
-                    <p className="mt-2">El usuario final nunca ver? placeholders; solo los datos amigables capturados en el wizard.</p>
+                  <h2 className="text-2xl font-semibold text-primary">5. Revisión</h2>
+                  <div className="ep-card-soft rounded-[1.5rem] p-5 space-y-3">
+                    <p className="text-sm font-semibold text-primary">Tipo de escritura</p>
+                    <p className="text-sm text-secondary">
+                      {ESCRITURA_TYPES.find((t) => t.code === escrituraType)?.label ?? "Sin definir"}
+                    </p>
+                    <p className="mt-3 text-sm font-semibold text-primary">Actos confirmados</p>
+                    <div className="space-y-1">
+                      {actWizardItems.map((a, i) => (
+                        <p key={a.uid} className="text-sm text-secondary">{i + 1}. {a.label}</p>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-primary">Número interno</p>
+                    <p className="text-sm text-secondary">{caseDetail?.internal_case_number ?? ""}</p>
                   </div>
-                  <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-                    <FileSignature className="h-4 w-4" />Generar borrador Word v1
-                  </button>
+                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
+                    Todo listo. Al continuar, el sistema generará la escritura con Gari y podrás previsualizarla, descargarla o regenerarla.
+                  </div>
                 </div>
               ) : null}
             </>
@@ -664,6 +1254,11 @@ export function CreateCaseWizard() {
           {!isLoading && templates.length > 0 && step < 4 ? (
             <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
               Continuar <ArrowRight className="h-4 w-4" />
+            </button>
+          ) : null}
+          {!isLoading && templates.length > 0 && step === 4 ? (
+            <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
+              Generar con Gari <ArrowRight className="h-4 w-4" />
             </button>
           ) : null}
         </div>

@@ -81,3 +81,8 @@ class Case(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="desc(CaseWorkflowEvent.created_at)",
     )
+    acts: Mapped[list["CaseAct"]] = relationship(
+        back_populates="case",
+        cascade="all, delete-orphan",
+        order_by="CaseAct.act_order.asc()",
+    )

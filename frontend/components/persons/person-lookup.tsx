@@ -4,6 +4,32 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { lookupPersons, type PersonPayload, type PersonRecord } from "@/lib/document-flow";
 
+const maritalStatusOptions = [
+  "Soltero(a)",
+  "Casado(a)",
+  "Unión marital de hecho",
+  "Divorciado(a)",
+  "Viudo(a)",
+  "Otro",
+];
+
+const professionOptions = [
+  "Abogado(a)",
+  "Administrador(a)",
+  "Comerciante",
+  "Contador(a)",
+  "Docente",
+  "Economista",
+  "Enfermero(a)",
+  "Independiente",
+  "Ingeniero(a)",
+  "Médico(a)",
+  "Pensionado(a)",
+  "Servidor(a) público(a)",
+  "Tecnólogo(a)",
+  "Otro",
+];
+
 type PersonLookupProps = {
   onPick: (person: PersonRecord) => void;
   onNotFound: (person: PersonPayload) => void;
@@ -52,6 +78,36 @@ function PersonField({
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-sm font-medium text-primary">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="ep-select h-11 rounded-xl px-3"
+      >
+        <option value="">Selecciona una opción</option>
+        {options.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function PersonLookup({ onPick, onNotFound }: PersonLookupProps) {
   const [documentType, setDocumentType] = useState("CC");
   const [documentNumber, setDocumentNumber] = useState("");
@@ -61,16 +117,42 @@ export function PersonLookup({ onPick, onNotFound }: PersonLookupProps) {
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [draftPerson, setDraftPerson] = useState<PersonPayload>(() => blankPersonDraft());
+  const [maritalStatusChoice, setMaritalStatusChoice] = useState("");
+  const [maritalStatusCustom, setMaritalStatusCustom] = useState("");
+  const [professionChoice, setProfessionChoice] = useState("");
+  const [professionCustom, setProfessionCustom] = useState("");
+
+  function syncDerivedFields(nextDraft: PersonPayload) {
+    const nextMaritalStatus = nextDraft.marital_status || "";
+    const nextProfession = nextDraft.profession || "";
+    const nextMaritalChoice = maritalStatusOptions.includes(nextMaritalStatus) && nextMaritalStatus !== "Otro"
+      ? nextMaritalStatus
+      : nextMaritalStatus
+        ? "Otro"
+        : "";
+    const nextProfessionChoice = professionOptions.includes(nextProfession) && nextProfession !== "Otro"
+      ? nextProfession
+      : nextProfession
+        ? "Otro"
+        : "";
+
+    setMaritalStatusChoice(nextMaritalChoice);
+    setMaritalStatusCustom(nextMaritalChoice === "Otro" ? nextMaritalStatus : "");
+    setProfessionChoice(nextProfessionChoice);
+    setProfessionCustom(nextProfessionChoice === "Otro" ? nextProfession : "");
+  }
 
   function openCreateForm() {
-    setDraftPerson((current) =>
-      blankPersonDraft({
+    setDraftPerson((current) => {
+      const nextDraft = blankPersonDraft({
         ...current,
         document_type: documentType || current.document_type,
         document_number: documentNumber || current.document_number,
         full_name: query || current.full_name,
-      }),
-    );
+      });
+      syncDerivedFields(nextDraft);
+      return nextDraft;
+    });
     setShowCreateForm(true);
     setError(null);
   }
@@ -84,13 +166,13 @@ export function PersonLookup({ onPick, onNotFound }: PersonLookupProps) {
       const safeResults = Array.isArray(data) ? data : [];
       setResults(safeResults);
       if (safeResults.length === 0) {
-        setDraftPerson(
-          blankPersonDraft({
-            document_type: documentType,
-            document_number: documentNumber,
-            full_name: query,
-          }),
-        );
+        const nextDraft = blankPersonDraft({
+          document_type: documentType,
+          document_number: documentNumber,
+          full_name: query,
+        });
+        setDraftPerson(nextDraft);
+        syncDerivedFields(nextDraft);
         setShowCreateForm(true);
       }
     } catch (issue) {
@@ -107,6 +189,8 @@ export function PersonLookup({ onPick, onNotFound }: PersonLookupProps) {
       document_type: draftPerson.document_type.trim(),
       document_number: draftPerson.document_number.trim(),
       full_name: draftPerson.full_name.trim(),
+      marital_status: maritalStatusChoice === "Otro" ? maritalStatusCustom.trim() : maritalStatusChoice,
+      profession: professionChoice === "Otro" ? professionCustom.trim() : professionChoice,
       metadata_json: draftPerson.metadata_json || "{}",
     };
 
@@ -243,16 +327,64 @@ export function PersonLookup({ onPick, onNotFound }: PersonLookupProps) {
                 value={draftPerson.nationality || ""}
                 onChange={(value) => setDraftPerson((current) => ({ ...current, nationality: value }))}
               />
-              <PersonField
-                label="Estado civil"
-                value={draftPerson.marital_status || ""}
-                onChange={(value) => setDraftPerson((current) => ({ ...current, marital_status: value }))}
-              />
-              <PersonField
-                label="Profesión u oficio"
-                value={draftPerson.profession || ""}
-                onChange={(value) => setDraftPerson((current) => ({ ...current, profession: value }))}
-              />
+              <div className="space-y-1">
+                <SelectField
+                  label="Estado civil"
+                  value={maritalStatusChoice}
+                  options={maritalStatusOptions}
+                  onChange={(value) => {
+                    setMaritalStatusChoice(value);
+                    if (value !== "Otro") {
+                      setMaritalStatusCustom("");
+                    }
+                    setDraftPerson((current) => ({
+                      ...current,
+                      marital_status: value === "Otro" ? maritalStatusCustom.trim() : value,
+                    }));
+                  }}
+                />
+                {maritalStatusChoice === "Otro" ? (
+                  <input
+                    value={maritalStatusCustom}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setMaritalStatusCustom(value);
+                      setDraftPerson((current) => ({ ...current, marital_status: value }));
+                    }}
+                    placeholder="Especifica..."
+                    className="ep-input h-11 rounded-xl px-3"
+                  />
+                ) : null}
+              </div>
+              <div className="space-y-1">
+                <SelectField
+                  label="Profesión u oficio"
+                  value={professionChoice}
+                  options={professionOptions}
+                  onChange={(value) => {
+                    setProfessionChoice(value);
+                    if (value !== "Otro") {
+                      setProfessionCustom("");
+                    }
+                    setDraftPerson((current) => ({
+                      ...current,
+                      profession: value === "Otro" ? professionCustom.trim() : value,
+                    }));
+                  }}
+                />
+                {professionChoice === "Otro" ? (
+                  <input
+                    value={professionCustom}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setProfessionCustom(value);
+                      setDraftPerson((current) => ({ ...current, profession: value }));
+                    }}
+                    placeholder="Especifica..."
+                    className="ep-input h-11 rounded-xl px-3"
+                  />
+                ) : null}
+              </div>
               <PersonField
                 label="Municipio de domicilio"
                 value={draftPerson.municipality || ""}

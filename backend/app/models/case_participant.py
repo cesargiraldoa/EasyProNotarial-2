@@ -13,9 +13,11 @@ class CaseParticipant(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), index=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), index=True)
+    legal_entity_id: Mapped[int | None] = mapped_column(ForeignKey("legal_entities.id"), nullable=True, index=True)
     role_code: Mapped[str] = mapped_column(String(80), index=True)
     role_label: Mapped[str] = mapped_column(String(120))
     snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
 
     case: Mapped["Case"] = relationship(back_populates="participants")
     person: Mapped["Person"] = relationship(back_populates="case_participations")
+    legal_entity: Mapped["LegalEntity | None"] = relationship(back_populates="case_participations")

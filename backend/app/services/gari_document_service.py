@@ -1,4 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+import json
 
 import io
 import os
@@ -13,54 +15,54 @@ from supabase import Client, create_client
 from app.core.config import get_settings
 
 
-SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacción notarial colombiano de EasyPro.
+SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacciÃ³n notarial colombiano de EasyPro.
 
 IDENTIDAD Y ROL:
-- Redactas instrumentos públicos notariales en Colombia con precisión jurídica total.
-- Sigues el Decreto 960 de 1970, Decreto 2148 de 1983 y demás normas notariales colombianas.
+- Redactas instrumentos pÃºblicos notariales en Colombia con precisiÃ³n jurÃ­dica total.
+- Sigues el Decreto 960 de 1970, Decreto 2148 de 1983 y demÃ¡s normas notariales colombianas.
 - Solo produces el texto del documento. Nunca incluyes explicaciones, comentarios ni metadata.
 
 REGLAS DE FORMATO NOTARIAL OBLIGATORIAS:
 - NO uses guiones de relleno (- - - - -) en el cuerpo del documento
-- El sistema los agregará automáticamente al formatear
-- Solo usa saltos de línea entre secciones
-- Separa cada acto con una línea en blanco
-- Números siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintiséis (2026)"
+- El sistema los agregarÃ¡ automÃ¡ticamente al formatear
+- Solo usa saltos de lÃ­nea entre secciones
+- Separa cada acto con una lÃ­nea en blanco
+- NÃºmeros siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintisÃ©is (2026)"
 - Valores monetarios: "$6.000.000" Y "seis millones de pesos colombianos ($6.000.000)"
-- Negrilla para títulos de actos: **PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA**
-- Cada acto inicia en nueva sección con su número ordinal en negrilla
+- Negrilla para tÃ­tulos de actos: **PRIMER ACTO: LIBERACIÃ“N PARCIAL DE HIPOTECA**
+- Cada acto inicia en nueva secciÃ³n con su nÃºmero ordinal en negrilla
 - Los intervinientes se presentan con su calidad completa: "quien obra en calidad de apoderado especial de [ENTIDAD] identificada con NIT [NIT]"
 
 ESTRUCTURA OBLIGATORIA DEL DOCUMENTO:
-1. Encabezado: NOTARÍA + NÚMERO ESCRITURA + CLASE Y CUANTÍA DE ACTOS + PERSONAS QUE INTERVIENEN
+1. Encabezado: NOTARÃA + NÃšMERO ESCRITURA + CLASE Y CUANTÃA DE ACTOS + PERSONAS QUE INTERVIENEN
 2. Apertura: ciudad, fecha en texto, notario titular
 3. Un bloque por cada acto en el orden exacto indicado en el prompt
-4. Cada acto: comparecencia del interviniente  declaraciones  aceptación
-5. Liquidación de derechos notariales
+4. Cada acto: comparecencia del interviniente  declaraciones  aceptaciÃ³n
+5. LiquidaciÃ³n de derechos notariales
 6. Constancias legales (Ley 1581/2012, Art. 102 Decreto 960/1970)
 7. Firmas de todos los comparecientes + Notario
 
 REGLAS DE INTERVINIENTES:
 - Cada apoderado SIEMPRE menciona: "quien obra como apoderado especial de [ENTIDAD, NIT]"
-- La personería se acredita con: "escritura pública número X de la Notaría Y de [ciudad], la cual se protocoliza"
-- El género gramatical SIEMPRE debe concordar con el sexo del interviniente
-- Si el interviniente está de tránsito: "domiciliado en [municipio], de tránsito por Caldas"
+- La personerÃ­a se acredita con: "escritura pÃºblica nÃºmero X de la NotarÃ­a Y de [ciudad], la cual se protocoliza"
+- El gÃ©nero gramatical SIEMPRE debe concordar con el sexo del interviniente
+- Si el interviniente estÃ¡ de trÃ¡nsito: "domiciliado en [municipio], de trÃ¡nsito por Caldas"
 
-MODO CORRECCIÓN:
-- Cuando recibes un borrador anterior + instrucción de corrección
+MODO CORRECCIÃ“N:
+- Cuando recibes un borrador anterior + instrucciÃ³n de correcciÃ³n
 - Aplica SOLO el cambio solicitado
 - Reproduce el resto del documento sin alteraciones
 - No resumas ni acortes el documento
 
 PROHIBICIONES ABSOLUTAS:
-- Nunca inventes datos que no estén en el prompt
+- Nunca inventes datos que no estÃ©n en el prompt
 - Nunca uses placeholders como [DATO] o {{VARIABLE}}
 - Nunca agregues comentarios fuera del texto notarial
-- Nunca omitas actos que estén en la lista de actos requeridos
+- Nunca omitas actos que estÃ©n en la lista de actos requeridos
 
 PRIORIDAD ABSOLUTA:
-Debes generar TODOS los actos indicados en la instrucción de generación.
-Es más importante generar todos los actos que usar muchos guiones de relleno.
+Debes generar TODOS los actos indicados en la instrucciÃ³n de generaciÃ³n.
+Es mÃ¡s importante generar todos los actos que usar muchos guiones de relleno.
 Si debes elegir entre guiones decorativos y contenido de actos, siempre elige el contenido.
 """
 
@@ -86,273 +88,151 @@ def build_gari_prompt(
     notary_label: str,
     notary_name: str,
     participants: list[dict],
-    act_data: dict,
+    case_acts: list[dict] | None = None,
+    act_data: dict | None = None,
     template_reference_text: str | None = None,
     variante_id: str | None = None,
     correction_note: str | None = None,
     previous_draft: str | None = None,
 ) -> str:
-    """Construye el prompt para Gari con todos los datos del acto notarial."""
-    ORDEN_ACTOS_POR_VARIANTE = {
-        "aragua_apto_1c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-        "aragua_apto_2c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-        "aragua_parq_2c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "PODER ESPECIAL",
-        ],
-        "aragua_parq_3c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "PODER ESPECIAL",
-        ],
-        "jaggua_fna_1c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-        "jaggua_fna_2c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CANCELACIÓN DE COMODATO",
-            "CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-        "jaggua_bogota_1c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-        "jaggua_bogota_2c": [
-            "LIBERACIÓN PARCIAL DE HIPOTECA",
-            "PROTOCOLIZACIÓN CERTIFICADO TÉCNICO DE OCUPACIÓN",
-            "COMPRAVENTA VIS",
-            "RENUNCIA A CONDICIÓN RESOLUTORIA",
-            "CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO",
-            "CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE",
-            "PODER ESPECIAL",
-        ],
-    }
+    """Construye el prompt para Gari con actos dinamicos por caso."""
+    act_data = act_data or {}
 
-    grouped_participants: dict[str, list[dict]] = {}
-    for participant in participants:
-        role_code = participant.get("role_code", "") or ""
-        grouped_participants.setdefault(role_code, []).append(participant)
+    def _matches_participant_role(role: str, role_code: str) -> bool:
+        if role == "compradores" and role_code.startswith("comprador"):
+            return True
+        if role == "fideicomiso" and role_code == "apoderado_fideicomiso":
+            return True
+        if role == "banco_libera" and role_code == "apoderado_banco_libera":
+            return True
+        if role == "constructora" and role_code == "apoderado_fideicomitente":
+            return True
+        if role == "banco_hipoteca" and role_code == "apoderado_banco_hipoteca":
+            return True
+        return role_code == role
 
-    ACTOS_POR_VARIANTE = {
-        "aragua-parq-1c": [
-            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Bancolombia libera. Acreedor: Bancolombia S.A. NIT 890.903.938-8. Deudor: Fideicomiso P.A. Aragua de Primavera / Fiduciaria Bancolombia S.A. NIT 830.054.539-0. Valor: $100.000)",
-            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Aragua / Fiduciaria Bancolombia NIT 830.054.539-0 y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
-            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Aragua. Comprador(es): los intervinientes con rol comprador_1, comprador_2, comprador_3. Valor: el campo valor_de_la_venta)",
-            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso P.A. Aragua y los compradores. Sin cuantía)",
-            "QUINTO ACTO: CANCELACIÓN DE COMODATO PRECARIO (Otorgantes: Fideicomiso P.A. Aragua y Constructora Contex. Sin cuantía)",
-            "SEXTO ACTO: PODER ESPECIAL (Poderdante(s): los compradores. Apoderado: Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
-        ],
-        "aragua-parq-2c": [],
-        "aragua-parq-3c": [],
-        "torre6-contado": [
-            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Banco Davivienda S.A. NIT 860.034.313-7 libera. Deudor: Fideicomiso P.A. Aragua / Fiduciaria Bancolombia NIT 830.054.539-0)",
-            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Aragua y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
-            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Aragua. Comprador: rol comprador_1. Valor: campo valor_de_la_venta)",
-            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso y comprador. Sin cuantía)",
-            "QUINTO ACTO: CANCELACIÓN DE COMODATO PRECARIO (Otorgantes: Fideicomiso y Constructora Contex. Sin cuantía)",
-            "SEXTO ACTO: CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE (Otorgante: comprador_1. Sin cuantía)",
-            "SÉPTIMO ACTO: PODER ESPECIAL (Poderdante: comprador_1. Apoderado: Constructora Contex S.A.S. BIC. Sin cuantía)",
-        ],
-        "jaggua-bogota-1c": [
-            "PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA (Fondo Nacional del Ahorro NIT 899.999.284-4 libera. Deudor: Fideicomiso P.A. Jaggua / Fiduciaria Bancolombia NIT 830.054.539-0)",
-            "SEGUNDO ACTO: PROTOCOLIZACIÓN DE CERTIFICADO TÉCNICO DE OCUPACIÓN (Otorgantes: Fideicomiso P.A. Jaggua y Constructora Contex S.A.S. BIC NIT 900.082.107-5. Sin cuantía)",
-            "TERCER ACTO: COMPRAVENTA DE INTERÉS SOCIAL (VIS) (Vendedor: Fideicomiso P.A. Jaggua. Comprador: rol comprador_1. Valor: campo valor_de_la_venta)",
-            "CUARTO ACTO: RENUNCIA A CONDICIÓN RESOLUTORIA (Otorgantes: Fideicomiso y comprador_1. Sin cuantía)",
-            "QUINTO ACTO: CONSTITUCIÓN DE HIPOTECA ABIERTA DE PRIMER GRADO (Deudor hipotecante: comprador_1. Acreedor: Banco de Bogotá S.A. NIT 860.002.964-4. Valor: campo valor_del_acto_hipoteca)",
-            "SEXTO ACTO: CONSTITUCIÓN DE PATRIMONIO DE FAMILIA INEMBARGABLE (Otorgante: comprador_1. Sin cuantía)",
-            "SÉPTIMO ACTO: PODER ESPECIAL (Poderdante: comprador_1. Apoderado: Constructora Contex S.A.S. BIC. Sin cuantía)",
-        ],
-        "jaggua-bogota-2c": [],
-        "correccion-registro-civil": [
-            "ÚNICO ACTO: CORRECCIÓN DE REGISTRO CIVIL DE NACIMIENTO (Compareciente: rol inscrito. Obra en nombre propio.)",
-        ],
-        "salida-del-pais": [
-            "ÚNICO ACTO: PERMISO PERMANENTE DE SALIDA DEL PAÍS (Otorgante: rol otorgante  padre. Aceptante: rol aceptante  madre. A favor de: rol menor.)",
-        ],
-    }
-    ACTOS_POR_VARIANTE["aragua-parq-2c"] = ACTOS_POR_VARIANTE["aragua-parq-1c"]
-    ACTOS_POR_VARIANTE["aragua-parq-3c"] = ACTOS_POR_VARIANTE["aragua-parq-1c"]
-    ACTOS_POR_VARIANTE["jaggua-bogota-2c"] = ACTOS_POR_VARIANTE["jaggua-bogota-1c"]
+    actos_section = ""
+    for act in sorted(case_acts or [], key=lambda item: int(item.get("act_order", 0) or 0)):
+        act_code = str(act.get("act_code", "") or "")
+        act_label = str(act.get("act_label", "") or "")
+        act_order = int(act.get("act_order", 0) or 0)
+        roles_raw = act.get("roles_json", "[]")
+        try:
+            roles = json.loads(roles_raw) if isinstance(roles_raw, str) else list(roles_raw or [])
+        except json.JSONDecodeError:
+            roles = []
 
-    participants_text = ""
-    ordered_role_codes = list(grouped_participants.keys())
-    for role_code in ordered_role_codes:
-        for p in grouped_participants.get(role_code, []):
-            role_label = p.get("role_label", "") or p.get("role_code", "")
-            participants_text += (
-                f"\n- ROL: {str(p.get('role_label', role_code)).upper()}"
-            )
-            participants_text += f"\n  Nombre completo: {p.get('full_name', '')}"
-            participants_text += f"\n  Tipo documento: {p.get('document_type', '')}"
-            participants_text += f"\n  Número documento: {p.get('document_number', '')}"
-            participants_text += f"\n  Sexo: {p.get('sex', '')}"
-            participants_text += f"\n  Nacionalidad: {p.get('nationality', '')}"
-            participants_text += f"\n  Estado civil: {p.get('marital_status', '')}"
-            participants_text += f"\n  Profesión u oficio: {p.get('profession', '')}"
-            participants_text += f"\n  Municipio de domicilio: {p.get('municipality', '')}"
-            participants_text += (
-                f"\n  ¿Está de tránsito?: {'Sí' if p.get('is_transient') else 'No'}"
-            )
-            participants_text += f"\n  Teléfono: {p.get('phone', '')}"
-            participants_text += f"\n  Dirección: {p.get('address', '')}"
-            participants_text += f"\n  Email: {p.get('email', '')}"
+        relevant_participants: list[dict] = []
+        for role in roles:
+            for participant in participants:
+                role_code = str(participant.get("role_code", "") or "")
+                if _matches_participant_role(str(role), role_code):
+                    relevant_participants.append(participant)
 
-    entidades_section = """
-ENTIDADES JURÃDICAS PREEXISTENTES (usar cuando el rol sea apoderado):
-- Fideicomiso P.A. Aragua de Primavera / vocera: Fiduciaria Bancolombia S.A.  NIT 830.054.539-0
-- Constructora Contex S.A.S. BIC  NIT 900.082.107-5
-- Bancolombia S.A.  NIT 890.903.938-8
-- Banco Davivienda S.A.  NIT 860.034.313-7
-- Fondo Nacional del Ahorro S.A.  NIT 899.999.284-4
-- Banco de Bogotá S.A.  NIT 860.002.964-4
-- Fideicomiso P.A. Jaggua / vocera: Fiduciaria Bancolombia S.A.  NIT 830.054.539-0
-
-El rol del interviniente indica quÃ© entidad representa:
-- apoderado_banco_libera  representa al banco acreedor que libera la hipoteca
-- apoderado_fideicomiso  representa al Fideicomiso (vendedor)
-- apoderado_fideicomitente  representa a la Constructora (fideicomitente)
-- apoderado_banco_hipoteca  representa al banco que otorga el nuevo crÃ©dito hipotecario
-"""
+        actos_section += f"\nACTO {act_order}  {act_label.upper()}\n"
+        if act_code:
+            actos_section += f"  CODIGO: {act_code}\n"
+        for participant in relevant_participants:
+            nombre = participant.get("full_name", "") or ""
+            doc = f"{participant.get('document_type', '')} {participant.get('document_number', '')}".strip()
+            entidad = participant.get("represented_entity_name", "") or ""
+            nit = participant.get("represented_entity_nit", "") or ""
+            rol = participant.get("role_label", "") or participant.get("role_code", "") or ""
+            if entidad:
+                actos_section += f"  {rol}: {nombre} {doc}  obrando como apoderado de {entidad} NIT {nit}\n"
+            else:
+                actos_section += f"  {rol}: {nombre} {doc}\n"
 
     act_data_text = ""
     for key, value in act_data.items():
         act_data_text += f"\n- {key}: {value}"
 
-    instruccion_section = ""
-    actos_lista = ACTOS_POR_VARIANTE.get(variante_id or "", [])
-    if actos_lista:
-        actos_texto = "\n".join(f"{idx + 1}. {acto}" for idx, acto in enumerate(actos_lista))
-        instruccion_section = f"""
-INSTRUCCIÓN DE GENERACIÓN  OBLIGATORIO:
-Debes generar EXACTAMENTE estos actos en este orden. Cada acto en su propia sección con título en negrilla:
-{actos_texto}
-
-Para cada acto:
-- Redacta la comparecencia completa del interviniente mencionando la entidad que representa
-- Incluye las declaraciones y cláusulas del acto
-- Termina con la aceptación del interviniente
-"""
-
     reference_section = ""
     if template_reference_text:
-        _REF_MAX_CHARS = 14_000
-        _ref_text = template_reference_text[:_REF_MAX_CHARS]
-        _truncated = len(template_reference_text) > _REF_MAX_CHARS
+        _ref_text = template_reference_text[:14000]
+        _truncated = len(template_reference_text) > 14000
         reference_section = f"""
-PLANTILLA DE REFERENCIA DEL ACTO (usar como guía de estructura y redacción notarial colombiana):
-{"[NOTA: texto de referencia truncado por longitud — mantener estructura y estilo del fragmento mostrado]" if _truncated else ""}
+PLANTILLA DE REFERENCIA DEL ACTO:
+{"[NOTA: texto de referencia truncado por longitud - mantener estructura y estilo del fragmento mostrado]" if _truncated else ""}
 ---
 {_ref_text}
 ---
 """
 
-    variante_section = ""
-    if variante_id and variante_id in ORDEN_ACTOS_POR_VARIANTE:
-        actos_ordenados = ORDEN_ACTOS_POR_VARIANTE[variante_id]
-        actos_texto = "\n".join(
-            f"{idx}. {acto}" for idx, acto in enumerate(actos_ordenados, start=1)
-        )
-        variante_section = f"""
-VARIANTE DOCUMENTAL: {variante_id}
-ACTOS QUE DEBE CONTENER EN ESTE ORDEN EXACTO:
-{actos_texto}
-"""
-
     correction_section = ""
     if correction_note and previous_draft:
         correction_section = f"""
-MODO CORRECCIÓN ACTIVO:
+MODO CORRECCION ACTIVO:
 El siguiente es el borrador actual que debes corregir:
 ---BORRADOR ACTUAL---
 {previous_draft[:8000]}
 ---FIN BORRADOR---
 
-Instrucción de corrección: {correction_note}
+Instruccion de correccion: {correction_note}
 
-INSTRUCCIÓN CRÍTICA: Aplica ÚNICAMENTE el cambio solicitado en la instrucción anterior.
-No reescribas párrafos que no fueron mencionados. No cambies datos que no se pidan.
-Devuelve el documento completo con solo esa corrección aplicada.
+INSTRUCCION CRITICA: Aplica UNICAMENTE el cambio solicitado en la instruccion anterior.
+No reescribas parrafos que no fueron mencionados. No cambies datos que no se pidan.
+Devuelve el documento completo con solo esa correccion aplicada.
 """
     elif correction_note:
         correction_section = f"""
-INSTRUCCIÓN DE CORRECCIÓN: {correction_note}
-Aplica únicamente este cambio. No modifiques nada más del documento.
+INSTRUCCION DE CORRECCION: {correction_note}
+Aplica unicamente este cambio. No modifiques nada mas del documento.
 """
-    prompt = f"""Eres un experto en derecho notarial colombiano. Tu tarea es redactar un instrumento público notarial completo y correcto jurídicamente.
 
-NOTARÍA: {notary_label}
+    prompt = f"""Eres un experto en derecho notarial colombiano. Tu tarea es redactar un instrumento publico notarial completo y correcto juridicamente.
+
+1. NOTARIA Y NOTARIO TITULAR
+NOTARIA: {notary_label}
 NOTARIO TITULAR: {notary_name}
 TIPO DE ACTO: {act_type}
 
-INTERVINIENTES:{participants_text}
+2. ACTOS ESTRUCTURADOS
+{actos_section}
 
-{entidades_section}
+3. DATOS DEL ACTO
+{act_data_text}
 
-{instruccion_section}
+4. INSTRUCCION DE FORMATO NOTARIAL
+Redacta la escritura publica completa en español formal notarial colombiano con EXACTAMENTE este formato:
 
-DATOS DEL ACTO:{act_data_text}
+SECCION 1  ENCABEZADO:
+- - - NOTARIA UNICA DEL CIRCULO DE CALDAS - - -
+INSTRUMENTO PUBLICO NUMERO: numero_escritura
+CLASES DE ACTOS:
+1) NOMBRE ACTO: inmueble y matricula si aplica
+   PERSONAS QUE INTERVIENEN: lista
+   VALOR DEL ACTO: valor o SIN CUANTIA
+repetir por cada acto
 
-{variante_section}
+SECCION 2  CUERPO:
+En el municipio de Caldas, Departamento de Antioquia, Republica de Colombia,
+a los dia del mes de mes del año año, ante el despacho de la NOTARIA UNICA
+DEL CIRCULO DE CALDAS, cuyo Notario Titular es el doctor nombre_notario,
+se otorgo escritura publica en los siguientes terminos:
+- - - - - - - - - - - - - - - - - - - - - - -
+PRIMER ACTO: NOMBRE
+Comparecencia completa del apoderado con todos sus datos
+PRIMERO: clausula
+SEGUNDO: clausula
+repetir por cada acto
+
+SECCION 3  CIERRE:
+Otorgamiento y Autorizacion
+Tratamiento de Datos Personales (Ley 1581/2012)
+Derechos notariales: valor
+IVA: valor
+Superintendencia de notariado: valor
+Hojas de protocolo: numeros
+Firmas de todos los comparecientes con nombre, CC, celular, direccion, email
+
+Usa guiones de separacion exactamente como: - - - - - - - - - - - - - - - - -
+Nunca uses placeholders ni corchetes en el documento final.
+Nunca omitas actos de la lista.
 
 {reference_section}
 
 {correction_section}
-
-INSTRUCCIONES DE REDACCIÓN:
-1. Redacta el documento completo en español formal notarial colombiano
-2. Incluye todas las secciones requeridas según la ley colombiana
-3. Inserta los datos de los intervinientes exactamente como se proporcionan — nunca inventar datos
-5. Usa el género gramatical correcto según el sexo de cada interviniente
-6. Incluye constancias notariales obligatorias: Ley 1581/2012, Art. 102 Decreto 960/1970
-7. Incluye liquidación de derechos notariales con los valores proporcionados
-8. Incluye sección de firmas con datos de comparecientes
-9. Documento listo para firmar, sin placeholders ni etiquetas
-10. Si hay VARIANTE DOCUMENTAL, genera los actos en ese orden exacto
-
-FORMATO DE SALIDA:
-- Solo el texto del documento
-- Sin explicaciones ni etiquetas
-- Listo para exportar a Word
 """
 
     return prompt
@@ -363,7 +243,8 @@ def generate_notarial_document(
     notary_label: str,
     notary_name: str,
     participants: list[dict],
-    act_data: dict,
+    case_acts: list[dict] | None = None,
+    act_data: dict | None = None,
     template_reference_text: str | None = None,
     max_tokens: int = 4000,
     variante_id: str | None = None,
@@ -377,7 +258,8 @@ def generate_notarial_document(
         notary_label=notary_label,
         notary_name=notary_name,
         participants=participants,
-        act_data=act_data,
+        case_acts=case_acts,
+        act_data=act_data or {},
         template_reference_text=template_reference_text,
         variante_id=variante_id,
         correction_note=correction_note,
@@ -402,7 +284,6 @@ def generate_notarial_document(
 
     return response.choices[0].message.content or ""
 
-
 def build_gari_docx_buffer(text: str) -> io.BytesIO:
     """Construye un documento .docx en memoria con formato Gari."""
     doc = DocxDocument()
@@ -418,13 +299,13 @@ def build_gari_docx_buffer(text: str) -> io.BytesIO:
             doc.add_paragraph()
             continue
         texto = line
-        # Solo agregar guiones si la línea parece un campo para rellenar
-        # (termina con ":" o es corta y no es un título/cláusula completa)
+        # Solo agregar guiones si la lÃ­nea parece un campo para rellenar
+        # (termina con ":" o es corta y no es un tÃ­tulo/clÃ¡usula completa)
         es_encabezado = any(line.upper().startswith(kw) for kw in [
             "PRIMERO", "SEGUNDO", "TERCERO", "CUARTO", "QUINTO", "SEXTO",
-            "SÉPTIMO", "OCTAVO", "NOVENO", "DÉCIMO", "ESCRITURA", "ACTO:",
-            "OTORGAMIENTO", "CONSTANCIA", "AUTORIZACIÓN", "PARÁGRAFO",
-            "PARAGRAFO", "NOTA", "DERECHOS", "SUPERFONDO", "LIQUIDACIÓN",
+            "SÃ‰PTIMO", "OCTAVO", "NOVENO", "DÃ‰CIMO", "ESCRITURA", "ACTO:",
+            "OTORGAMIENTO", "CONSTANCIA", "AUTORIZACIÃ“N", "PARÃGRAFO",
+            "PARAGRAFO", "NOTA", "DERECHOS", "SUPERFONDO", "LIQUIDACIÃ“N",
         ])
         es_campo_vacio = line.endswith(":") or (len(line) < 60 and not es_encabezado and not line.endswith("."))
         if es_campo_vacio and not line.strip().startswith("- -"):
@@ -464,7 +345,7 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
     signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
     url = signed.get("signedUrl") or signed.get("signedURL") or ""
     if not url:
-        raise ValueError(f"Supabase no retornó signed URL para {storage_path}. Respuesta: {signed}")
+        raise ValueError(f"Supabase no retornÃ³ signed URL para {storage_path}. Respuesta: {signed}")
     return url
 
 def resolver_escritura(
@@ -664,7 +545,7 @@ def resolver_escritura(
     key = (proyecto_norm, tipo_inmueble_norm, num_compradores, banco_norm)
     if key not in variantes:
         raise ValueError(
-            "No existe una variante de escritura para la combinación "
+            "No existe una variante de escritura para la combinaciÃ³n "
             f"proyecto={proyecto_norm}, tipo_inmueble={tipo_inmueble_norm}, "
             f"num_compradores={num_compradores}, banco_hipotecante={banco_norm}."
         )
@@ -755,3 +636,5 @@ if __name__ == "__main__":
     )
     print("Ejemplo jaggua bogota 2c:")
     print(ejemplo_jaggua)
+
+

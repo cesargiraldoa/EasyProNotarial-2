@@ -25,6 +25,7 @@ from app.models.role_assignment import RoleAssignment
 from app.models.template_field import TemplateField
 from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User
+from app.seeds.seed_act_catalog import seed_act_catalog
 from app.modules.notaries.router import build_catalog_identity_key
 from app.services.document_generation import build_case_text_snapshot, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
 from app.services.storage import copy_template_file, next_case_file_path, template_file_path
@@ -419,6 +420,8 @@ def seed_database(db: Session) -> None:
         if activity.responsible in owner_map:
             activity.responsible_user_id = owner_map[activity.responsible]
     db.commit()
+
+    seed_act_catalog(db)
 
     template = ensure_power_general_template(db, notary)
 

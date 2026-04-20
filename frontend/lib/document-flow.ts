@@ -1,40 +1,35 @@
-﻿import { cleanNullableText, cleanText, sanitizeTextDeep } from "@/lib/text";
+﻿import { cleanNullableText, cleanText } from "@/lib/text";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const SESSION_KEY = "easypro2_session";
-
-function getCookieToken() {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${SESSION_KEY}=([^;]+)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function getStoredToken() {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(SESSION_KEY) || window.sessionStorage.getItem(SESSION_KEY) || null;
-  } catch {
-    return null;
+async function apiFetch<T = unknown>(path: string, options: { method?: string; body?: unknown; headers?: HeadersInit } = {}): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}${path}`;
+  
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+  if (options.headers) {
+    Object.assign(headers, Object.fromEntries(new Headers(options.headers).entries()));
   }
-}
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  const text = await response.text();
+  const response = await fetch(url, {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
   if (!response.ok) {
-    throw new Error(text || "No fue posible completar la solicitud.");
+    const errorText = await response.text();
+    throw new Error(errorText);
   }
-  if (!text.trim()) {
-    return null as T;
-  }
-  return sanitizeTextDeep(JSON.parse(text) as T);
-}
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getCookieToken() || getStoredToken();
-  const headers = new Headers(init.headers ?? {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store", credentials: "include" });
-  return parseResponse<T>(response);
+  const text = await response.text();
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
 }
 
 const asString = (value: unknown, fallback = "") => cleanText(value, fallback);
@@ -190,25 +185,156 @@ function normalizeCase(value: unknown): DocumentFlowCase {
 
 export async function getActiveTemplates() { return asArray(await apiFetch<unknown>("/api/v1/templates/active"), normalizeTemplate); }
 export async function getTemplates() { return asArray(await apiFetch<unknown>("/api/v1/templates"), normalizeTemplate); }
-export async function createDocumentCase(payload: DocumentFlowCasePayload) { return normalizeCase(await apiFetch<unknown>("/api/v1/document-flow/cases/from-template", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })); }
-export async function getDocumentCase(caseId: number) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}`)); }
-export async function saveCaseParticipants(caseId: number, payload: CaseParticipantPayload[]) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/participants`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })); }
-export async function saveCaseActData(caseId: number, payload: CaseActDataPayload) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/act-data`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })); }
-export async function addClientComment(caseId: number, comment: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/client-comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment }) })); }
-export async function addInternalNote(caseId: number, note: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/internal-notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) })); }
-export async function generateCaseDraft(caseId: number, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/generate-draft`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment: comment || null }) })); }
-export async function generateWithGari(caseId: number, comment?: string, correctionText?: string): Promise<DocumentFlowCase> {
-  return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/generate-with-gari`, {
+export async function createDocumentCase(payload: {
+  template_id?: number | null;
+  notary_id: number;
+  client_user_id?: number | null;
+  current_owner_user_id?: number | null;
+  protocolist_user_id?: number | null;
+  approver_user_id?: number | null;
+  titular_notary_user_id?: number | null;
+  substitute_notary_user_id?: number | null;
+  requires_client_review?: boolean;
+  metadata_json?: string;
+}): Promise<DocumentFlowCase> {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}/api/v1/document-flow/cases/from-template`;
+  const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ comment: comment || null, correction_text: correctionText || null }),
-  }));
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json();
 }
-export async function approveDocumentCase(caseId: number, role_code: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role_code, comment: comment || null }) })); }
-export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_format }) })); }
-export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename, content_base64, comment: comment || null }) })); }
+export async function getDocumentCase(caseId: number) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}`)); }
+export async function saveCaseParticipants(
+  caseId: number,
+  payload: any[]
+): Promise<DocumentFlowCase> {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/participants`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json();
+}
+export async function saveCaseActData(
+  caseId: number,
+  payload: { data_json: string }
+): Promise<DocumentFlowCase> {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/act-data`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json();
+}
+export async function addClientComment(caseId: number, comment: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/client-comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { comment } })); }
+export async function addInternalNote(caseId: number, note: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/internal-notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { note } })); }
+export async function generateCaseDraft(
+  caseId: number,
+  comment: string
+): Promise<DocumentFlowCase> {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-with-gari`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json();
+}
+export async function generateWithGari(caseId: number, comment?: string, correctionText?: string): Promise<DocumentFlowCase> {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-with-gari`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment: comment || null, correction_text: correctionText || null }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json();
+}
+export async function approveDocumentCase(caseId: number, role_code: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { role_code, comment: comment || null } })); }
+export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { file_format } })); }
+export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { filename, content_base64, comment: comment || null } })); }
 export async function lookupPersons(params: { document_type?: string; document_number?: string; q?: string }) { const query = new URLSearchParams(); if (params.document_type) query.set("document_type", params.document_type); if (params.document_number) query.set("document_number", params.document_number); if (params.q) query.set("q", params.q); return asArray(await apiFetch<unknown>(`/api/v1/document-flow/persons/lookup?${query.toString()}`), normalizePerson); }
-export async function createTemplate(payload: unknown) { return normalizeTemplate(await apiFetch<unknown>("/api/v1/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })); }
-export async function updateTemplate(id: number, payload: unknown) { return normalizeTemplate(await apiFetch<unknown>(`/api/v1/templates/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })); }
+export async function createTemplate(payload: unknown) { return normalizeTemplate(await apiFetch<unknown>("/api/v1/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload })); }
+export async function updateTemplate(id: number, payload: unknown) { return normalizeTemplate(await apiFetch<unknown>(`/api/v1/templates/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: payload })); }
+
+export type ActCatalogItem = {
+  id: number;
+  code: string;
+  label: string;
+  roles_json: string;
+  is_active: boolean;
+};
+
+export type CaseActItem = {
+  code: string;
+  label: string;
+  act_order: number;
+  roles_json: string;
+};
+
+export async function getActCatalog(): Promise<ActCatalogItem[]> {
+  const data = await apiFetch("/api/v1/act-catalog");
+  return Array.isArray(data) ? data : [];
+}
+
+export async function saveCaseActs(caseId: number, acts: CaseActItem[]): Promise<void> {
+  await apiFetch(`/api/v1/document-flow/cases/${caseId}/acts`, {
+    method: "PUT",
+    body: { acts },
+  });
+}
 
 

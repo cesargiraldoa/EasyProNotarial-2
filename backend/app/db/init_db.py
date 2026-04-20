@@ -5,7 +5,9 @@ from sqlalchemy import inspect, text
 from app.db.base import Base
 from app.db.seed import seed_database
 from app.db.session import SessionLocal, engine
+from app.models.act_catalog import ActCatalog
 from app.models.case import Case
+from app.models.case_act import CaseAct
 from app.models.case_act_data import CaseActData
 from app.models.case_client_comment import CaseClientComment
 from app.models.case_document import CaseDocument
@@ -91,6 +93,8 @@ def repair_model_strings(db) -> None:
             "potential", "internal_observations", "institutional_data",
         ],
         Case: ["case_type", "act_type", "metadata_json", "internal_case_number", "official_deed_number", "approved_by_role_code"],
+        ActCatalog: ["code", "label", "roles_json"],
+        CaseAct: ["act_code", "act_label", "roles_json"],
         CaseStateDefinition: ["case_type", "code", "label"],
         DocumentTemplate: ["name", "slug", "case_type", "document_type", "description", "scope_type", "source_filename", "storage_path", "internal_variable_map_json"],
         TemplateRequiredRole: ["role_code", "label"],
@@ -198,6 +202,30 @@ def ensure_case_act_data_columns() -> None:
             connection.execute(text("ALTER TABLE case_act_data ADD COLUMN gari_draft_text TEXT"))
 
 
+def ensure_case_participant_columns() -> None:
+    inspector = inspect(engine)
+    if "case_participants" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("case_participants")}
+    with engine.begin() as connection:
+        if "legal_entity_id" not in existing_columns:
+            connection.execute(text("ALTER TABLE case_participants ADD COLUMN legal_entity_id INTEGER"))
+    # Refresh metadata after the optional ALTER TABLE so downstream checks see the new column.
+    inspector = inspect(engine)
+    indexes = {index["name"] for index in inspector.get_indexes("case_participants")}
+    if "ix_case_participants_legal_entity_id" not in indexes:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE INDEX ix_case_participants_legal_entity_id ON case_participants (legal_entity_id)"))
+    foreign_keys = {fk.get("name") for fk in inspector.get_foreign_keys("case_participants")}
+    if "fk_case_participants_legal_entity_id" not in foreign_keys:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE case_participants "
+                "ADD CONSTRAINT fk_case_participants_legal_entity_id "
+                "FOREIGN KEY (legal_entity_id) REFERENCES legal_entities (id)"
+            ))
+
+
 def init_db() -> None:
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
@@ -205,6 +233,7 @@ def init_db() -> None:
     ensure_commercial_activity_columns()
     ensure_case_columns()
     ensure_case_act_data_columns()
+    ensure_case_participant_columns()
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))

@@ -1,5 +1,7 @@
 from app.models import (
+    ActCatalog,
     Case,
+    CaseAct,
     CaseActData,
     CaseClientComment,
     CaseDocument,
@@ -10,6 +12,8 @@ from app.models import (
     CaseTimelineEvent,
     CaseWorkflowEvent,
     DocumentTemplate,
+    LegalEntity,
+    LegalEntityRepresentative,
     Notary,
     NotaryCommercialActivity,
     NotaryCrmAuditLog,

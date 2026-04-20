@@ -26,3 +26,4 @@ class Person(TimestampMixin, Base):
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
 
     case_participations: Mapped[list["CaseParticipant"]] = relationship(back_populates="person")
+    legal_entity_representations: Mapped[list["LegalEntityRepresentative"]] = relationship(back_populates="person")

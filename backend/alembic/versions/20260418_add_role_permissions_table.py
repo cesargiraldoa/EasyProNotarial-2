@@ -147,17 +147,25 @@ def _seed_permissions(connection: sa.engine.Connection) -> None:
 
 
 def upgrade() -> None:
-    op.create_table(
-        "role_permissions",
-        sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
-        sa.Column("role_id", sa.Integer(), sa.ForeignKey("roles.id"), nullable=False),
-        sa.Column("module_code", sa.String(length=80), nullable=False),
-        sa.Column("can_access", sa.Boolean(), nullable=False, server_default=sa.text("0")),
-        sa.UniqueConstraint("role_id", "module_code", name="uq_role_permissions"),
-    )
-    op.create_index(op.f("ix_role_permissions_id"), "role_permissions", ["id"], unique=False)
-    op.create_index(op.f("ix_role_permissions_module_code"), "role_permissions", ["module_code"], unique=False)
-    op.create_index(op.f("ix_role_permissions_role_id"), "role_permissions", ["role_id"], unique=False)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "role_permissions" not in inspector.get_table_names():
+        op.create_table(
+            "role_permissions",
+            sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
+            sa.Column("role_id", sa.Integer(), sa.ForeignKey("roles.id"), nullable=False),
+            sa.Column("module_code", sa.String(length=80), nullable=False),
+            sa.Column("can_access", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.UniqueConstraint("role_id", "module_code", name="uq_role_permissions"),
+        )
+        inspector = sa.inspect(bind)
+
+    if not any(index["name"] == op.f("ix_role_permissions_id") for index in inspector.get_indexes("role_permissions")):
+        op.create_index(op.f("ix_role_permissions_id"), "role_permissions", ["id"], unique=False)
+    if not any(index["name"] == op.f("ix_role_permissions_module_code") for index in inspector.get_indexes("role_permissions")):
+        op.create_index(op.f("ix_role_permissions_module_code"), "role_permissions", ["module_code"], unique=False)
+    if not any(index["name"] == op.f("ix_role_permissions_role_id") for index in inspector.get_indexes("role_permissions")):
+        op.create_index(op.f("ix_role_permissions_role_id"), "role_permissions", ["role_id"], unique=False)
 
     connection = op.get_bind()
     _seed_permissions(connection)

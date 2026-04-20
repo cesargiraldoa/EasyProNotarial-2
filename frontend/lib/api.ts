@@ -422,16 +422,20 @@ function normalizeApiError(error: unknown, fallbackMessage = "No fue posible com
   return new Error(fallbackMessage);
 }
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+type JsonRequestInit = Omit<RequestInit, "body"> & { body?: unknown };
+
+export async function apiFetch<T>(path: string, init: JsonRequestInit = {}): Promise<T> {
   const token = getSessionToken();
   const headers = new Headers(init.headers ?? {});
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  const body = init.body !== undefined ? JSON.stringify(init.body) : undefined;
   try {
     const response = await fetch(`${API_URL}${path}`, {
       ...init,
       headers,
+      body: body as BodyInit | null | undefined,
       cache: init.cache ?? "no-store",
       credentials: "include"
     });
@@ -557,22 +561,22 @@ export async function getCurrentUser(): Promise<CurrentUser> {
 export async function getNotaries(filters: NotaryFilters = {}): Promise<NotaryRecord[]> { return normalizeNotaryResponse(await apiFetch<NotaryRecord[]>(`/api/v1/notaries${buildQuery(filters)}`)); }
 export async function getNotaryFilterOptions(): Promise<NotaryFilterOptions> { return apiFetch<NotaryFilterOptions>("/api/v1/notaries/filters"); }
 export async function getNotary(id: number): Promise<NotaryDetail> { return apiFetch<NotaryDetail>(`/api/v1/notaries/${id}`); }
-export async function updateNotary(id: number, payload: NotaryPayload): Promise<NotaryRecord> { return apiFetch<NotaryRecord>(`/api/v1/notaries/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeNotaryPayload(payload)) }); }
-export async function createCommercialActivity(id: number, payload: CommercialActivityPayload): Promise<CommercialActivityRecord> { return apiFetch<CommercialActivityRecord>(`/api/v1/notaries/${id}/commercial-activities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, responsible: payload.responsible.trim() || null, result: payload.result.trim() || null, next_action: payload.next_action.trim() || null }) }); }
-export async function importAntioquiaSource(overwriteExisting = true): Promise<NotaryImportSummary> { return apiFetch<NotaryImportSummary>("/api/v1/notaries/imports/antioquia-source", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ overwrite_existing: overwriteExisting }) }); }
+export async function updateNotary(id: number, payload: NotaryPayload): Promise<NotaryRecord> { return apiFetch<NotaryRecord>(`/api/v1/notaries/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: normalizeNotaryPayload(payload) }); }
+export async function createCommercialActivity(id: number, payload: CommercialActivityPayload): Promise<CommercialActivityRecord> { return apiFetch<CommercialActivityRecord>(`/api/v1/notaries/${id}/commercial-activities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { ...payload, responsible: payload.responsible.trim() || null, result: payload.result.trim() || null, next_action: payload.next_action.trim() || null } }); }
+export async function importAntioquiaSource(overwriteExisting = true): Promise<NotaryImportSummary> { return apiFetch<NotaryImportSummary>("/api/v1/notaries/imports/antioquia-source", { method: "POST", headers: { "Content-Type": "application/json" }, body: { overwrite_existing: overwriteExisting } }); }
 export async function getRoleCatalog(): Promise<RoleCatalogItem[]> { return apiFetch<RoleCatalogItem[]>("/api/v1/users/roles"); }
 export async function getUsers(): Promise<UserRecord[]> { return apiFetch<UserRecord[]>("/api/v1/users"); }
 export async function getUserOptions(activeOnly = true): Promise<UserOption[]> { return normalizeUserOptionsResponse(await apiFetch<UserOption[]>(`/api/v1/users/options${activeOnly ? "?active_only=true" : "?active_only=false"}`)); }
-export async function createUser(payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>("/api/v1/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeUserPayload(payload)) }); }
-export async function updateUser(id: number, payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeUserPayload(payload)) }); }
+export async function createUser(payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>("/api/v1/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }
+export async function updateUser(id: number, payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }
 export async function getCases(filters: CaseFilters = {}): Promise<CaseRecord[]> { return normalizeCaseResponse(await apiFetch<CaseRecord[]>(`/api/v1/cases${buildQuery(filters)}`)); }
 export async function getCaseFilters(): Promise<CaseFilterOptions> { return normalizeCaseFilterOptions(await apiFetch<CaseFilterOptions>("/api/v1/cases/filters")); }
 export async function getCase(id: number): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}`); }
-export async function createCase(payload: Omit<CasePayload, "consecutive" | "year"> & { consecutive?: number; year?: number }): Promise<CaseDetail> { return apiFetch<CaseDetail>("/api/v1/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeCasePayload({ ...payload, consecutive: payload.consecutive ?? 0, year: payload.year ?? new Date().getFullYear() } as CasePayload)) }); }
-export async function updateCase(id: number, payload: CasePayload): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(normalizeCasePayload(payload)) }); }
-export async function updateCaseState(id: number, currentState: string, comment = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/state`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current_state: currentState, comment: comment.trim() || null }) }); }
-export async function updateCaseOwner(id: number, userId: number | null, comment = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/owner`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ current_owner_user_id: userId, comment: comment.trim() || null }) }); }
-export async function addCaseComment(id: number, comment: string, metadataJson = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/timeline-events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment, metadata_json: metadataJson.trim() || null }) }); }
+export async function createCase(payload: Omit<CasePayload, "consecutive" | "year"> & { consecutive?: number; year?: number }): Promise<CaseDetail> { return apiFetch<CaseDetail>("/api/v1/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: normalizeCasePayload({ ...payload, consecutive: payload.consecutive ?? 0, year: payload.year ?? new Date().getFullYear() } as CasePayload) }); }
+export async function updateCase(id: number, payload: CasePayload): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: normalizeCasePayload(payload) }); }
+export async function updateCaseState(id: number, currentState: string, comment = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/state`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: { current_state: currentState, comment: comment.trim() || null } }); }
+export async function updateCaseOwner(id: number, userId: number | null, comment = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/owner`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: { current_owner_user_id: userId, comment: comment.trim() || null } }); }
+export async function addCaseComment(id: number, comment: string, metadataJson = ""): Promise<CaseDetail> { return apiFetch<CaseDetail>(`/api/v1/cases/${id}/timeline-events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { comment, metadata_json: metadataJson.trim() || null } }); }
 
 
 
@@ -584,7 +588,7 @@ export async function createRole(payload: {
   return apiFetch<RoleCatalogItem>("/api/v1/users/roles", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 
@@ -595,7 +599,7 @@ export async function updateRole(
   return apiFetch<RoleCatalogItem>(`/api/v1/users/roles/${roleId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 
@@ -611,7 +615,7 @@ export async function updateRolePermissions(roleId: number, permissions: RolePer
   return apiFetch<RolePermissionItem[]>(`/api/v1/users/roles/${roleId}/permissions`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(permissions)
+    body: permissions
   });
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, FileSignature, MessageSquareText, NotebookTabs, Sparkles, Upload } from "lucide-react";
-import { addClientComment, addInternalNote, approveDocumentCase, exportDocumentCase, generateWithGari, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addClientComment, addInternalNote, approveDocumentCase, exportDocumentCase, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { formatDateTime } from "@/lib/datetime";
 
 const flowSteps = [
@@ -37,9 +37,28 @@ function parseActData(caseDetail: DocumentFlowCase | null) {
   }
 }
 
-export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
+async function fetchGenerateWithGari(caseId: number, comment: string, correctionText: string | null) {
+  const token = localStorage.getItem("easypro2_session");
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-with-gari`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment, correction_text: correctionText }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return response.json() as Promise<DocumentFlowCase>;
+}
+
+export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; initialTab?: string }) {
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
-  const [tab, setTab] = useState<(typeof tabs)[number]>("Resumen");
+  const [tab, setTab] = useState<(typeof tabs)[number]>(initialTab === "documento-gari" ? "Documento Gari" : "Resumen");
   const [clientComment, setClientComment] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [finalFile, setFinalFile] = useState<File | null>(null);
@@ -61,6 +80,12 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     }
     void load();
   }, [caseId]);
+
+  useEffect(() => {
+    if (initialTab === "documento-gari") {
+      setTab("Documento Gari");
+    }
+  }, [initialTab]);
 
   async function load() {
     setIsLoading(true);
@@ -166,7 +191,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
     setError(null);
     setFeedback(null);
     try {
-      const updated = await generateWithGari(caseId, "Generado con Gari desde detalle del caso");
+      const updated = await fetchGenerateWithGari(caseId, "Generado con Gari desde detalle del caso", null);
       setCaseDetail(updated);
       setGariText(updated?.act_data?.gari_draft_text ?? null);
       setTab("Documento Gari");
@@ -421,7 +446,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number }) {
                             setIsRegenerating(true);
                             setError(null);
                             try {
-                              const updated = await generateWithGari(caseId, correctionNote, correctionNote);
+                              const updated = await fetchGenerateWithGari(caseId, correctionNote, correctionNote);
                               setCaseDetail(updated);
                               setGariText(updated?.act_data?.gari_draft_text ?? null);
                               setCorrectionNote("");

@@ -87,6 +87,7 @@ class CaseParticipantPayload(BaseModel):
     role_label: str = Field(min_length=2, max_length=120)
     person_id: int | None = None
     person: PersonCreate | None = None
+    legal_entity_id: int | None = None
 
 
 class CaseParticipantSummary(BaseModel):

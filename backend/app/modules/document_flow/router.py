@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
 from app.models.case import Case
+from app.models.case_act import CaseAct
 from app.models.case_act_data import CaseActData
 from app.models.case_client_comment import CaseClientComment
 from app.models.case_document import CaseDocument
@@ -22,6 +23,7 @@ from app.models.case_participant import CaseParticipant
 from app.models.case_timeline_event import CaseTimelineEvent
 from app.models.case_workflow_event import CaseWorkflowEvent
 from app.models.document_template import DocumentTemplate
+from app.models.legal_entity import LegalEntity
 from app.models.notary import Notary
 from app.models.numbering_sequence import NumberingSequence
 from app.models.person import Person
@@ -47,6 +49,7 @@ from app.schemas.case import (
     FinalUploadRequest,
     GariGenerationRequest,
 )
+from app.schemas.act_catalog import CaseActOut, CaseActsPayload
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
 from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
@@ -57,6 +60,7 @@ from app.services.gari_document_service import (
     save_gari_document_as_docx,
 )
 from app.services.storage import next_case_file_path, save_base64_file
+from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
 
@@ -99,6 +103,8 @@ def detail_query(db: Session):
         joinedload(Case.timeline_events).joinedload(CaseTimelineEvent.actor_user),
         joinedload(Case.workflow_events).joinedload(CaseWorkflowEvent.actor_user),
         joinedload(Case.participants).joinedload(CaseParticipant.person),
+        joinedload(Case.participants).joinedload(CaseParticipant.legal_entity),
+        joinedload(Case.acts),
         joinedload(Case.act_data),
         joinedload(Case.client_comments).joinedload(CaseClientComment.created_by_user),
         joinedload(Case.internal_notes).joinedload(CaseInternalNote.created_by_user),
@@ -111,6 +117,46 @@ def load_case_or_404(db: Session, case_id: int) -> Case:
     if case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Minuta no encontrada.")
     return case
+
+
+@router.put("/cases/{case_id}/acts", response_model=list[CaseActOut])
+def replace_case_acts(
+    case_id: int,
+    payload: CaseActsPayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    case = load_case_or_404(db, case_id)
+    db.query(CaseAct).filter(CaseAct.case_id == case.id).delete(synchronize_session=False)
+    db.flush()
+
+    new_acts = []
+    for act in payload.acts:
+        new_act = CaseAct(
+            case_id=case.id,
+            act_code=act.code,
+            act_label=act.label,
+            act_order=act.act_order,
+            roles_json=act.roles_json,
+        )
+        db.add(new_act)
+        new_acts.append(new_act)
+
+    db.commit()
+    for item in new_acts:
+        db.refresh(item)
+    return new_acts
+
+
+@router.get("/cases/{case_id}/acts", response_model=list[CaseActOut])
+def get_case_acts(
+    case_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    case = load_case_or_404(db, case_id)
+    acts = db.query(CaseAct).filter(CaseAct.case_id == case.id).order_by(CaseAct.act_order.asc()).all()
+    return acts
 
 
 def serialize_template(template: DocumentTemplate | None) -> TemplateSummary | None:
@@ -476,11 +522,8 @@ def get_case_detail(case_id: int, db: Session = Depends(get_db), current_user: U
 @router.put("/cases/{case_id}/participants", response_model=CaseDetail)
 def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
     case = load_case_or_404(db, case_id)
-    required_roles = {item.role_code for item in case.template.required_roles if item.is_required} if case.template else set()
-    provided_roles = {item.role_code for item in payload}
-    missing = sorted(required_roles - provided_roles)
-    if missing:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Faltan intervinientes obligatorios: {', '.join(missing)}.")
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes agregar al menos un interviniente.")
     case.participants.clear()
     db.flush()
     person_ids: list[int] = []
@@ -496,7 +539,16 @@ def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], 
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Debes seleccionar o crear la persona para {item.role_label}.")
         person_ids.append(person.id)
         snapshot = {"document_type": person.document_type, "document_number": person.document_number, "full_name": person.full_name, "sex": person.sex, "nationality": person.nationality, "marital_status": person.marital_status, "profession": person.profession, "municipality": person.municipality, "is_transient": person.is_transient, "phone": person.phone, "address": person.address, "email": person.email}
-        case.participants.append(CaseParticipant(case_id=case.id, person_id=person.id, role_code=item.role_code.strip(), role_label=item.role_label.strip(), snapshot_json=json.dumps(snapshot, ensure_ascii=False)))
+        case_participant = CaseParticipant(case_id=case.id, person_id=person.id, role_code=item.role_code.strip(), role_label=item.role_label.strip(), snapshot_json=json.dumps(snapshot, ensure_ascii=False))
+        if item.legal_entity_id is not None:
+            legal_entity = db.query(LegalEntity).filter(LegalEntity.id == item.legal_entity_id).first()
+            if legal_entity is None:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"No existe la entidad jurídica seleccionada para {item.role_label}.")
+            case_participant.legal_entity_id = legal_entity.id
+            snapshot["represented_entity_name"] = legal_entity.name
+            snapshot["represented_entity_nit"] = legal_entity.nit
+            case_participant.snapshot_json = json.dumps(snapshot, ensure_ascii=False)
+        case.participants.append(case_participant)
     if len(person_ids) != len(set(person_ids)):
         append_workflow(db, case, current_user, "participants_warning", actor_role_code="protocolist", comment="Poderdante y apoderado corresponden a la misma persona.")
     append_workflow(db, case, current_user, "participants_saved", actor_role_code="protocolist", comment="Intervinientes actualizados")
@@ -572,6 +624,8 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
             "phone": item.person.phone,
             "address": item.person.address,
             "email": item.person.email,
+            "represented_entity_name": item.legal_entity.name if item.legal_entity else "",
+            "represented_entity_nit": item.legal_entity.nit if item.legal_entity else "",
         }
         for item in case.participants
     ]
@@ -602,6 +656,18 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
         max_tokens = 4000
         variante_id = None
 
+    case_acts = [
+        {
+            "act_code": item.act_code,
+            "act_label": item.act_label,
+            "act_order": item.act_order,
+            "roles_json": item.roles_json,
+        }
+        for item in case.acts
+    ]
+    if not case_acts and variante_id:
+        case_acts = LEGACY_CASE_ACTS_BY_VARIANT.get(variante_id, [])
+
     try:
         previous_draft = case.act_data.gari_draft_text if case.act_data else None
         correction_note = payload.comment if payload.comment and payload.comment.strip() else None
@@ -610,6 +676,7 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
             notary_label=case.notary.notary_label,
             notary_name=case.notary.current_notary_name or case.notary.legal_name or case.notary.notary_label,
             participants=participants,
+            case_acts=case_acts,
             act_data=act_data,
             template_reference_text=template_reference_text,
             max_tokens=max_tokens,
