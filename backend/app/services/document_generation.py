@@ -1,70 +1,154 @@
 from __future__ import annotations
 
-import html
 import json
 import re
-import unicodedata
 import zipfile
+from bisect import bisect_right
 from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_COLOR_INDEX
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{.*?\}\}", re.DOTALL)
-XML_TAG_PATTERN = re.compile(r"<[^>]+>")
+DASH_PLACEHOLDER = "[[--]]"
+LONGITUD_GUIONES = 95
 
 
 def normalize_placeholder(raw: str) -> str:
-    plain = XML_TAG_PATTERN.sub("", raw)
-    plain = plain.replace("\n", "").replace("\r", "").replace("\t", "")
+    plain = raw.replace("\n", "").replace("\r", "").replace("\t", "")
     plain = re.sub(r"\s+", "", plain)
     return plain
+
+
+def build_notarial_dash_fill(text: str, target_length: int = LONGITUD_GUIONES) -> str:
+    visible_text = (text or "").replace(DASH_PLACEHOLDER, "").strip()
+    available = target_length - len(visible_text)
+    if available < 4:
+        return " -"
+
+    guiones = ""
+    while len(guiones) + 2 <= available:
+        guiones += "- "
+    return " " + guiones.rstrip()
+
+
+def _iter_paragraphs(container):
+    paragraphs = getattr(container, "paragraphs", [])
+    for paragraph in paragraphs:
+        yield paragraph
+
+    for table in getattr(container, "tables", []):
+        for row in table.rows:
+            for cell in row.cells:
+                yield from _iter_paragraphs(cell)
+
+
+def _replace_tokens_in_paragraph(paragraph, replacements: dict[str, str]) -> bool:
+    runs = list(paragraph.runs)
+    if not runs:
+        return False
+
+    original_texts = [run.text or "" for run in runs]
+    full_text = "".join(original_texts)
+    if not full_text:
+        return False
+
+    matches: list[tuple[int, int, str]] = []
+    for match in PLACEHOLDER_PATTERN.finditer(full_text):
+        token = normalize_placeholder(match.group(0))
+        if token in replacements:
+            matches.append((match.start(), match.end(), str(replacements[token] or "")))
+
+    if not matches and DASH_PLACEHOLDER not in full_text:
+        return False
+
+    run_starts: list[int] = []
+    cursor = 0
+    for text in original_texts:
+        run_starts.append(cursor)
+        cursor += len(text)
+
+    mutated_texts = list(original_texts)
+
+    for start, end, replacement in reversed(matches):
+        start_run = bisect_right(run_starts, start) - 1
+        end_run = bisect_right(run_starts, end - 1) - 1
+        if start_run < 0 or end_run < 0:
+            continue
+
+        start_offset = start - run_starts[start_run]
+        end_offset = end - run_starts[end_run]
+
+        if start_run == end_run:
+            mutated_texts[start_run] = (
+                mutated_texts[start_run][:start_offset]
+                + replacement
+                + mutated_texts[start_run][end_offset:]
+            )
+            continue
+
+        mutated_texts[start_run] = mutated_texts[start_run][:start_offset] + replacement
+        for index in range(start_run + 1, end_run):
+            mutated_texts[index] = ""
+        mutated_texts[end_run] = mutated_texts[end_run][end_offset:]
+
+    paragraph_text_after = "".join(mutated_texts)
+    if DASH_PLACEHOLDER in paragraph_text_after:
+        dash_fill = build_notarial_dash_fill(paragraph_text_after)
+        dash_run_starts: list[int] = []
+        cursor = 0
+        for text in mutated_texts:
+            dash_run_starts.append(cursor)
+            cursor += len(text)
+
+        dash_matches = list(re.finditer(re.escape(DASH_PLACEHOLDER), paragraph_text_after))
+        for start, end in reversed([(m.start(), m.end()) for m in dash_matches]):
+            start_run = bisect_right(dash_run_starts, start) - 1
+            end_run = bisect_right(dash_run_starts, end - 1) - 1
+            if start_run < 0 or end_run < 0:
+                continue
+
+            start_offset = start - dash_run_starts[start_run]
+            end_offset = end - dash_run_starts[end_run]
+
+            if start_run == end_run:
+                mutated_texts[start_run] = (
+                    mutated_texts[start_run][:start_offset]
+                    + dash_fill
+                    + mutated_texts[start_run][end_offset:]
+                )
+                continue
+
+            mutated_texts[start_run] = mutated_texts[start_run][:start_offset] + dash_fill
+            for index in range(start_run + 1, end_run):
+                mutated_texts[index] = ""
+            mutated_texts[end_run] = mutated_texts[end_run][end_offset:]
+
+    changed = False
+    for run, new_text in zip(runs, mutated_texts):
+        if run.text != new_text:
+            run.text = new_text
+            changed = True
+    return changed
+
+
+def _replace_tokens_in_container(container, replacements: dict[str, str]) -> bool:
+    changed = False
+    for paragraph in _iter_paragraphs(container):
+        changed = _replace_tokens_in_paragraph(paragraph, replacements) or changed
+    return changed
 
 
 def render_docx_template(source_path: str | Path, destination_path: str | Path, replacements: dict[str, str]) -> None:
     source = Path(source_path)
     destination = Path(destination_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(source, "r") as source_zip, zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as dest_zip:
-        for item in source_zip.infolist():
-            data = source_zip.read(item.filename)
-            if item.filename.endswith(".xml"):
-                text = data.decode("utf-8", errors="ignore")
-
-                def replace_match(match: re.Match[str]) -> str:
-                    token = normalize_placeholder(match.group(0))
-                    if token in replacements:
-                        return html.escape(str(replacements[token] or ""))
-                    return match.group(0)
-
-                text = PLACEHOLDER_PATTERN.sub(replace_match, text)
-                import re as _re
-
-                LONGITUD_LINEA = 95
-
-                def reemplazar_guiones(xml_parrafo: str) -> str:
-                    if "[[--]]" not in xml_parrafo:
-                        return xml_parrafo
-                    texto_visible = _re.sub(r"<[^>]+>", "", xml_parrafo)
-                    texto_visible = texto_visible.replace("[[--]]", "").strip()
-                    espacio = LONGITUD_LINEA - len(texto_visible)
-                    if espacio < 4:
-                        guiones = " -"
-                    else:
-                        guiones = ""
-                        while len(guiones) + 2 <= espacio:
-                            guiones += "- "
-                        guiones = " " + guiones.rstrip()
-                    return xml_parrafo.replace("[[--]]", guiones)
-
-                text = _re.sub(
-                    r"(<w:p[ >].*?</w:p>)",
-                    lambda m: reemplazar_guiones(m.group(1)),
-                    text,
-                    flags=_re.DOTALL,
-                )
-                data = text.encode("utf-8")
-            dest_zip.writestr(item, data)
+    document = Document(str(source))
+    _replace_tokens_in_container(document, replacements)
+    for section in document.sections:
+        _replace_tokens_in_container(section.header, replacements)
+        _replace_tokens_in_container(section.footer, replacements)
+    document.save(str(destination))
 
 
 def recalculate_dash_fills(docx_path: str | Path) -> None:
@@ -85,38 +169,22 @@ def recalculate_dash_fills(docx_path: str | Path) -> None:
 
     doc = Document(str(docx_path))
 
-    for para in doc.paragraphs:
-        runs = para.runs
+    for paragraph in _iter_paragraphs(doc):
+        runs = list(paragraph.runs)
         if not runs:
             continue
-
-        last_dash_run = None
-        last_dash_idx = -1
-        candidates = runs[-2:] if len(runs) >= 2 else runs[-1:]
-        for i, run in enumerate(candidates):
-            real_idx = len(runs) - len(candidates) + i
-            text = run.text.strip()
-            if PATRON_GUIONES.match(run.text) and len(text) > 6:
-                last_dash_run = run
-                last_dash_idx = real_idx
-
-        if last_dash_run is None:
+        full_text = "".join(run.text or "" for run in runs)
+        if DASH_PLACEHOLDER not in full_text:
             continue
+        _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill(full_text, LONGITUD_OBJETIVO)})
 
-        texto_sin_guiones = "".join(
-            r.text for i, r in enumerate(runs) if i != last_dash_idx
-        ).rstrip()
-
-        espacio_disponible = LONGITUD_OBJETIVO - len(texto_sin_guiones)
-        if espacio_disponible < 4:
-            last_dash_run.text = " -"
-            continue
-
-        guiones = ""
-        while len(guiones) + 2 <= espacio_disponible:
-            guiones += "- "
-
-        last_dash_run.text = " " + guiones.rstrip()
+    for section in doc.sections:
+        for paragraph in _iter_paragraphs(section.header):
+            if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs), LONGITUD_OBJETIVO)})
+        for paragraph in _iter_paragraphs(section.footer):
+            if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs), LONGITUD_OBJETIVO)})
 
     doc.save(str(docx_path))
 
