@@ -11,7 +11,7 @@ from docx.enum.text import WD_COLOR_INDEX
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 DASH_PLACEHOLDER = "[[--]]"
-LONGITUD_GUIONES = 95
+TAB_NOTARIAL = "\t"
 
 
 def normalize_placeholder(raw: str) -> str:
@@ -20,16 +20,13 @@ def normalize_placeholder(raw: str) -> str:
     return plain
 
 
-def build_notarial_dash_fill(text: str, target_length: int = LONGITUD_GUIONES) -> str:
-    visible_text = (text or "").replace(DASH_PLACEHOLDER, "").strip()
-    available = target_length - len(visible_text)
-    if available < 4:
-        return " -"
-
-    guiones = ""
-    while len(guiones) + 2 <= available:
-        guiones += "- "
-    return " " + guiones.rstrip()
+def build_notarial_dash_fill(text: str | None = None) -> str:
+    """
+    EasyPro_1 no construye una cadena de guiones a mano.
+    Inserta un tab literal y deja que Word/LibreOffice aplique
+    el tab stop con líder de dashes definido en la plantilla.
+    """
+    return TAB_NOTARIAL
 
 
 def _iter_paragraphs(container):
@@ -164,9 +161,6 @@ def recalculate_dash_fills(docx_path: str | Path) -> None:
     - Calcular cuántos guiones caben para llegar a LONGITUD_OBJETIVO = 90 chars
     - Reemplazar el run de guiones con la cantidad correcta
     """
-    LONGITUD_OBJETIVO = 90
-    PATRON_GUIONES = re.compile(r"^[\s\-]+$")
-
     doc = Document(str(docx_path))
 
     for paragraph in _iter_paragraphs(doc):
@@ -176,15 +170,15 @@ def recalculate_dash_fills(docx_path: str | Path) -> None:
         full_text = "".join(run.text or "" for run in runs)
         if DASH_PLACEHOLDER not in full_text:
             continue
-        _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill(full_text, LONGITUD_OBJETIVO)})
+        _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill(full_text)})
 
     for section in doc.sections:
         for paragraph in _iter_paragraphs(section.header):
             if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
-                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs), LONGITUD_OBJETIVO)})
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs))})
         for paragraph in _iter_paragraphs(section.footer):
             if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
-                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs), LONGITUD_OBJETIVO)})
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs))})
 
     doc.save(str(docx_path))
 

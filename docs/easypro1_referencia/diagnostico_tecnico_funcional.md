@@ -102,5 +102,6 @@
 ## Nota tecnica del sprint DOCX
 - Se corrigio el motor de reemplazo para trabajar sobre `python-docx` a nivel de parrafos y runs, en lugar de reescribir el XML completo.
 - Esa decision preserva estilos, margenes, fuente y estructura original del Word.
-- El relleno notarial `[[--]]` ahora se resuelve dentro del flujo de runs, sin reconstruir el parrafo.
-- Queda pendiente evaluar si alguna plantilla antigua usa marcadores fuera de parrafos o dentro de cajas de texto, porque ese caso no estaba confirmado en el muestreo actual.
+- El relleno notarial `[[--]]` se convierte en un tab literal (`\t`), igual que en EasyPro_1.
+- El lider de guiones no se fabrica por conteo de caracteres; debe existir en la plantilla como tab stop con leader de dashes.
+- Queda pendiente evaluar si alguna plantilla antigua no trae ese tab stop configurado, porque ese caso no estaba confirmado en el muestreo actual.
