@@ -307,8 +307,42 @@ export async function approveDocumentCase(caseId: number, role_code: string, com
 export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { file_format } })); }
 export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { filename, content_base64, comment: comment || null } })); }
 export async function lookupPersons(params: { document_type?: string; document_number?: string; q?: string }) { const query = new URLSearchParams(); if (params.document_type) query.set("document_type", params.document_type); if (params.document_number) query.set("document_number", params.document_number); if (params.q) query.set("q", params.q); return asArray(await apiFetch<unknown>(`/api/v1/document-flow/persons/lookup?${query.toString()}`), normalizePerson); }
-export async function createTemplate(payload: unknown) { return normalizeTemplate(await apiFetch<unknown>("/api/v1/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload })); }
-export async function updateTemplate(id: number, payload: unknown) { return normalizeTemplate(await apiFetch<unknown>(`/api/v1/templates/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: payload })); }
+export async function createTemplate(payload: unknown) {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const response = await fetch(`${base}/api/v1/templates`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return normalizeTemplate(await response.json());
+}
+export async function updateTemplate(id: number, payload: unknown) {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const response = await fetch(`${base}/api/v1/templates/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return normalizeTemplate(await response.json());
+}
 
 export type ActCatalogItem = {
   id: number;

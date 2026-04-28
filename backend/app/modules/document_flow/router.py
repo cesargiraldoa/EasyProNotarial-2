@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import io
 from datetime import datetime
@@ -48,6 +49,7 @@ from app.schemas.case import (
     ExportRequest,
     FinalUploadRequest,
     GariGenerationRequest,
+    GenerateFromTemplatePayload,
 )
 from app.schemas.act_catalog import CaseActOut, CaseActsPayload
 from app.schemas.person import PersonCreate
@@ -689,6 +691,14 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="No fue posible generar el documento con Gari.") from exc
 
+    # Reparar encoding UTF-8 si viene roto (latin-1 leído como utf-8)
+    if isinstance(generated_text, bytes):
+        generated_text = generated_text.decode('utf-8')
+    try:
+        generated_text = generated_text.encode('latin-1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+
     case.act_data.gari_draft_text = generated_text
     db.flush()
 
@@ -707,6 +717,8 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
         case.template_id,
         json.dumps({"source": "gari", "model": "gpt-4o"}, ensure_ascii=False),
     )
+    version.storage_path = output_path
+    db.flush()
 
     previous_state = case.current_state
     if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
@@ -813,15 +825,26 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
                 break
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+
+    # Detectar si es documento Gari y regenerar en tiempo real desde el texto
+    snapshot = json.loads(version.placeholder_snapshot_json or "{}")
+    if snapshot.get("source") == "gari" and case.act_data and case.act_data.gari_draft_text:
+        buf = build_gari_docx_buffer(case.act_data.gari_draft_text)
+        filename = version.original_filename or f"{case.internal_case_number or case.id}_gari.docx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     storage = version.storage_path or ""
+
+    # 1) Si es URL completa ya firmada → regenerar signed URL o redirigir
     if storage.startswith("http://") or storage.startswith("https://"):
-        # Intentar regenerar signed URL desde Supabase
         try:
             from app.services.gari_document_service import get_supabase_client
             import re
 
-            # Extraer el path relativo del storage_path original
-            # El path en Supabase es: cases/case-{id}/draft/...
             match = re.search(r"(cases/.*)", storage)
             if match:
                 supabase_path = match.group(1).split("?")[0]
@@ -834,25 +857,37 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
         except Exception:
             pass
         return RedirectResponse(url=storage, status_code=302)
+
+    # 2) Si existe como archivo local → servir directo
     path = Path(storage)
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
-    return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+    if path.exists():
+        return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+
+    # 3) Si es path relativo de Supabase (no existe local) → generar signed URL
+    try:
+        from app.services.gari_document_service import get_supabase_client
+        supabase = get_supabase_client()
+        result = supabase.storage.from_("documentos").create_signed_url(storage, 300)
+        new_url = result.get("signedURL") or result.get("signedUrl")
+        if new_url:
+            return RedirectResponse(url=new_url, status_code=302)
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
 
 
 @router.get("/cases/{case_id}/gari-download")
 def download_gari_document(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     case = load_case_or_404(db, case_id)
-    gari_text = (case.act_data.gari_draft_text if case.act_data else None) or ""
-    if not gari_text.strip():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay documento Gari generado")
-    buffer = build_gari_docx_buffer(gari_text)
+    if not (case.act_data and case.act_data.gari_draft_text and case.act_data.gari_draft_text.strip()):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay borrador Gari para este caso")
+    buf = build_gari_docx_buffer(case.act_data.gari_draft_text)
     filename = f"{case.internal_case_number or case.id}_gari.docx"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(
-        io.BytesIO(buffer.getvalue()),
+        buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers=headers,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -892,3 +927,66 @@ def lookup_person(document_type: str | None = Query(default=None), document_numb
         }
         for item in query.limit(25).all()
     ]
+
+
+@router.post("/cases/{case_id}/generate-from-template")
+def generate_from_template(
+    case_id: int,
+    payload: GenerateFromTemplatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary")),
+):
+    case = load_case_or_404(db, case_id)
+    if case.template_id is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El caso no tiene plantilla configurada.")
+
+    template = db.query(DocumentTemplate).filter(DocumentTemplate.id == case.template_id).first()
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La plantilla asociada al caso no existe.")
+    if not template.storage_path:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La plantilla no tiene archivo base configurado")
+
+    act_data = {str(key): str(value) for key, value in (payload.act_data or {}).items()}
+    if case.act_data is None:
+        case.act_data = CaseActData(case_id=case.id, data_json=json.dumps(act_data, ensure_ascii=False))
+    else:
+        case.act_data.data_json = json.dumps(act_data, ensure_ascii=False)
+
+    destination_path = Path(__file__).resolve().parents[3] / "storage" / "cases" / f"case-{case.id}" / "draft" / "borrador_v1.docx"
+    os.makedirs(destination_path.parent, exist_ok=True)
+
+    replacements = {f"{{{{{key.upper()}}}}}": value for key, value in act_data.items()}
+    render_docx_template(template.storage_path, destination_path, replacements)
+
+    draft_document = db.query(CaseDocument).filter(CaseDocument.case_id == case.id, CaseDocument.category == "draft").first()
+    if draft_document is None:
+        draft_document = CaseDocument(case_id=case.id, category="draft", title="Borrador documental", current_version_number=0)
+        db.add(draft_document)
+        db.flush()
+
+    version_number = (draft_document.current_version_number or 0) + 1
+    draft_document.current_version_number = version_number
+    db.add(
+        CaseDocumentVersion(
+            case_document_id=draft_document.id,
+            version_number=version_number,
+            file_format="docx",
+            storage_path=str(destination_path),
+            original_filename=destination_path.name,
+            generated_from_template_id=template.id,
+            placeholder_snapshot_json=json.dumps(replacements, ensure_ascii=False, indent=2),
+            created_by_user_id=current_user.id,
+        )
+    )
+    append_timeline(
+        db,
+        case.id,
+        current_user.id,
+        "draft_generated",
+        case.current_state,
+        case.current_state,
+        comment="Documento generado desde plantilla",
+        metadata={"template_id": template.id, "version_number": version_number},
+    )
+    db.commit()
+    return {"status": "ok", "message": "Documento generado correctamente.", "case_id": case.id, "docx_path": str(destination_path)}

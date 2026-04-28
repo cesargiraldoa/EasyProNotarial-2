@@ -107,6 +107,10 @@ class CaseActDataPayload(BaseModel):
     data_json: str = "{}"
 
 
+class GenerateFromTemplatePayload(BaseModel):
+    act_data: dict[str, str] = {}
+
+
 class CaseActDataSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

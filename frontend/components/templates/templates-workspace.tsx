@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { FileUp, Save } from "lucide-react";
 import { createTemplate, getTemplates, updateTemplate, type TemplateRecord } from "@/lib/document-flow";
 import { getNotaries } from "@/lib/api";
@@ -26,10 +26,10 @@ const defaultVariableMap = JSON.stringify(
 );
 
 const emptyForm = {
-  name: "Poder General",
+  name: "",
   case_type: "escritura",
-  document_type: "Poder General",
-  description: "Plantilla piloto de escritura pública tipo Poder General.",
+  document_type: "",
+  description: "",
   scope_type: "global",
   notary_id: "",
   is_active: true,
@@ -89,13 +89,24 @@ export function TemplatesWorkspace() {
     });
   }
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function handleSubmit() {
     setFeedback(null);
     setError(null);
     setIsSaving(true);
     try {
-      const upload = uploadFile ? { filename: uploadFile.name, content_base64: await fileToBase64(uploadFile) } : null;
+      if (!form.name.trim() || form.name.trim().length < 3) {
+        setError("El nombre de la plantilla es obligatorio (mínimo 3 caracteres).");
+        setIsSaving(false);
+        return;
+      }
+      if (!form.document_type.trim() || form.document_type.trim().length < 2) {
+        setError("El tipo documental es obligatorio.");
+        setIsSaving(false);
+        return;
+      }
+      const upload = uploadFile
+        ? { filename: uploadFile.name, content_base64: await fileToBase64(uploadFile) }
+        : null;
       const payload = {
         ...form,
         notary_id: form.notary_id ? Number(form.notary_id) : null,
@@ -103,7 +114,7 @@ export function TemplatesWorkspace() {
           { role_code: "poderdante", label: "Poderdante", is_required: true, step_order: 1 },
           { role_code: "apoderado", label: "Apoderado(a)", is_required: true, step_order: 2 },
         ],
-        fields: [
+        fields: uploadFile ? [] : [
           { field_code: "dia_elaboracion", label: "Día elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "DIA_ELABORACION_ESCRITURA", help_text: null, step_order: 1 },
           { field_code: "mes_elaboracion", label: "Mes elaboración", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "MES_ELABORACION_ESCRITURA", help_text: null, step_order: 2 },
           { field_code: "ano_elaboracion", label: "Año elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "ANO_ELABORACION_ESCRITURA", help_text: null, step_order: 3 },
@@ -152,7 +163,7 @@ export function TemplatesWorkspace() {
             ))}
           </div>
         </aside>
-        <form onSubmit={handleSubmit} className="ep-card rounded-[2rem] p-6 space-y-5">
+        <div className="ep-card rounded-[2rem] p-6 space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm font-medium text-primary">Nombre<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Tipo documental<input value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
@@ -166,12 +177,29 @@ export function TemplatesWorkspace() {
           <label className="ep-card-muted flex items-center justify-between rounded-[1.5rem] px-4 py-4 text-sm text-secondary"><span className="inline-flex items-center gap-2"><FileUp className="h-4 w-4 text-primary" />Archivo .docx base</span><input type="file" accept=".docx" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /></label>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="ep-card-soft rounded-[1.5rem] p-4"><p className="text-sm font-semibold text-primary">Intervinientes requeridos</p><ul className="mt-3 space-y-2 text-sm text-secondary"><li>Poderdante</li><li>Apoderado(a)</li></ul></div>
-            <div className="ep-card-soft rounded-[1.5rem] p-4"><p className="text-sm font-semibold text-primary">Campos del acto</p><p className="mt-3 text-sm leading-6 text-secondary">Día, mes, año, derechos notariales, IVA, aporte superintendencia, fondo notariado, consecutivos de hojas y extensión.</p></div>
+            <div className="ep-card-soft rounded-[1.5rem] p-4">
+              <p className="text-sm font-semibold text-primary">
+                Campos del acto{selected?.fields?.length ? ` (${selected.fields.length})` : ""}
+              </p>
+              {selected?.fields?.length ? (
+                <ul className="mt-3 space-y-1">
+                  {[...selected.fields]
+                    .sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
+                    .map((f) => (
+                      <li key={f.field_code} className="text-sm text-secondary">
+                        {f.label}
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-secondary">Sin campos configurados.</p>
+              )}
+            </div>
           </div>
           {feedback ? <div className="ep-kpi-success rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
           {error ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
-          <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? "Guardando..." : "Guardar plantilla"}</button>
-        </form>
+          <button type="button" onClick={() => void handleSubmit()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? "Guardando..." : "Guardar plantilla"}</button>
+        </div>
       </section>
     </div>
   );
