@@ -24,24 +24,24 @@ function statusSummary(cases: CaseRecord[]) {
 
 function suggestedAction(item: CaseRecord) {
   if (item.final_signed_uploaded) {
-    return "Descargar / cerrar";
+    return "Descargar Word";
   }
   if (item.current_state === "borrador") {
-    return "Diligenciar";
+    return "Continuar diligenciamiento";
   }
   if (item.current_state === "en_diligenciamiento" || item.current_state === "revision_cliente" || item.current_state === "ajustes_solicitados") {
-    return "Generar Word";
+    return "Continuar diligenciamiento";
   }
   if (item.current_state === "revision_aprobador" || item.current_state === "revision_notario") {
-    return "Revisar";
+    return "Revisar minuta";
   }
   if (item.current_state === "rechazado_notario" || item.current_state === "devuelto_aprobador") {
-    return "Ajustar y reenviar";
+    return "Continuar diligenciamiento";
   }
   if (item.current_state === "aprobado_notario" || item.current_state === "generado") {
     return "Descargar Word";
   }
-  return "Abrir detalle";
+  return "Ver detalle";
 }
 
 export function CasesWorkspace() {
@@ -122,7 +122,7 @@ export function CasesWorkspace() {
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Bandeja de minutas</p>
             <h1 className="mt-2 text-3xl font-semibold text-primary">Minutas</h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
-              Aquí se ve la bandeja operativa: crear documento, revisar avance, abrir detalle y continuar según el estado.
+              Aquí se ve la bandeja operativa: crear minuta, revisar avance, abrir detalle y continuar según el estado.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

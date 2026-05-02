@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { approveDocumentCase, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 
@@ -68,6 +68,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [tab, setTab] = useState<(typeof tabs)[number]>("Documento");
   const [finalFile, setFinalFile] = useState<File | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
+  const [internalNote, setInternalNote] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
@@ -115,7 +117,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const documents = Array.isArray(caseDetail?.documents) ? caseDetail.documents : [];
   const participants = Array.isArray(caseDetail?.participants) ? caseDetail.participants : [];
   const workflowEvents = Array.isArray(caseDetail?.workflow_events) ? caseDetail.workflow_events : [];
+  const internalNotes = Array.isArray(caseDetail?.internal_notes) ? caseDetail.internal_notes : [];
+  const clientComments = Array.isArray(caseDetail?.client_comments) ? caseDetail.client_comments : [];
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
+  const latestWordVersion = draftDocument?.versions?.[0] ?? null;
 
   async function fileToBase64(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -213,7 +218,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
   async function handleApprove() {
     if (!approvalRoleCode) {
-      setError("No tienes un rol disponible para aprobar este documento.");
+      setError("No tienes un rol disponible para aprobar esta minuta.");
       return;
     }
     setError(null);
@@ -228,6 +233,27 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
       setError(issue instanceof Error ? issue.message : "No fue posible registrar la aprobación.");
     } finally {
       setIsApproving(false);
+    }
+  }
+
+  async function handleSaveInternalNote() {
+    const note = internalNote.trim();
+    if (!note) {
+      setError("Escribe una observación interna antes de guardar.");
+      return;
+    }
+    setError(null);
+    setFeedback(null);
+    setIsSavingNote(true);
+    try {
+      await addInternalNote(caseId, note);
+      setInternalNote("");
+      await load();
+      setFeedback("Observacion interna guardada.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible guardar la observación interna.");
+    } finally {
+      setIsSavingNote(false);
     }
   }
 
@@ -264,8 +290,8 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
               <ArrowLeft className="h-4 w-4" />
               Volver a la bandeja
             </Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle del documento / minuta</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Documento / minuta"}</h1>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Minuta"}</h1>
             <p className="mt-3 text-base text-secondary">
               {caseDetail.internal_case_number || "Sin número interno"} · {caseDetail.notary_label || "Sin notaría"}
             </p>
@@ -324,6 +350,99 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                         ? "El documento está listo para revisión y decisión."
                         : "Continúa el flujo desde aquí."}
               </div>
+              <section className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-primary">Revisión manual</p>
+                  <p className="text-sm text-secondary">
+                    Revisa manualmente la minuta, el Word generado, las observaciones internas y el historial. No se usa IA para aprobar ni rechazar.
+                  </p>
+                  <p className="text-sm text-secondary">
+                    Si necesitas solicitar ajustes, registra una observación interna y devuelve la minuta según el flujo definido por la notaría.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Estado actual</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{prettyState(caseDetail.current_state)}</p>
+                  </div>
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Responsable actual</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.current_owner_user_name || "Sin asignar"}</p>
+                  </div>
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Protocolista</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.protocolist_user_name || "Sin asignar"}</p>
+                  </div>
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Aprobador</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.approver_user_name || "Sin asignar"}</p>
+                  </div>
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Última actualización</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{pretty(caseDetail.updated_at)}</p>
+                  </div>
+                  <div className="ep-card-soft rounded-[1.25rem] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Word disponible</p>
+                    <p className="mt-2 text-sm font-semibold text-primary">{latestWordVersion ? `Si, v${latestWordVersion.version_number}` : "No"}</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-primary">Agregar observación interna</p>
+                  <textarea
+                    value={internalNote}
+                    onChange={(event) => setInternalNote(event.target.value)}
+                    rows={3}
+                    placeholder="Escribe aquí la observación interna de revisión"
+                    className="ep-textarea rounded-2xl px-4 py-3"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveInternalNote()}
+                    disabled={isSavingNote}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                  >
+                    {isSavingNote ? "Guardando..." : "Guardar observación"}
+                  </button>
+                </div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-primary">Observaciones internas existentes</p>
+                    {internalNotes.length > 0 ? (
+                      <div className="space-y-2">
+                        {internalNotes.map((item) => (
+                          <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Sistema"}</p>
+                              <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
+                            </div>
+                            <p className="mt-2 text-sm text-secondary">{item.note || item.comment || "Sin texto"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin observaciones internas todavía.</div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-primary">Comentarios registrados</p>
+                    {clientComments.length > 0 ? (
+                      <div className="space-y-2">
+                        {clientComments.map((item) => (
+                          <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Cliente"}</p>
+                              <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
+                            </div>
+                            <p className="mt-2 text-sm text-secondary">{item.comment || item.note || "Sin texto"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin comentarios registrados todavía.</div>
+                    )}
+                  </div>
+                </div>
+              </section>
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -395,7 +514,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
               {canApprove ? (
                 <div className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                  <p className="text-sm font-semibold text-primary">Revisión y aprobación</p>
+                  <p className="text-sm font-semibold text-primary">Aprobación manual</p>
                   <p className="text-sm text-secondary">
                     Puedes registrar aprobación con comentario. El rechazo todavía no está disponible como acción separada en esta fase.
                   </p>
@@ -403,7 +522,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     value={approvalComment}
                     onChange={(event) => setApprovalComment(event.target.value)}
                     rows={3}
-                    placeholder="Comentario de revisión"
+                    placeholder="Comentario de aprobación"
                     className="ep-textarea rounded-2xl px-4 py-3"
                   />
                   <button
@@ -412,7 +531,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     disabled={isApproving}
                     className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {isApproving ? "Registrando..." : "Aprobar"}
+                    {isApproving ? "Registrando..." : "Aprobar minuta"}
                   </button>
                 </div>
               ) : null}
