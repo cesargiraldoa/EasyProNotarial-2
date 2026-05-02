@@ -16,9 +16,9 @@ import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/
 
 const steps = [
   "Plantilla",
-  "Datos generales",
-  "Datos del acto",
-  "Revisión",
+  "Documento / minuta",
+  "Diligenciar",
+  "Revisar y generar Word",
 ];
 const documentTypes = ["CC", "CE", "TI", "PP", "NIT"];
 const sexOptions = ["F", "M", "No especifica"];
@@ -245,14 +245,6 @@ export function CreateCaseWizard() {
 
     const currentActData = actDataRef.current;
     const templateFields = Array.isArray(selectedTemplate.fields) ? selectedTemplate.fields : [];
-    console.log(
-      "autoFillDemo ejecutado, templateFields:",
-      templateFields.length,
-      "step:",
-      step,
-      "selectedTemplate:",
-      selectedTemplate?.name,
-    );
     const hasCurrentTemplateData = templateFields.every((field) => field.field_code in currentActData);
     if (!hasCurrentTemplateData) {
       return;
@@ -260,11 +252,6 @@ export function CreateCaseWizard() {
 
     const templateFieldCodes = templateFields.map((field) => field.field_code);
     const demoKeys = Object.keys(demoData);
-    const noMatch = demoKeys.filter((key) => !templateFieldCodes.includes(key));
-    const willFill = demoKeys.filter((key) => templateFieldCodes.includes(key));
-    console.log("Campos que SÍ se llenarán:", willFill.length, willFill);
-    console.log("Campos sin match:", noMatch.length, noMatch);
-
     const fieldCodes = Object.keys(demoData).filter((key) => key in currentActData);
     if (fieldCodes.length === 0) {
       return;
@@ -329,7 +316,6 @@ export function CreateCaseWizard() {
   }
 
   useEffect(() => {
-    console.log("useEffect step cambió a:", step);
     if (step !== 2) {
       cancelDemoFill(true);
       return;
@@ -361,8 +347,6 @@ export function CreateCaseWizard() {
       const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
       const defaultNotaryRaw = currentUser?.default_notary_id;
       const defaultNotaryId = String(defaultNotaryRaw ?? "");
-      console.log("notary_id seteado:", String(defaultNotaryRaw ?? ""));
-
       setTemplates(safeTemplates);
       setSelectedTemplate(
         safeTemplates[0] ?? null,
@@ -476,12 +460,16 @@ export function CreateCaseWizard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
-              {caseDetail?.internal_case_number ? `Crear Minuta · ${caseDetail.internal_case_number}` : "Crear Minuta"}
+              {caseDetail?.internal_case_number ? `Documento / minuta · ${caseDetail.internal_case_number}` : "Documento / minuta"}
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">Crear documento desde una plantilla Word</h1>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
+              Escoge una plantilla, diligencia el formulario dinámico que el sistema detecta y genera el Word sin salir de este flujo.
             </p>
           </div>
           {caseDetail ? (
             <Link href={`/dashboard/casos/${caseDetail.id}`} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white">
-              Abrir detalle de la minuta <ArrowRight className="h-4 w-4" />
+              Abrir detalle del documento <ArrowRight className="h-4 w-4" />
             </Link>
           ) : null}
         </div>
@@ -504,6 +492,9 @@ export function CreateCaseWizard() {
 
       <section className={`grid gap-6 ${showAside ? "xl:grid-cols-[minmax(0,1.2fr)_360px]" : "xl:grid-cols-1"}`}>
         <div className="ep-card z-0 rounded-[2rem] p-6 space-y-6">
+          <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
+            La plantilla seleccionada define los campos visibles. Si cambias de plantilla, el formulario cambia con ella.
+          </div>
           {isLoading ? <div className="ep-card-muted z-0 rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Cargando plantillas, notarías y usuarios...</div> : null}
           {!isLoading && error && templates.length === 0 ? <div className="ep-kpi-critical z-0 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
           {!isLoading && !error && templates.length === 0 ? <div className="ep-card-muted z-0 rounded-[1.5rem] px-4 py-6 text-sm text-secondary">No hay plantillas activas todavía.</div> : null}
@@ -526,13 +517,14 @@ export function CreateCaseWizard() {
                         }`}
                       >
                         <p className="text-lg font-semibold text-primary">{item.name}</p>
-                        <p className="mt-1 text-sm text-secondary">{item.document_type}</p>
+                        <p className="mt-1 text-sm text-secondary">Documento / minuta: {item.document_type}</p>
                         {item.description && (
                           <p className="mt-2 text-xs text-secondary">{item.description}</p>
                         )}
                         <p className="mt-3 text-xs text-secondary">
-                          {item.fields?.length ?? 0} campos · {item.required_roles?.length ?? 0} intervinientes
+                          Campos detectados: {item.fields?.length ?? 0} · Intervinientes: {item.required_roles?.length ?? 0}
                         </p>
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Usar esta plantilla para crear documento</p>
                       </button>
                     ))}
                   </div>
@@ -541,7 +533,10 @@ export function CreateCaseWizard() {
 
               {step === 1 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">2. Datos generales de la minuta</h2>
+                  <h2 className="text-2xl font-semibold text-primary">2. Documento / minuta</h2>
+                  <p className="text-sm text-secondary">
+                    Define la notaría y quién trabajará el documento. El formulario de abajo sigue siendo dinámico, no está quemado por tipo documental.
+                  </p>
                   <div className="grid gap-4">
                     {canSelectNotary ? (
                       <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
@@ -593,19 +588,22 @@ export function CreateCaseWizard() {
                   </div>
                   <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
                     <input type="checkbox" checked={generalForm.requires_client_review} onChange={(event) => setGeneralForm((current) => ({ ...current, requires_client_review: event.target.checked }))} />
-                    Requiere revisión cliente
+                    Requiere revisión del cliente
                   </label>
                 </div>
               ) : null}
 
               {step === 2 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">3. Datos del acto</h2>
+                  <h2 className="text-2xl font-semibold text-primary">3. Diligenciar</h2>
+                  <p className="text-sm text-secondary">
+                    Completa solo los campos detectados por la plantilla seleccionada.
+                  </p>
                   {(() => {
                     const templateFields = sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []);
 
                     if (templateFields.length === 0) {
-                      return <p>La plantilla no tiene campos configurados.</p>;
+                      return <p>La plantilla no tiene campos detectados todavía.</p>;
                     }
 
                     return (
@@ -663,17 +661,17 @@ export function CreateCaseWizard() {
 
               {step === 3 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">4. Revisión</h2>
+                  <h2 className="text-2xl font-semibold text-primary">4. Revisar y generar Word</h2>
                   <div className="ep-card-soft rounded-[1.5rem] p-5 space-y-3">
                     <p className="text-sm font-semibold text-primary">Plantilla seleccionada</p>
                     <p className="text-sm text-secondary">
                       {selectedTemplate?.name ?? "Sin plantilla"}
                     </p>
-                    <p className="mt-3 text-sm font-semibold text-primary">Tipo documental</p>
+                    <p className="mt-3 text-sm font-semibold text-primary">Documento / minuta</p>
                     <p className="text-sm text-secondary">
                       {selectedTemplate?.document_type ?? "Sin definir"}
                     </p>
-                    <p className="mt-3 text-sm font-semibold text-primary">Campos</p>
+                    <p className="mt-3 text-sm font-semibold text-primary">Campos detectados</p>
                     <p className="text-sm text-secondary">
                       {selectedTemplate?.fields?.length ?? 0} campos configurados
                     </p>
@@ -681,7 +679,7 @@ export function CreateCaseWizard() {
                     <p className="text-sm text-secondary">{caseDetail?.internal_case_number ?? ""}</p>
                   </div>
                   <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
-                    Todo listo. Al continuar, el sistema generará la escritura con Gari y podrás previsualizarla, descargarla o regenerarla.
+                    Todo listo. Al continuar, el sistema generará el Word y podrás abrir el detalle para descargarlo o seguir con la revisión.
                   </div>
                 </div>
               ) : null}
@@ -697,7 +695,7 @@ export function CreateCaseWizard() {
           ) : null}
           {!isLoading && templates.length > 0 && step === 3 ? (
             <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-              Generar documento <ArrowRight className="h-4 w-4" />
+              Generar Word <ArrowRight className="h-4 w-4" />
             </button>
           ) : null}
         </div>
@@ -705,14 +703,14 @@ export function CreateCaseWizard() {
         {showAside ? (
           <aside className="space-y-4">
             <div className="ep-card z-0 rounded-[1.8rem] p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Minuta activa</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Documento / minuta activa</p>
               <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
               <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
               <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
               <p className="mt-2 text-sm text-secondary">Escritura oficial: {caseDetail?.official_deed_number || "Pendiente de aprobación"}</p>
             </div>
             <div className="ep-card z-0 rounded-[1.8rem] p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Reglas funcionales</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Flujo de trabajo</p>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary">
                 <li>La plantilla define el trámite.</li>
                 <li>El número oficial no se asigna al crear.</li>

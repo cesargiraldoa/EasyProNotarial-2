@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { approveDocumentCase, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 
-const tabs = ["Documento", "Datos", "Trazabilidad"] as const;
+const tabs = ["Documento", "Diligenciamiento", "Historial"] as const;
 
 const stateLabels: Record<string, string> = {
   borrador: "Borrador",
@@ -66,15 +67,18 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
   const [tab, setTab] = useState<(typeof tabs)[number]>("Documento");
   const [finalFile, setFinalFile] = useState<File | null>(null);
+  const [approvalComment, setApprovalComment] = useState("");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
-      setError("El identificador de la minuta no es válido.");
+      setError("El identificador del documento no es válido.");
       setIsLoading(false);
       return;
     }
@@ -83,9 +87,9 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
   useEffect(() => {
     if (initialTab === "datos") {
-      setTab("Datos");
+      setTab("Diligenciamiento");
     } else if (initialTab === "trazabilidad") {
-      setTab("Trazabilidad");
+      setTab("Historial");
     } else {
       setTab("Documento");
     }
@@ -95,10 +99,12 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getDocumentCase(caseId);
+      const [data, user] = await Promise.all([getDocumentCase(caseId), getCurrentUser()]);
       setCaseDetail(data);
+      setCurrentUser(user);
     } catch (issue) {
       setCaseDetail(null);
+      setCurrentUser(null);
       setError(issue instanceof Error ? issue.message : "No fue posible cargar la minuta.");
     } finally {
       setIsLoading(false);
@@ -188,6 +194,43 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     }
   }
 
+  function resolveApprovalRole() {
+    const roles = currentUser?.role_codes ?? [];
+    if (caseDetail?.approver_user_id === currentUser?.id || roles.includes("approver")) {
+      return "approver";
+    }
+    if (caseDetail?.titular_notary_user_id === currentUser?.id) {
+      return "titular_notary";
+    }
+    if (caseDetail?.substitute_notary_user_id === currentUser?.id) {
+      return "substitute_notary";
+    }
+    return null;
+  }
+
+  const approvalRoleCode = resolveApprovalRole();
+  const canApprove = Boolean(approvalRoleCode);
+
+  async function handleApprove() {
+    if (!approvalRoleCode) {
+      setError("No tienes un rol disponible para aprobar este documento.");
+      return;
+    }
+    setError(null);
+    setFeedback(null);
+    setIsApproving(true);
+    try {
+      await approveDocumentCase(caseId, approvalRoleCode, approvalComment.trim());
+      setApprovalComment("");
+      await load();
+      setFeedback("Aprobación registrada.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible registrar la aprobación.");
+    } finally {
+      setIsApproving(false);
+    }
+  }
+
   function participantDisplay(item: (typeof participants)[number]) {
     const person = item.person;
     return {
@@ -209,7 +252,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   }
 
   if (!caseDetail) {
-    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos de la minuta todavía.</div>;
+    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos del documento todavía.</div>;
   }
 
   return (
@@ -219,10 +262,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
           <div>
             <Link href="/dashboard/casos" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
               <ArrowLeft className="h-4 w-4" />
-              Volver a minutas
+              Volver a la bandeja
             </Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Minuta documental"}</h1>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle del documento / minuta</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Documento / minuta"}</h1>
             <p className="mt-3 text-base text-secondary">
               {caseDetail.internal_case_number || "Sin número interno"} · {caseDetail.notary_label || "Sin notaría"}
             </p>
@@ -270,6 +313,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         <div className="mt-6">
           {tab === "Documento" ? (
             <div className="space-y-5">
+              <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
+                {caseDetail.final_signed_uploaded
+                  ? "El documento final ya está cargado."
+                  : caseDetail.current_state === "borrador"
+                    ? "Falta diligenciar el formulario para generar el Word."
+                    : caseDetail.current_state === "revision_cliente"
+                      ? "El documento está esperando revisión del cliente."
+                      : caseDetail.current_state === "revision_aprobador" || caseDetail.current_state === "revision_notario"
+                        ? "El documento está listo para revisión y decisión."
+                        : "Continúa el flujo desde aquí."}
+              </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -278,8 +332,18 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                   className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
                 >
                   <Upload className="h-4 w-4" />
-                  {isGenerating ? "Generando..." : "Generar documento"}
+                  {isGenerating ? "Generando..." : "Generar Word"}
                 </button>
+                {draftDocument?.versions?.[0] ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload(draftDocument.versions[0].download_url || "", `v${draftDocument.versions[0].version_number}.${draftDocument.versions[0].file_format || "docx"}`)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
+                  >
+                    <Download className="h-4 w-4" />
+                    Descargar Word
+                  </button>
+                ) : null}
               </div>
 
               <div className="space-y-3">
@@ -328,10 +392,34 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                   {isUploading ? "Cargando..." : "Cargar firmado"}
                 </button>
               </div>
+
+              {canApprove ? (
+                <div className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                  <p className="text-sm font-semibold text-primary">Revisión y aprobación</p>
+                  <p className="text-sm text-secondary">
+                    Puedes registrar aprobación con comentario. El rechazo todavía no está disponible como acción separada en esta fase.
+                  </p>
+                  <textarea
+                    value={approvalComment}
+                    onChange={(event) => setApprovalComment(event.target.value)}
+                    rows={3}
+                    placeholder="Comentario de revisión"
+                    className="ep-textarea rounded-2xl px-4 py-3"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleApprove()}
+                    disabled={isApproving}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {isApproving ? "Registrando..." : "Aprobar"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
-          {tab === "Datos" ? (
+          {tab === "Diligenciamiento" ? (
             <div className="space-y-6">
               <div className="grid gap-4 lg:grid-cols-2">
                 {Object.entries(actData).length > 0 ? (
@@ -342,7 +430,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     </div>
                   ))
                 ) : (
-                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin datos del acto todavía.</div>
+                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin datos del diligenciamiento todavía.</div>
                 )}
               </div>
 
@@ -373,7 +461,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
             </div>
           ) : null}
 
-          {tab === "Trazabilidad" ? (
+          {tab === "Historial" ? (
             <div className="space-y-3">
               {workflowEvents.length > 0 ? (
                 workflowEvents.map((item) => (
@@ -391,7 +479,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                   </div>
                 ))
               ) : (
-                <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin trazabilidad todavía.</div>
+                <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin historial todavía.</div>
               )}
             </div>
           ) : null}

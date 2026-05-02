@@ -100,7 +100,7 @@ export function TemplatesWorkspace() {
         return;
       }
       if (!form.document_type.trim() || form.document_type.trim().length < 2) {
-        setError("El tipo documental es obligatorio.");
+        setError("El tipo de documento es obligatorio.");
         setIsSaving(false);
         return;
       }
@@ -143,22 +143,27 @@ export function TemplatesWorkspace() {
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] p-6">
         <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Plantillas</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">Plantillas documentales reutilizables</h1>
-        <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">La plantilla define intervinientes requeridos, campos del acto y variables internas del documento. En este MVP queda lista la base real de Poder General.</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">Subir plantilla Word y activar formulario dinamico</h1>
+        <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
+          La plantilla Word define los campos detectados por el sistema. Si cambias el archivo, el formulario de diligenciamiento cambia con la plantilla.
+        </p>
       </section>
       <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="ep-card rounded-[2rem] p-5">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-primary">Plantillas registradas</h2>
-            <button type="button" onClick={() => { setSelected(null); setUploadFile(null); setForm(emptyForm); }} className="text-sm font-semibold text-primary">Nueva</button>
+            <h2 className="text-xl font-semibold text-primary">Plantillas disponibles</h2>
+            <button type="button" onClick={() => { setSelected(null); setUploadFile(null); setForm(emptyForm); }} className="text-sm font-semibold text-primary">Nueva plantilla</button>
           </div>
           <div className="mt-4 space-y-3">
-            {isLoading ? <div className="ep-card-muted rounded-[1.3rem] px-4 py-4 text-sm text-secondary">Cargando plantillas...</div> : null}
-            {!isLoading && !error && templates.length === 0 ? <div className="ep-card-muted rounded-[1.3rem] px-4 py-4 text-sm text-secondary">Sin plantillas todavía.</div> : null}
+            {isLoading ? <div className="ep-card-muted rounded-[1.3rem] px-4 py-4 text-sm text-secondary">Cargando plantillas Word...</div> : null}
+            {!isLoading && !error && templates.length === 0 ? <div className="ep-card-muted rounded-[1.3rem] px-4 py-4 text-sm text-secondary">Todavía no hay plantillas cargadas.</div> : null}
             {templates.map((item) => (
               <button key={item.id} type="button" onClick={() => selectTemplate(item)} className={`block w-full rounded-[1.3rem] border px-4 py-4 text-left ${selected?.id === item.id ? "border-primary/30 bg-primary/8" : "border-[var(--line)]"}`}>
                 <p className="text-sm font-semibold text-primary">{item.name || "Plantilla sin nombre"}</p>
-                <p className="mt-1 text-xs text-secondary">{item.document_type || "Sin tipo documental"} · {item.is_active ? "Activa" : "Inactiva"}</p>
+                <p className="mt-1 text-xs text-secondary">{item.document_type || "Sin tipo de documento"} · {item.is_active ? "Plantilla activa" : "Inactiva"}</p>
+                <p className="mt-1 text-xs text-secondary">
+                  Campos detectados: {item.fields?.length ?? 0}
+                </p>
               </button>
             ))}
           </div>
@@ -166,20 +171,20 @@ export function TemplatesWorkspace() {
         <div className="ep-card rounded-[2rem] p-6 space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm font-medium text-primary">Nombre<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Tipo documental<input value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Tipo de minuta<input value={form.case_type} onChange={(event) => setForm((current) => ({ ...current, case_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Tipo de documento<input value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Documento / minuta<input value={form.case_type} onChange={(event) => setForm((current) => ({ ...current, case_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Alcance<select value={form.scope_type} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="global">Global</option><option value="notary">Por notaría</option></select></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Notaría<select value={form.notary_id} onChange={(event) => setForm((current) => ({ ...current, notary_id: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="">Todas</option>{notaries.map((item) => <option key={item.id} value={item.id}>{item.notary_label} · {item.municipality}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Estado<select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.value === "active" }))} className="ep-select h-12 rounded-2xl px-4"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Plantilla activa<select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.value === "active" }))} className="ep-select h-12 rounded-2xl px-4"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></label>
           </div>
           <label className="grid gap-2 text-sm font-medium text-primary">Descripción<textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} className="ep-textarea rounded-2xl px-4 py-3" /></label>
-          <label className="grid gap-2 text-sm font-medium text-primary">Variables internas<textarea value={form.internal_variable_map_json} onChange={(event) => setForm((current) => ({ ...current, internal_variable_map_json: event.target.value }))} rows={10} className="ep-textarea rounded-2xl px-4 py-3 font-mono text-xs" /></label>
-          <label className="ep-card-muted flex items-center justify-between rounded-[1.5rem] px-4 py-4 text-sm text-secondary"><span className="inline-flex items-center gap-2"><FileUp className="h-4 w-4 text-primary" />Archivo .docx base</span><input type="file" accept=".docx" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /></label>
+          <label className="grid gap-2 text-sm font-medium text-primary">Referencia interna<textarea value={form.internal_variable_map_json} onChange={(event) => setForm((current) => ({ ...current, internal_variable_map_json: event.target.value }))} rows={10} className="ep-textarea rounded-2xl px-4 py-3 font-mono text-xs" /></label>
+          <label className="ep-card-muted flex items-center justify-between rounded-[1.5rem] px-4 py-4 text-sm text-secondary"><span className="inline-flex items-center gap-2"><FileUp className="h-4 w-4 text-primary" />Subir plantilla Word</span><input type="file" accept=".docx" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /></label>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="ep-card-soft rounded-[1.5rem] p-4"><p className="text-sm font-semibold text-primary">Intervinientes requeridos</p><ul className="mt-3 space-y-2 text-sm text-secondary"><li>Poderdante</li><li>Apoderado(a)</li></ul></div>
             <div className="ep-card-soft rounded-[1.5rem] p-4">
               <p className="text-sm font-semibold text-primary">
-                Campos del acto{selected?.fields?.length ? ` (${selected.fields.length})` : ""}
+                Campos detectados{selected?.fields?.length ? ` (${selected.fields.length})` : ""}
               </p>
               {selected?.fields?.length ? (
                 <ul className="mt-3 space-y-1">
@@ -190,15 +195,16 @@ export function TemplatesWorkspace() {
                         {f.label}
                       </li>
                     ))}
-                </ul>
+                  </ul>
               ) : (
-                <p className="mt-3 text-sm leading-6 text-secondary">Sin campos configurados.</p>
+                <p className="mt-3 text-sm leading-6 text-secondary">El formulario dinamico aparece cuando la plantilla Word trae campos detectados.</p>
               )}
+              <p className="mt-3 text-xs uppercase tracking-[0.18em] text-secondary">Formulario dinamico</p>
             </div>
           </div>
           {feedback ? <div className="ep-kpi-success rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
           {error ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
-          <button type="button" onClick={() => void handleSubmit()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? "Guardando..." : "Guardar plantilla"}</button>
+          <button type="button" onClick={() => void handleSubmit()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? "Guardando..." : "Guardar plantilla Word"}</button>
         </div>
       </section>
     </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Filter, RefreshCw } from "lucide-react";
 import { getCaseFilters, getCases, getCurrentUser, type CaseFilterOptions, type CaseFilters, type CaseRecord } from "@/lib/api";
+import { formatDateTime } from "@/lib/datetime";
 
 const emptyFilters: CaseFilters = {
   current_state: "",
@@ -19,6 +20,28 @@ function statusSummary(cases: CaseRecord[]) {
     summary.set(item.current_state, (summary.get(item.current_state) ?? 0) + 1);
   }
   return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
+}
+
+function suggestedAction(item: CaseRecord) {
+  if (item.final_signed_uploaded) {
+    return "Descargar / cerrar";
+  }
+  if (item.current_state === "borrador") {
+    return "Diligenciar";
+  }
+  if (item.current_state === "en_diligenciamiento" || item.current_state === "revision_cliente" || item.current_state === "ajustes_solicitados") {
+    return "Generar Word";
+  }
+  if (item.current_state === "revision_aprobador" || item.current_state === "revision_notario") {
+    return "Revisar";
+  }
+  if (item.current_state === "rechazado_notario" || item.current_state === "devuelto_aprobador") {
+    return "Ajustar y reenviar";
+  }
+  if (item.current_state === "aprobado_notario" || item.current_state === "generado") {
+    return "Descargar Word";
+  }
+  return "Abrir detalle";
 }
 
 export function CasesWorkspace() {
@@ -96,21 +119,25 @@ export function CasesWorkspace() {
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-primary">Minutas</h1>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Bandeja documental</p>
+            <h1 className="mt-2 text-3xl font-semibold text-primary">Documentos / minutas</h1>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
+              Aquí se ve la bandeja operativa: crear documento, revisar avance, abrir detalle y continuar según el estado.
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard/casos/crear" className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">
-              Crear minuta
+              Crear documento / minuta
             </Link>
             <button onClick={() => void loadCases(filters)} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel">
               <RefreshCw className="h-4 w-4" />
-              Refrescar minutas
+              Actualizar bandeja
             </button>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Minutas visibles</p><p className="mt-3 text-3xl font-semibold text-primary">{cases.length}</p></div>
+          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Documentos / minutas</p><p className="mt-3 text-3xl font-semibold text-primary">{cases.length}</p></div>
           <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Con revisión cliente</p><p className="mt-3 text-3xl font-semibold text-primary">{clientReviewCount}</p></div>
           <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Firmado cargado</p><p className="mt-3 text-3xl font-semibold text-primary">{finalSignedCount}</p></div>
           <div className="rounded-[1.5rem] bg-primary p-4 text-white shadow-panel"><p className="text-xs uppercase tracking-[0.2em] text-white/72">Estados activos</p><p className="mt-3 text-3xl font-semibold">{stateStats.length}</p></div>
@@ -128,7 +155,7 @@ export function CasesWorkspace() {
             <select value={filters.current_state ?? ""} onChange={(event) => updateFilter("current_state", event.target.value)} className="ep-select h-10 rounded-2xl px-3 text-sm"><option value="">Todos</option>{filterOptions.states.map((item) => <option key={item} value={item}>{item}</option>)}</select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-secondary">Tipo de minuta</label>
+            <label className="text-xs font-medium text-secondary">Documento / minuta</label>
             <select value={filters.case_type ?? ""} onChange={(event) => updateFilter("case_type", event.target.value)} className="ep-select h-10 rounded-2xl px-3 text-sm"><option value="">Todos</option>{filterOptions.case_types.map((item) => <option key={item} value={item}>{item}</option>)}</select>
           </div>
           <div className="flex flex-col gap-1">
@@ -158,16 +185,16 @@ export function CasesWorkspace() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{item.case_type}</span>
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Documento / minuta</span>
                       <h3 className="truncate text-lg font-semibold text-primary">{item.act_type}</h3>
                     </div>
-                    <p className="mt-2 text-sm text-secondary">Minuta {item.year}-{String(item.consecutive).padStart(4, "0")} · {item.notary_label}</p>
-                    <p className="mt-2 text-sm leading-6 text-secondary">Responsable actual: {item.current_owner_user_name || "Sin asignar"}</p>
+                    <p className="mt-2 text-sm text-secondary">Plantilla dinámica · Minuta {item.year}-{String(item.consecutive).padStart(4, "0")} · {item.notary_label}</p>
+                    <p className="mt-2 text-sm leading-6 text-secondary">Responsable: {item.current_owner_user_name || "Sin asignar"}</p>
                   </div>
                   <div className="grid gap-2 text-sm text-secondary lg:min-w-[230px]">
                     <span className="ep-badge rounded-full px-3 py-1 font-semibold text-primary">{item.current_state}</span>
-                    <span>Cliente: {item.client_user_name || "No aplica"}</span>
-                    <span>Revisión cliente: {item.requires_client_review ? "Sí" : "No"}</span>
+                    <span>Última actualización: {formatDateTime(item.updated_at)}</span>
+                    <span>Acción sugerida: {suggestedAction(item)}</span>
                     <span>Firmado final: {item.final_signed_uploaded ? "Cargado" : "Pendiente"}</span>
                   </div>
                 </div>
