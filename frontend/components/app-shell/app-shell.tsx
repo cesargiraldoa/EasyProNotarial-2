@@ -110,9 +110,7 @@ export function AppShell({ children }: AppShellProps) {
     Usuarios: ["super_admin", "admin_notary", "notary"],
     Roles: ["super_admin", "admin_notary"],
     Minutas: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
-    Casos: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
     "Crear Minuta": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    "Crear Caso": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "Actos / Plantillas": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "System Status": ["super_admin"],
@@ -126,9 +124,7 @@ export function AppShell({ children }: AppShellProps) {
     Usuarios: ["usuarios"],
     Roles: ["roles"],
     Minutas: ["minutas"],
-    Casos: ["minutas"],
     "Crear Minuta": ["crear_minuta"],
-    "Crear Caso": ["crear_minuta"],
     "Actos / Plantillas": ["actos_plantillas"],
     Lotes: ["lotes"],
     "System Status": ["system_status"],
@@ -161,7 +157,7 @@ export function AppShell({ children }: AppShellProps) {
     }
 
     if (!hasRecognizedRole) {
-      return label === "Resumen" || label === "Minutas" || label === "Casos";
+      return label === "Resumen" || label === "Minutas";
     }
 
     const allowedRoles = navVisibilityByLabel[label];
@@ -203,7 +199,7 @@ export function AppShell({ children }: AppShellProps) {
           <nav className="mt-10 space-y-2">
             {visibleNavigation.map(({ label, href, icon: Icon }) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
-              const navLabel = label === "Casos" ? "Minutas" : label === "Crear Caso" ? "Crear Minuta" : label;
+              const navLabel = label;
               return (
                 <Link
                   key={label}
