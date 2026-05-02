@@ -119,15 +119,15 @@ export function CasesWorkspace() {
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Bandeja documental</p>
-            <h1 className="mt-2 text-3xl font-semibold text-primary">Documentos / minutas</h1>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Bandeja de minutas</p>
+            <h1 className="mt-2 text-3xl font-semibold text-primary">Minutas</h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
               Aquí se ve la bandeja operativa: crear documento, revisar avance, abrir detalle y continuar según el estado.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard/casos/crear" className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">
-              Crear documento / minuta
+              Crear minuta
             </Link>
             <button onClick={() => void loadCases(filters)} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel">
               <RefreshCw className="h-4 w-4" />
@@ -137,8 +137,8 @@ export function CasesWorkspace() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Documentos / minutas</p><p className="mt-3 text-3xl font-semibold text-primary">{cases.length}</p></div>
-          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Con revisión cliente</p><p className="mt-3 text-3xl font-semibold text-primary">{clientReviewCount}</p></div>
+          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Minutas</p><p className="mt-3 text-3xl font-semibold text-primary">{cases.length}</p></div>
+          <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">En revisión del cliente</p><p className="mt-3 text-3xl font-semibold text-primary">{clientReviewCount}</p></div>
           <div className="ep-card-muted rounded-[1.5rem] p-4"><p className="text-xs uppercase tracking-[0.2em] text-secondary">Firmado cargado</p><p className="mt-3 text-3xl font-semibold text-primary">{finalSignedCount}</p></div>
           <div className="rounded-[1.5rem] bg-primary p-4 text-white shadow-panel"><p className="text-xs uppercase tracking-[0.2em] text-white/72">Estados activos</p><p className="mt-3 text-3xl font-semibold">{stateStats.length}</p></div>
         </div>
@@ -155,7 +155,7 @@ export function CasesWorkspace() {
             <select value={filters.current_state ?? ""} onChange={(event) => updateFilter("current_state", event.target.value)} className="ep-select h-10 rounded-2xl px-3 text-sm"><option value="">Todos</option>{filterOptions.states.map((item) => <option key={item} value={item}>{item}</option>)}</select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-secondary">Documento / minuta</label>
+            <label className="text-xs font-medium text-secondary">Tipo de minuta</label>
             <select value={filters.case_type ?? ""} onChange={(event) => updateFilter("case_type", event.target.value)} className="ep-select h-10 rounded-2xl px-3 text-sm"><option value="">Todos</option>{filterOptions.case_types.map((item) => <option key={item} value={item}>{item}</option>)}</select>
           </div>
           <div className="flex flex-col gap-1">
@@ -185,7 +185,7 @@ export function CasesWorkspace() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Documento / minuta</span>
+                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Minuta</span>
                       <h3 className="truncate text-lg font-semibold text-primary">{item.act_type}</h3>
                     </div>
                     <p className="mt-2 text-sm text-secondary">Plantilla dinámica · Minuta {item.year}-{String(item.consecutive).padStart(4, "0")} · {item.notary_label}</p>
@@ -199,7 +199,7 @@ export function CasesWorkspace() {
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm text-primary">
-                  <span>{item.protocolist_user_name || "Sin protocolista"}</span>
+                  <span>{item.protocolist_user_name || "Protocolista: sin asignar"}</span>
                   <span className="inline-flex items-center gap-2 font-semibold">Ver detalle <ArrowRight className="h-4 w-4" /></span>
                 </div>
               </Link>
