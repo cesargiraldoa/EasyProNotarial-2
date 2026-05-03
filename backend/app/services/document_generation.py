@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import zipfile
 from bisect import bisect_right
+from os import environ
 from pathlib import Path
 
 from docx import Document
@@ -238,6 +241,67 @@ def generate_plain_pdf(destination_path: str | Path, title: str, lines: list[str
         for offset in offsets[1:]:
             handle.write(f"{offset:010d} 00000 n \n".encode("ascii"))
         handle.write(f"trailer<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode("ascii"))
+
+
+def _resolve_libreoffice_executable() -> Path:
+    candidates = []
+    env_path = (environ.get("LIBREOFFICE_PATH") or "").strip()
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend([
+        Path(r"C:\Program Files\LibreOffice\program\soffice.exe"),
+        Path(r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"),
+    ])
+
+    which_path = shutil.which("soffice")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+
+    raise FileNotFoundError("No se encontró LibreOffice/soffice para convertir DOCX a PDF.")
+
+
+def convert_docx_to_pdf(source_docx: Path, output_dir: Path) -> Path:
+    source = Path(source_docx)
+    if not source.exists():
+        raise FileNotFoundError(f"El documento DOCX no existe: {source}")
+    if source.suffix.lower() != ".docx":
+        raise ValueError("La conversión PDF solo admite archivos .docx.")
+
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    soffice = _resolve_libreoffice_executable()
+
+    result = subprocess.run(
+        [
+            str(soffice),
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(output),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Conversión DOCX a PDF fallida.").strip()
+        raise RuntimeError(detail)
+
+    expected_pdf = output / f"{source.stem}.pdf"
+    if expected_pdf.exists():
+        return expected_pdf
+
+    pdf_candidates = sorted(output.glob("*.pdf"), key=lambda item: item.stat().st_mtime, reverse=True)
+    if pdf_candidates:
+        return pdf_candidates[0]
+
+    raise FileNotFoundError("LibreOffice no generó el PDF esperado.")
 
 
 def build_case_text_snapshot(case_number: str, act_type: str, participants: list[dict], act_data: dict) -> list[str]:

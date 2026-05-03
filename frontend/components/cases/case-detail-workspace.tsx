@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, getDocumentCase, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
 
 const baseTabs = ["Minuta", "Diligenciamiento", "Observaciones"] as const;
@@ -94,7 +95,7 @@ function parseActData(caseDetail: DocumentFlowCase | null) {
 }
 
 async function generateFromTemplate(caseId: number, actData: Record<string, string>) {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-from-template`, {
     method: "POST",
@@ -125,7 +126,11 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [isReviewTransitioning, setIsReviewTransitioning] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [pdfPreviewError, setPdfPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
@@ -169,6 +174,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const actData = parseActData(caseDetail);
   const documents = Array.isArray(caseDetail?.documents) ? caseDetail.documents : [];
   const participants = Array.isArray(caseDetail?.participants) ? caseDetail.participants : [];
+  const timelineEvents = Array.isArray(caseDetail?.timeline_events) ? caseDetail.timeline_events : [];
   const workflowEvents = Array.isArray(caseDetail?.workflow_events) ? caseDetail.workflow_events : [];
   const internalNotes = Array.isArray(caseDetail?.internal_notes) ? caseDetail.internal_notes : [];
   const clientComments = Array.isArray(caseDetail?.client_comments) ? caseDetail.client_comments : [];
@@ -182,8 +188,113 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const tabs = useMemo(() => (canSeeTechnicalHistory ? superAdminTabs : baseTabs), [canSeeTechnicalHistory]);
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
   const latestWordVersion = draftDocument?.versions?.[0] ?? null;
-  const approvalRoleCode = resolveApprovalRole();
-  const canApprove = Boolean(approvalRoleCode);
+  const canSendToReview = Boolean(caseDetail) && (isProtocolist || isAdminNotary || isSuperAdmin) && ["borrador", "en_diligenciamiento", "generado"].includes(caseDetail?.current_state ?? "");
+  const canReviewRevision = Boolean(caseDetail) && (isApprover || isAdminNotary || isSuperAdmin || caseDetail?.approver_user_id === currentUser?.id) && caseDetail?.current_state === "revision_aprobador";
+  const canApprove = canReviewRevision;
+  const matchesReviewReturn = (item: { event_type?: string | null; from_state?: string | null; to_state?: string | null }) => {
+    const normalizedEventType = normalizeText(item.event_type ?? "");
+    const normalizedFromState = normalizeText(item.from_state ?? "");
+    const normalizedToState = normalizeText(item.to_state ?? "");
+    return (
+      normalizedEventType === "return_review" ||
+      normalizedEventType === "case_returned_review" ||
+      normalizedEventType.includes("return") ||
+      normalizedEventType.includes("reject") ||
+      normalizedEventType.includes("adjust") ||
+      normalizedEventType.includes("devuelto") ||
+      normalizedEventType.includes("ajuste") ||
+      normalizedFromState === "revision_aprobador" ||
+      normalizedToState === "devuelto_aprobador" ||
+      normalizedToState === "ajustes_solicitados" ||
+      normalizedToState === "rechazado_notario"
+    );
+  };
+  const latestReviewSubmissionEvent = (() => {
+    const matchesReviewSubmission = (item: { event_type?: string | null; from_state?: string | null; to_state?: string | null }) => {
+      const normalizedEventType = normalizeText(item.event_type ?? "");
+      return (
+        normalizedEventType === "case_sent_to_review" ||
+        normalizedEventType === "send_to_review" ||
+        normalizedEventType.includes("send") && normalizedEventType.includes("review") ||
+        item.to_state === "revision_aprobador"
+      );
+    };
+
+    return workflowEvents.find(matchesReviewSubmission) ?? timelineEvents.find(matchesReviewSubmission) ?? null;
+  })();
+  const latestReviewReturnEvent = (() => {
+    return workflowEvents.find(matchesReviewReturn) ?? timelineEvents.find(matchesReviewReturn) ?? null;
+  })();
+  const flowState = (() => {
+    const state = caseDetail?.current_state ?? "";
+    if (["borrador", "en_diligenciamiento", "generado"].includes(state)) {
+      return { step: 1, label: "Diligenciamiento", summary: "Diligenciamiento" };
+    }
+    if (["revision_aprobador", "devuelto_aprobador", "revision_cliente", "ajustes_solicitados"].includes(state)) {
+      return { step: 2, label: "Revisión", summary: "En revisión del aprobador", alert: state === "rechazado_notario" };
+    }
+    if (state === "aprobado_notario") {
+      return { step: 3, label: "Aprobación", summary: "Revisión aprobada" };
+    }
+    if (["firmado_cargado", "cerrado"].includes(state)) {
+      return { step: 4, label: "Firma", summary: "Pendiente de firma" };
+    }
+    if (state === "rechazado_notario") {
+      return { step: 2, label: "Revisión", summary: "Rechazado", rejected: true };
+    }
+    return { step: 1, label: "Diligenciamiento", summary: prettyState(state) };
+  })();
+  const flowChips = [
+    { label: "Responsable", value: caseDetail?.current_owner_user_name || "Sin asignar" },
+    { label: "Aprobador", value: caseDetail?.approver_user_name || "Sin asignar" },
+    { label: "Borrador", value: latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin generar" },
+    { label: "Plantilla", value: caseDetail?.template_name || "Sin plantilla" },
+    { label: "Última actualización", value: caseDetail?.updated_at ? pretty(caseDetail.updated_at) : "Sin actualización" },
+  ];
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    if (!draftDocument?.id || !latestWordVersion?.id || latestWordVersion.file_format.toLowerCase() !== "docx") {
+      setPdfPreviewUrl(null);
+      setPdfPreviewError(null);
+      setPdfPreviewLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setPdfPreviewLoading(true);
+    setPdfPreviewError(null);
+    setPdfPreviewUrl(null);
+
+    void (async () => {
+      try {
+        const blob = await downloadDocumentPreviewPdf(caseId, draftDocument.id, latestWordVersion.id);
+        if (cancelled) {
+          return;
+        }
+        objectUrl = URL.createObjectURL(blob);
+        setPdfPreviewUrl(objectUrl);
+      } catch (issue) {
+        if (!cancelled) {
+          setPdfPreviewError(issue instanceof Error ? issue.message : "No fue posible cargar la previsualización PDF.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPdfPreviewLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [caseId, draftDocument?.id, latestWordVersion?.file_format, latestWordVersion?.id]);
 
   useEffect(() => {
     if (!(tabs as readonly string[]).includes(tab)) {
@@ -248,7 +359,6 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
       }
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
-      const { getToken } = await import("@/lib/auth");
       const token = getToken();
       const res = await fetch(`${API_URL}${downloadUrl}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -268,47 +378,68 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     }
   }
 
-  function resolveApprovalRole() {
-    if (!caseDetail || !currentUser) {
-      return null;
-    }
-
-    if (isSuperAdmin && !isApprover && !isNotary && !isAdminNotary) {
-      return null;
-    }
-
-    if (isApprover || caseDetail.approver_user_id === currentUser.id) {
-      return "approver";
-    }
-
-    if (isNotary || isAdminNotary || caseDetail.titular_notary_user_id === currentUser.id) {
-      return "titular_notary";
-    }
-
-    if (isAdminNotary || caseDetail.substitute_notary_user_id === currentUser.id) {
-      return "substitute_notary";
-    }
-
-    return null;
-  }
-
   async function handleApprove() {
-    if (!approvalRoleCode) {
-      setError("No tienes un rol disponible para aprobar esta minuta.");
+    if (!canReviewRevision) {
+      setError("No tienes permisos para aprobar esta revisión.");
       return;
     }
     setError(null);
     setFeedback(null);
     setIsApproving(true);
     try {
-      await approveDocumentCase(caseId, approvalRoleCode, approvalComment.trim());
+      await approveDocumentCase(caseId, "approver", "Revisión aprobada");
       setApprovalComment("");
       await load();
-      setFeedback("Aprobación registrada.");
+      setFeedback("Revisión aprobada.");
     } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "No fue posible registrar la aprobación.");
+      setError(issue instanceof Error ? issue.message : "No fue posible aprobar la revisión.");
     } finally {
       setIsApproving(false);
+    }
+  }
+
+  async function handleSendToReview() {
+    if (!canSendToReview) {
+      setError("No tienes permisos para enviar esta minuta a revisión.");
+      return;
+    }
+    setError(null);
+    setFeedback(null);
+    setIsReviewTransitioning(true);
+    try {
+      await sendCaseToReview(caseId, approvalComment.trim() || undefined);
+      setApprovalComment("");
+      await load();
+      setFeedback("Minuta enviada a revisión.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible enviar la minuta a revisión.");
+    } finally {
+      setIsReviewTransitioning(false);
+    }
+  }
+
+  async function handleReturnReview() {
+    const comment = approvalComment.trim();
+    if (!canReviewRevision) {
+      setError("No tienes permisos para devolver esta revisión.");
+      return;
+    }
+    if (!comment) {
+      setError("Escribe un comentario antes de devolver para ajustes.");
+      return;
+    }
+    setError(null);
+    setFeedback(null);
+    setIsReviewTransitioning(true);
+    try {
+      await returnCaseReview(caseId, comment);
+      setApprovalComment("");
+      await load();
+      setFeedback("Minuta devuelta para ajustes.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible devolver la minuta para ajustes.");
+    } finally {
+      setIsReviewTransitioning(false);
     }
   }
 
@@ -435,41 +566,21 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
   return (
     <div className="space-y-6">
-      <section className="ep-card rounded-[2rem] p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+      <section className="ep-card rounded-[2rem] px-6 py-4">
+        <div className="flex flex-col gap-3">
           <div>
             <Link href="/dashboard/casos" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
               <ArrowLeft className="h-4 w-4" />
               Volver a la bandeja
             </Link>
-            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
+            <p className="mt-3 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Minuta"}</h1>
-            <p className="mt-3 text-base text-secondary">
+            <p className="mt-2 text-sm text-secondary">
               {caseDetail.internal_case_number || "Sin número interno"} · {caseDetail.notary_label || "Sin notaría"}
             </p>
-            <span className="mt-4 inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+            <span className="mt-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
               {prettyState(caseDetail.current_state)}
             </span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:w-[430px]">
-            <div className="ep-card-muted rounded-[1.5rem] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Escritura oficial</p>
-              <p className="mt-2 text-lg font-semibold text-primary">{caseDetail.official_deed_number || "Pendiente"}</p>
-            </div>
-            <div className="ep-card-muted rounded-[1.5rem] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Responsable actual</p>
-              <p className="mt-2 text-lg font-semibold text-primary">{caseDetail.current_owner_user_name || "Sin asignar"}</p>
-            </div>
-            <div className="ep-card-muted rounded-[1.5rem] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Borrador actual</p>
-              <p className="mt-2 text-lg font-semibold text-primary">
-                {draftDocument?.current_version_number ? `v${draftDocument.current_version_number}` : "Sin generar"}
-              </p>
-            </div>
-            <div className="ep-card-muted rounded-[1.5rem] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Plantilla</p>
-              <p className="mt-2 text-lg font-semibold text-primary">{caseDetail.template_name || "Sin plantilla"}</p>
-            </div>
           </div>
         </div>
       </section>
@@ -504,108 +615,213 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
               </div>
               <section className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-primary">Revisión manual</p>
-                  <p className="text-sm text-secondary">
-                    Revisa el Word generado, corrige desde diligenciamiento y deja observaciones manuales según tu rol.
-                  </p>
-                  <p className="text-sm text-secondary">
-                    Si necesitas solicitar ajustes, usa la pestaña Observaciones para dejar la nota manual de revisión.
-                  </p>
+                  <p className="text-sm font-semibold text-primary">Flujo de revisión</p>
+                  <p className="text-sm text-secondary">Sigue el paso actual del caso y actúa solo sobre la fase visible.</p>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Estado actual</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{prettyState(caseDetail.current_state)}</p>
-                  </div>
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Responsable actual</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.current_owner_user_name || "Sin asignar"}</p>
-                  </div>
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Protocolista</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.protocolist_user_name || "Sin asignar"}</p>
-                  </div>
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Aprobador</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{caseDetail.approver_user_name || "Sin asignar"}</p>
-                  </div>
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Última actualización</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{pretty(caseDetail.updated_at)}</p>
-                  </div>
-                  <div className="ep-card-soft rounded-[1.25rem] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">Word disponible</p>
-                    <p className="mt-2 text-sm font-semibold text-primary">{latestWordVersion ? `Si, v${latestWordVersion.version_number}` : "No"}</p>
-                  </div>
-                </div>
-                <div className="hidden">
-                  <p className="text-sm font-semibold text-primary">Agregar observación interna</p>
-                  <textarea
-                    value={internalNote}
-                    onChange={(event) => setInternalNote(event.target.value)}
-                    rows={3}
-                    placeholder="Escribe aquí la observación interna de revisión"
-                    className="ep-textarea rounded-2xl px-4 py-3"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveInternalNote()}
-                    disabled={isSavingNote}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
-                  >
-                    {isSavingNote ? "Guardando..." : "Guardar observación"}
-                  </button>
-                </div>
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-primary">Observaciones internas existentes</p>
-                    {internalNotes.length > 0 ? (
-                      <div className="space-y-2">
-                        {internalNotes.map((item) => (
-                          <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Sistema"}</p>
-                              <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
-                            </div>
-                            <p className="mt-2 text-sm text-secondary">{item.note || item.comment || "Sin texto"}</p>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-start gap-3 rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] p-4">
+                    {[
+                      { step: 1, label: "Diligenciamiento" },
+                      { step: 2, label: "Revisión" },
+                      { step: 3, label: "Aprobación" },
+                      { step: 4, label: "Firma" },
+                    ].map((item, index) => {
+                      const active = flowState.step === item.step;
+                      const completed = flowState.step > item.step;
+                      const rejected = item.step === 2 && flowState.summary === "Rechazado";
+                      return (
+                        <div key={item.label} className="flex min-w-[132px] flex-1 items-center gap-3">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold ${
+                              rejected
+                                ? "border-red-500 bg-red-50 text-red-700"
+                                : active
+                                  ? "border-primary bg-primary text-white"
+                                  : completed
+                                    ? "border-primary/40 bg-primary/10 text-primary"
+                                    : "border-[var(--line)] bg-[var(--panel-soft)] text-secondary"
+                            }`}
+                          >
+                            {index + 1}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin observaciones internas todavía.</div>
-                    )}
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-primary">Comentarios registrados</p>
-                    {clientComments.length > 0 ? (
-                      <div className="space-y-2">
-                        {clientComments.map((item) => (
-                          <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Cliente"}</p>
-                              <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
-                            </div>
-                            <p className="mt-2 text-sm text-secondary">{item.comment || item.note || "Sin texto"}</p>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-semibold ${rejected ? "text-red-700" : active ? "text-primary" : "text-secondary"}`}>{item.label}</p>
+                            <div className={`mt-2 h-1 rounded-full ${completed || active ? "bg-primary" : "bg-[var(--line)]"}`} />
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin comentarios registrados todavía.</div>
-                    )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-sm font-semibold text-primary">Paso actual: {flowState.summary}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {flowChips.map((item) => (
+                      <span key={item.label} className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--panel)] px-3 py-1 text-xs text-secondary">
+                        <span className="font-semibold text-primary">{item.label}:</span>
+                        <span>{item.value}</span>
+                      </span>
+                    ))}
                   </div>
                 </div>
-              {canSeeTechnicalHistory ? (
-                <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                  <p className="text-sm font-semibold text-primary">Actividad operativa reciente</p>
-                  {workflowEvents.length > 0 ? (
-                    <div className="space-y-2">
-                      {workflowEvents.slice(0, 8).map((item) => renderActivitySummary(item))}
+                <div className="space-y-4">
+                  {canSendToReview || canReviewRevision ? (
+                    <section className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-primary">Flujo de revisión</p>
+                        <p className="text-xs text-secondary">Comentario y acción principal del paso actual.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">
+                          {canSendToReview ? "Comentario para el aprobador" : "Comentario de devolución"}
+                        </label>
+                        <textarea
+                          value={approvalComment}
+                          onChange={(event) => setApprovalComment(event.target.value)}
+                          rows={4}
+                          placeholder={canSendToReview ? "Escribe un comentario breve" : "Explica el ajuste"}
+                          className="ep-textarea w-full rounded-2xl px-4 py-3"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        {canSendToReview ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleSendToReview()}
+                            disabled={isReviewTransitioning}
+                            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                          >
+                            {isReviewTransitioning ? "Enviando..." : "Pasar a revisión"}
+                          </button>
+                        ) : null}
+                        {canReviewRevision ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void handleApprove()}
+                              disabled={isApproving}
+                              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                            >
+                              {isApproving ? "Aprobando..." : "Aprobar revisión"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleReturnReview()}
+                              disabled={isReviewTransitioning}
+                              className="ml-3 inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                            >
+                              {isReviewTransitioning ? "Devolviendo..." : "Devolver para ajustes"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+                  <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-primary">Comentario del protocolista</p>
+                      <p className="text-xs text-secondary">
+                        {latestReviewSubmissionEvent?.actor_user_name ? `Enviado por ${latestReviewSubmissionEvent.actor_user_name}` : "Comentario asociado al último envío a revisión."}
+                        {latestReviewSubmissionEvent?.created_at ? ` · ${pretty(latestReviewSubmissionEvent.created_at)}` : ""}
+                      </p>
                     </div>
-                  ) : (
-                    <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin actividad operativa todavía.</div>
-                  )}
-                </section>
-              ) : null}
+                    <div className="rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] p-4">
+                      <p className="text-sm text-secondary">
+                        {latestReviewSubmissionEvent?.comment?.trim() ? latestReviewSubmissionEvent.comment : "Sin comentario de envío registrado."}
+                      </p>
+                    </div>
+                  </section>
+                  {["devuelto_aprobador", "ajustes_solicitados", "rechazado_notario"].includes(caseDetail.current_state) ? (
+                    <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-primary">Comentario del aprobador</p>
+                        <p className="text-xs text-secondary">
+                          {latestReviewReturnEvent?.actor_user_name ? `Enviado por ${latestReviewReturnEvent.actor_user_name}` : "Comentario asociado a la última devolución o rechazo."}
+                          {latestReviewReturnEvent?.created_at ? ` · ${pretty(latestReviewReturnEvent.created_at)}` : ""}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] p-4">
+                        <p className="text-sm text-secondary">
+                          {latestReviewReturnEvent?.comment?.trim() ? latestReviewReturnEvent.comment : "Sin comentario de devolución registrado."}
+                        </p>
+                      </div>
+                    </section>
+                  ) : null}
+                  <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-primary">Previsualización del documento</p>
+                      <p className="text-xs text-secondary">Revisa el contenido antes de descargar el Word o aprobar la revisión.</p>
+                    </div>
+                    {pdfPreviewLoading ? (
+                      <div className="ep-card-muted rounded-[1.25rem] px-4 py-5 text-sm text-secondary">Cargando previsualización PDF...</div>
+                    ) : pdfPreviewUrl ? (
+                      <iframe
+                        title="Previsualización PDF"
+                        src={pdfPreviewUrl}
+                        className="min-h-[600px] w-full rounded-[1.25rem] border border-[var(--line)] bg-white shadow-sm"
+                      />
+                    ) : pdfPreviewError ? (
+                      <div className="space-y-3">
+                        <div className="ep-card-muted rounded-[1.25rem] px-4 py-5 text-sm text-secondary">{pdfPreviewError}</div>
+                        <div className="ep-card-muted rounded-[1.25rem] px-4 py-5 text-sm text-secondary">
+                          No hay PDF disponible para previsualizar esta versión. Descarga el Word para revisar o genera/exporta PDF.
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ep-card-muted rounded-[1.25rem] px-4 py-5 text-sm text-secondary">
+                        No hay PDF disponible para previsualizar esta versión. Descarga el Word para revisar o genera/exporta PDF.
+                      </div>
+                    )}
+                  </section>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-primary">Observaciones internas existentes</p>
+                      {internalNotes.length > 0 ? (
+                        <div className="space-y-2">
+                          {internalNotes.map((item) => (
+                            <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Sistema"}</p>
+                                <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
+                              </div>
+                              <p className="mt-2 text-sm text-secondary">{item.note || item.comment || "Sin texto"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin observaciones internas todavía.</div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-primary">Comentarios registrados</p>
+                      {clientComments.length > 0 ? (
+                        <div className="space-y-2">
+                          {clientComments.map((item) => (
+                            <div key={item.id} className="ep-card-soft rounded-[1.25rem] p-4">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-sm font-semibold text-primary">{item.created_by_user_name || "Cliente"}</p>
+                                <span className="text-xs text-secondary">{pretty(item.created_at)}</span>
+                              </div>
+                              <p className="mt-2 text-sm text-secondary">{item.comment || item.note || "Sin texto"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin comentarios registrados todavía.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {canSeeTechnicalHistory ? (
+                  <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                    <p className="text-sm font-semibold text-primary">Actividad operativa reciente</p>
+                    {workflowEvents.length > 0 ? (
+                      <div className="space-y-2">
+                        {workflowEvents.slice(0, 8).map((item) => renderActivitySummary(item))}
+                      </div>
+                    ) : (
+                      <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin actividad operativa todavía.</div>
+                    )}
+                  </section>
+                ) : null}
               </section>
               <div className="flex flex-wrap items-center gap-3">
                 {isProtocolist || isAdminNotary ? (
@@ -625,10 +841,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     onClick={() => void handleDownload(draftDocument.versions[0].download_url || "", `v${draftDocument.versions[0].version_number}.${draftDocument.versions[0].file_format || "docx"}`)}
                     className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
                   >
-                    <Download className="h-4 w-4" />
-                    Descargar Word
-                  </button>
-                ) : null}
+                  <Download className="h-4 w-4" />
+                  Descargar Word
+                </button>
+              ) : null}
               </div>
 
               <div className="space-y-3">
@@ -678,39 +894,6 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 </button>
               </div>
 
-              {canApprove ? (
-                <div className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                  <p className="text-sm font-semibold text-primary">Aprobación manual</p>
-                  <p className="text-sm text-secondary">
-                    Puedes registrar aprobación con comentario. Si el documento requiere más trabajo, deja una nota y solicita ajustes manuales.
-                  </p>
-                  <textarea
-                    value={approvalComment}
-                    onChange={(event) => setApprovalComment(event.target.value)}
-                    rows={3}
-                    placeholder="Comentario de aprobación"
-                    className="ep-textarea rounded-2xl px-4 py-3"
-                  />
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => void handleApprove()}
-                      disabled={isApproving}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                    >
-                      {isApproving ? "Registrando..." : "Aprobar minuta"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleRequestAdjustments()}
-                      disabled={isSavingNote}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
-                    >
-                      {isSavingNote ? "Guardando..." : "Solicitar ajustes"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
 

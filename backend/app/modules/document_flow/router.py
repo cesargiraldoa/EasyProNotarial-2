@@ -4,10 +4,11 @@ import json
 import os
 import shutil
 import io
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -50,11 +51,12 @@ from app.schemas.case import (
     FinalUploadRequest,
     GariGenerationRequest,
     GenerateFromTemplatePayload,
+    ReviewTransitionRequest,
 )
 from app.schemas.act_catalog import CaseActOut, CaseActsPayload
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
-from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
+from app.services.document_generation import build_case_text_snapshot, convert_docx_to_pdf, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
 from app.services.gari_document_service import (
     build_gari_docx_buffer,
     generate_notarial_document,
@@ -326,6 +328,20 @@ def append_timeline(db: Session, case_id: int, actor_user_id: int | None, event_
 
 def append_workflow(db: Session, case: Case, actor_user: User | None, event_type: str, actor_role_code: str | None = None, field_name: str | None = None, old_value: str | None = None, new_value: str | None = None, comment: str | None = None, approved_version_id: int | None = None, metadata: dict | None = None, from_state: str | None = None, to_state: str | None = None) -> None:
     db.add(CaseWorkflowEvent(case_id=case.id, actor_user_id=actor_user.id if actor_user else None, actor_role_code=actor_role_code, event_type=event_type, field_name=field_name, old_value=old_value, new_value=new_value, comment=comment, approved_version_id=approved_version_id, metadata_json=json.dumps(metadata or {}, ensure_ascii=False) if metadata is not None else None, from_state=from_state, to_state=to_state))
+
+
+def require_transition_comment(comment: str | None) -> str:
+    text = (comment or "").strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El comentario es obligatorio.")
+    return text
+
+
+def resolve_actor_role_code(actor_roles: set[str], preferred_roles: tuple[str, ...]) -> str | None:
+    for role_code in preferred_roles:
+        if role_code in actor_roles:
+            return role_code
+    return None
 
 
 def resolve_existing_max_sequence(db: Session, sequence_type: str, notary_id: int, year: int) -> int:
@@ -770,6 +786,52 @@ def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(g
     return serialize_case_detail(load_case_or_404(db, case.id))
 
 
+@router.post("/cases/{case_id}/send-to-review", response_model=CaseDetail)
+def send_case_to_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    previous_state = case.current_state
+    review_comment = (payload.comment or "").strip() or "Caso enviado a revisión"
+    case.current_state = "revision_aprobador"
+    actor_role_code = resolve_actor_role_code(actor_roles, ("protocolist", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_sent_to_review", previous_state, case.current_state, review_comment, {"transition": "send_to_review"})
+    append_workflow(db, case, current_user, "case_sent_to_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "send_to_review"})
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/return-review", response_model=CaseDetail)
+def return_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    review_comment = require_transition_comment(payload.comment)
+    previous_state = case.current_state
+    if "approver" in actor_roles:
+        case.current_state = "devuelto_aprobador"
+        actor_role_code = "approver"
+    else:
+        case.current_state = "ajustes_solicitados"
+        actor_role_code = resolve_actor_role_code(actor_roles, ("notary", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_returned_review", previous_state, case.current_state, review_comment, {"transition": "return_review"})
+    append_workflow(db, case, current_user, "case_returned_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "return_review"})
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/reject-review", response_model=CaseDetail)
+def reject_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    review_comment = require_transition_comment(payload.comment)
+    previous_state = case.current_state
+    case.current_state = "rechazado_notario"
+    actor_role_code = resolve_actor_role_code(actor_roles, ("approver", "notary", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_rejected_review", previous_state, case.current_state, review_comment, {"transition": "reject_review"})
+    append_workflow(db, case, current_user, "case_rejected_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "reject_review"})
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
 @router.post("/cases/{case_id}/export", response_model=CaseDetail)
 def export_case_document(case_id: int, payload: ExportRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
     case = load_case_or_404(db, case_id)
@@ -875,6 +937,38 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
         pass
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/preview-pdf")
+def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+
+    version = next((item for item in document.versions if item.id == version_id), None)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+    if version.file_format.lower() != "docx":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para versiones DOCX.")
+
+    storage = (version.storage_path or "").strip()
+    if storage.startswith("http://") or storage.startswith("https://"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para archivos locales.")
+
+    source_docx = Path(storage)
+    if not source_docx.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El DOCX vigente no está disponible en almacenamiento local.")
+
+    preview_dir = Path(tempfile.mkdtemp(prefix=f"easypro2-preview-case-{case.id}-version-{version.id}-"))
+    try:
+        pdf_path = convert_docx_to_pdf(source_docx, preview_dir)
+    except Exception as exc:
+        background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+    background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{source_docx.stem}.pdf")
 
 
 @router.get("/cases/{case_id}/gari-download")

@@ -1,7 +1,8 @@
-﻿import { cleanNullableText, cleanText } from "@/lib/text";
+import { cleanNullableText, cleanText } from "@/lib/text";
+import { getToken } from "@/lib/auth";
 
 async function apiFetch<T = unknown>(path: string, options: { method?: string; body?: unknown; headers?: HeadersInit } = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}${path}`;
   
@@ -197,7 +198,7 @@ export async function createDocumentCase(payload: {
   requires_client_review?: boolean;
   metadata_json?: string;
 }): Promise<DocumentFlowCase> {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}/api/v1/document-flow/cases/from-template`;
   const response = await fetch(url, {
@@ -220,7 +221,7 @@ export async function saveCaseParticipants(
   caseId: number,
   payload: any[]
 ): Promise<DocumentFlowCase> {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/participants`;
   const response = await fetch(url, {
@@ -242,7 +243,7 @@ export async function saveCaseActData(
   caseId: number,
   payload: { data_json: string }
 ): Promise<DocumentFlowCase> {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/act-data`;
   const response = await fetch(url, {
@@ -262,11 +263,14 @@ export async function saveCaseActData(
 }
 export async function addClientComment(caseId: number, comment: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/client-comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { comment } })); }
 export async function addInternalNote(caseId: number, note: string) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/internal-notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { note } })); }
+async function postReviewTransition(caseId: number, path: string, comment?: string) {
+  return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { comment: comment || null } }));
+}
 export async function generateCaseDraft(
   caseId: number,
   comment: string
 ): Promise<DocumentFlowCase> {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-with-gari`;
   const response = await fetch(url, {
@@ -285,7 +289,7 @@ export async function generateCaseDraft(
   return response.json();
 }
 export async function generateWithGari(caseId: number, comment?: string, correctionText?: string): Promise<DocumentFlowCase> {
-  const token = localStorage.getItem("easypro2_session");
+  const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
   const url = `${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-with-gari`;
   const response = await fetch(url, {
@@ -304,12 +308,89 @@ export async function generateWithGari(caseId: number, comment?: string, correct
   return response.json();
 }
 export async function approveDocumentCase(caseId: number, role_code: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { role_code, comment: comment || null } })); }
+export async function downloadDocumentPreviewPdf(caseId: number, documentId: number, versionId: number): Promise<Blob> {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/documents/${documentId}/versions/${versionId}/preview-pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "No fue posible generar la previsualización PDF.");
+  }
+  return response.blob();
+}
+export async function downloadDocumentVersionBlob(downloadUrl: string): Promise<Blob> {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}${downloadUrl}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    throw new Error("No fue posible obtener la versión documental para previsualización.");
+  }
+  return response.blob();
+}
+export async function sendCaseToReview(caseId: number, comment?: string) {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/send-to-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment: comment || null }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return normalizeCase(await response.json());
+}
+export async function returnCaseReview(caseId: number, comment: string) {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/return-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return normalizeCase(await response.json());
+}
+export async function rejectCaseReview(caseId: number, comment: string) {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/reject-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ comment }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+  return normalizeCase(await response.json());
+}
 export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { file_format } })); }
 export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { filename, content_base64, comment: comment || null } })); }
 export async function lookupPersons(params: { document_type?: string; document_number?: string; q?: string }) { const query = new URLSearchParams(); if (params.document_type) query.set("document_type", params.document_type); if (params.document_number) query.set("document_number", params.document_number); if (params.q) query.set("q", params.q); return asArray(await apiFetch<unknown>(`/api/v1/document-flow/persons/lookup?${query.toString()}`), normalizePerson); }
 export async function createTemplate(payload: unknown) {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
-  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const token = getToken();
   const response = await fetch(`${base}/api/v1/templates`, {
     method: "POST",
     headers: {
@@ -327,7 +408,7 @@ export async function createTemplate(payload: unknown) {
 }
 export async function updateTemplate(id: number, payload: unknown) {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
-  const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
+  const token = getToken();
   const response = await fetch(`${base}/api/v1/templates/${id}`, {
     method: "PUT",
     headers: {

@@ -232,6 +232,10 @@ class ApprovalRequest(BaseModel):
     comment: str | None = None
 
 
+class ReviewTransitionRequest(BaseModel):
+    comment: str | None = Field(default=None, max_length=4000)
+
+
 class ExportRequest(BaseModel):
     file_format: Literal["docx", "pdf"]
 
