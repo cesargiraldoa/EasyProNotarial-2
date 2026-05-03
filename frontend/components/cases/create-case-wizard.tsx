@@ -16,6 +16,7 @@ import {
 } from "@/lib/document-flow";
 import { getEasyPro1CatalogOptions } from "@/lib/easypro1-notarial-catalogs";
 import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/lib/api";
+import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 const steps = [
   "Plantilla",
@@ -731,7 +732,7 @@ export function CreateCaseWizard() {
       const notaryOptions = safeNotaries
         .map((item) => ({
           value: String(item.id ?? ""),
-          label: [safeString(item.notary_label), safeString(item.municipality)].filter(Boolean).join(" · ") || "Notaría sin nombre",
+          label: formatNotaryOptionLabel(item),
         }))
         .filter((item) => item.value);
       const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");

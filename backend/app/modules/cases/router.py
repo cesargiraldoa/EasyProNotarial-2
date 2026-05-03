@@ -1,5 +1,5 @@
 ﻿import json
-from datetime import datetime
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
@@ -194,6 +194,9 @@ def append_timeline(db: Session, case_id: int, actor_user_id: int | None, event_
 def list_cases(
     current_state: str | None = Query(default=None),
     case_type: str | None = Query(default=None),
+    act_type: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     notary_id: int | None = Query(default=None),
     current_owner_user_id: int | None = Query(default=None),
     q: str | None = Query(default=None),
@@ -222,6 +225,12 @@ def list_cases(
         query = query.filter(Case.current_state == current_state)
     if case_type:
         query = query.filter(Case.case_type == case_type)
+    if act_type:
+        query = query.filter(Case.act_type == act_type)
+    if date_from is not None:
+        query = query.filter(Case.created_at >= datetime.combine(date_from, time.min))
+    if date_to is not None:
+        query = query.filter(Case.created_at <= datetime.combine(date_to, time.max))
     if notary_id:
         query = query.filter(Case.notary_id == notary_id)
     if current_owner_user_id:

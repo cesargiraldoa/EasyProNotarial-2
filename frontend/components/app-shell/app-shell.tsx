@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, LogOut, Menu, MoonStar, Search, SunMedium, UserRound } from "lucide-react";
-import { appNavigation } from "@/lib/navigation";
+import { appNavigation, type NavigationItem } from "@/lib/navigation";
 import { defaultBranding } from "@/lib/branding";
 import { getCurrentUser, logout, type CurrentUser } from "@/lib/api";
 import { LogoBadge } from "@/components/ui/logo-badge";
@@ -113,6 +113,7 @@ export function AppShell({ children }: AppShellProps) {
     "Crear Minuta": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "Actos / Plantillas": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
+    "Lotes (Next)": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
     "System Status": ["super_admin"],
     Configuración: ["super_admin", "admin_notary"],
     "Mi Perfil": ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
@@ -127,6 +128,7 @@ export function AppShell({ children }: AppShellProps) {
     "Crear Minuta": ["crear_minuta"],
     "Actos / Plantillas": ["actos_plantillas"],
     Lotes: ["lotes"],
+    "Lotes (Next)": ["lotes"],
     "System Status": ["system_status"],
     Configuración: ["configuracion"],
     "Mi Perfil": [],
@@ -197,19 +199,41 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <nav className="mt-10 space-y-2">
-            {visibleNavigation.map(({ label, href, icon: Icon }) => {
+            {visibleNavigation.map(({ label, href, icon: Icon, disabled }: NavigationItem) => {
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
               const navLabel = label;
+              const itemClassName = cn(
+                "ep-nav-item flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium leading-5 transition",
+                isSidebarCollapsed && "justify-center gap-0 px-0",
+                isActive && !disabled && "ep-nav-item-active",
+                disabled && "cursor-not-allowed opacity-60",
+              );
+              if (disabled) {
+                return (
+                  <div
+                    key={label}
+                    title={isSidebarCollapsed ? navLabel : undefined}
+                    aria-disabled="true"
+                    className={itemClassName}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {!isSidebarCollapsed ? (
+                      <span className="min-w-0">{navLabel}</span>
+                    ) : null}
+                    {!isSidebarCollapsed ? (
+                      <span className="ml-auto rounded-full border border-line bg-[var(--panel-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-secondary">
+                        Next
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              }
               return (
                 <Link
                   key={label}
                   href={href}
                   title={isSidebarCollapsed ? navLabel : undefined}
-                  className={cn(
-                    "ep-nav-item flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium leading-5 transition",
-                    isSidebarCollapsed && "justify-center gap-0 px-0",
-                    isActive && "ep-nav-item-active",
-                  )}
+                  className={itemClassName}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!isSidebarCollapsed ? <span className="min-w-0">{navLabel}</span> : null}

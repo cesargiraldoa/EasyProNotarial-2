@@ -85,6 +85,12 @@ function normalizePayload(state: UserEditorState): UserPayload {
   };
 }
 
+function notaryDisplayLabel(notary: NotaryRecord): string {
+  return [notary.notary_label, notary.municipality, notary.department]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function UsersAdminWorkspace() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -367,10 +373,9 @@ export function UsersAdminWorkspace() {
   }
 
   function notaryLabelFromId(id: number | null): string {
-    if (id === null) {
-      return "Global";
-    }
-    return notaries.find((notary) => notary.id === id)?.notary_label ?? "Sin notaría";
+    if (id === null) return "Global";
+    const notary = notaries.find((item) => item.id === id);
+    return notary ? notaryDisplayLabel(notary) : "Sin notaría";
   }
 
   function renderAccordion(userId: number | "new") {
@@ -485,7 +490,7 @@ export function UsersAdminWorkspace() {
                   <option value="">Sin notaría por defecto</option>
                   {notaries.map((notary) => (
                     <option key={notary.id} value={notary.id}>
-                      {notary.notary_label}
+                      {notaryDisplayLabel(notary)}
                     </option>
                   ))}
                 </select>
@@ -587,7 +592,7 @@ export function UsersAdminWorkspace() {
                       <option value="">{draftIsGlobal ? "Ámbito global" : "Selecciona una notaría"}</option>
                       {notaries.map((notary) => (
                         <option key={notary.id} value={notary.id}>
-                          {notary.notary_label}
+                          {notaryDisplayLabel(notary)}
                         </option>
                       ))}
                     </select>
@@ -701,7 +706,7 @@ export function UsersAdminWorkspace() {
               <option value="all">Todas las notarías</option>
               {notaries.map((notary) => (
                 <option key={notary.id} value={notary.id}>
-                  {notary.notary_label}
+                  {notaryDisplayLabel(notary)}
                 </option>
               ))}
             </select>

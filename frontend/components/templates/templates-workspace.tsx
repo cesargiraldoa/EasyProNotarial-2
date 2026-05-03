@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FileUp, Save } from "lucide-react";
 import { createTemplate, getTemplates, updateTemplate, type TemplateRecord } from "@/lib/document-flow";
 import { getNotaries } from "@/lib/api";
+import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 async function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -58,7 +59,7 @@ export function TemplatesWorkspace() {
       const [templateData, notaryData] = await Promise.all([getTemplates(), getNotaries()]);
       const safeTemplates = Array.isArray(templateData) ? templateData : [];
       setTemplates(safeTemplates);
-      setNotaries(Array.isArray(notaryData) ? notaryData.map((item) => ({ id: item.id, notary_label: item.notary_label || "Sin nombre", municipality: item.municipality || "Sin municipio" })) : []);
+      setNotaries(Array.isArray(notaryData) ? notaryData.map((item) => ({ id: item.id, notary_label: formatNotaryOptionLabel(item), municipality: item.municipality || "Sin municipio" })) : []);
       if (safeTemplates.length > 0) {
         selectTemplate(safeTemplates[0]);
       } else {
@@ -174,7 +175,7 @@ export function TemplatesWorkspace() {
             <label className="grid gap-2 text-sm font-medium text-primary">Tipo de documento<input value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Documento / minuta<input value={form.case_type} onChange={(event) => setForm((current) => ({ ...current, case_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Alcance<select value={form.scope_type} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="global">Global</option><option value="notary">Por notaría</option></select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Notaría<select value={form.notary_id} onChange={(event) => setForm((current) => ({ ...current, notary_id: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="">Todas</option>{notaries.map((item) => <option key={item.id} value={item.id}>{item.notary_label} · {item.municipality}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Notaría<select value={form.notary_id} onChange={(event) => setForm((current) => ({ ...current, notary_id: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="">Todas</option>{notaries.map((item) => <option key={item.id} value={item.id}>{item.notary_label}</option>)}</select></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Plantilla activa<select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.value === "active" }))} className="ep-select h-12 rounded-2xl px-4"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></label>
           </div>
           <label className="grid gap-2 text-sm font-medium text-primary">Descripción<textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} className="ep-textarea rounded-2xl px-4 py-3" /></label>

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $backendPath = Join-Path $root 'backend'
@@ -45,14 +45,14 @@ function Stop-ProcessesOnPort {
     )
 
     foreach ($port in $Ports) {
-        $pids = Get-PidsByPort -Port $port
-        foreach ($pid in $pids) {
+        $processIdsToStop = Get-PidsByPort -Port $port
+        foreach ($processIdToStop in $processIdsToStop) {
             try {
-                Stop-Process -Id $pid -Force -ErrorAction Stop
-                Write-Host "Port $port freed by stopping PID $pid"
+                Stop-Process -Id $processIdToStop -Force -ErrorAction Stop
+                Write-Host "Port $port freed by stopping PID $processIdToStop"
             }
             catch {
-                Write-Host ("Could not stop PID {0} on port {1}: {2}" -f $pid, $port, $_.Exception.Message)
+                Write-Host ("Could not stop PID {0} on port {1}: {2}" -f $processIdToStop, $port, $_.Exception.Message)
             }
         }
     }

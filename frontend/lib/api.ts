@@ -243,6 +243,9 @@ export type CaseDetail = CaseRecord & {
 export type CaseFilters = {
   current_state?: string;
   case_type?: string;
+  act_type?: string;
+  date_from?: string;
+  date_to?: string;
   notary_id?: string;
   current_owner_user_id?: string;
   q?: string;
