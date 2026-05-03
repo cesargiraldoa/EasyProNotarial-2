@@ -40,7 +40,7 @@ const asBoolean = (value: unknown, fallback = false) => (typeof value === "boole
 const asArray = <T>(value: unknown, mapper: (item: unknown) => T): T[] => Array.isArray(value) ? value.map(mapper) : [];
 
 export type TemplateRequiredRole = { id: number; role_code: string; label: string; is_required: boolean; step_order: number };
-export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
+export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; table_master?: string | null; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
 export type TemplateRecord = { id: number; name: string; slug: string; case_type: string; document_type: string; description?: string | null; scope_type: string; notary_id?: number | null; notary_label?: string | null; is_active: boolean; source_filename?: string | null; storage_path?: string | null; internal_variable_map_json: string; required_roles: TemplateRequiredRole[]; fields: TemplateField[] };
 export type PersonRecord = { id: number; document_type: string; document_number: string; full_name: string; sex?: string | null; nationality?: string | null; marital_status?: string | null; profession?: string | null; municipality?: string | null; is_transient: boolean; phone?: string | null; address?: string | null; email?: string | null; metadata_json?: string };
 export type PersonPayload = Omit<PersonRecord, "id">;
@@ -62,7 +62,7 @@ function normalizeTemplateRole(value: unknown): TemplateRequiredRole {
 }
 function normalizeTemplateField(value: unknown): TemplateField {
   const item = (value ?? {}) as Record<string, unknown>;
-  return { id: asNumber(item.id), field_code: asString(item.field_code), label: asString(item.label), field_type: asString(item.field_type, "text"), section: asString(item.section, "acto"), is_required: asBoolean(item.is_required, true), options_json: asNullableString(item.options_json), placeholder_key: asNullableString(item.placeholder_key), help_text: asNullableString(item.help_text), step_order: asNumber(item.step_order, 1) };
+  return { id: asNumber(item.id), field_code: asString(item.field_code), label: asString(item.label), field_type: asString(item.field_type, "text"), section: asString(item.section, "acto"), is_required: asBoolean(item.is_required, true), table_master: asNullableString(item.table_master), options_json: asNullableString(item.options_json), placeholder_key: asNullableString(item.placeholder_key), help_text: asNullableString(item.help_text), step_order: asNumber(item.step_order, 1) };
 }
 function normalizeTemplate(value: unknown): TemplateRecord {
   const item = (value ?? {}) as Record<string, unknown>;
