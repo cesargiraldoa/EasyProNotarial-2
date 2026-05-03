@@ -7,7 +7,7 @@ import { addInternalNote, approveDocumentCase, getDocumentCase, uploadFinalSigne
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 
-const tabs = ["Documento", "Diligenciamiento", "Historial"] as const;
+const tabs = ["Minuta", "Diligenciamiento", "Historial"] as const;
 
 const stateLabels: Record<string, string> = {
   borrador: "Borrador",
@@ -65,7 +65,7 @@ async function generateFromTemplate(caseId: number, actData: Record<string, stri
 
 export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; initialTab?: string }) {
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
-  const [tab, setTab] = useState<(typeof tabs)[number]>("Documento");
+  const [tab, setTab] = useState<(typeof tabs)[number]>("Minuta");
   const [finalFile, setFinalFile] = useState<File | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
   const [internalNote, setInternalNote] = useState("");
@@ -80,7 +80,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
-      setError("El identificador del documento no es válido.");
+      setError("El identificador de la minuta no es válido.");
       setIsLoading(false);
       return;
     }
@@ -93,7 +93,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     } else if (initialTab === "trazabilidad") {
       setTab("Historial");
     } else {
-      setTab("Documento");
+      setTab("Minuta");
     }
   }, [initialTab]);
 
@@ -138,9 +138,9 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     try {
       const result = await generateFromTemplate(caseId, actData);
       await load();
-      setFeedback(result.message || "Documento generado correctamente.");
+      setFeedback(result.message || "Minuta generada correctamente.");
     } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "No fue posible generar el documento.");
+      setError(issue instanceof Error ? issue.message : "No fue posible generar la minuta.");
     } finally {
       setIsGenerating(false);
     }
@@ -148,18 +148,18 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
   async function handleFinalUpload() {
     if (!finalFile) {
-      setError("Selecciona un archivo antes de cargar el documento definitivo.");
+      setError("Selecciona un archivo antes de cargar la minuta definitiva.");
       return;
     }
     setError(null);
     setFeedback(null);
     setIsUploading(true);
     try {
-      await uploadFinalSigned(caseId, finalFile.name, await fileToBase64(finalFile), "Documento definitivo cargado desde detalle.");
+      await uploadFinalSigned(caseId, finalFile.name, await fileToBase64(finalFile), "Minuta definitiva cargada desde detalle.");
       await load();
-      setFeedback("Documento definitivo cargado.");
+      setFeedback("Minuta definitiva cargada.");
     } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "No fue posible cargar el documento definitivo.");
+      setError(issue instanceof Error ? issue.message : "No fue posible cargar la minuta definitiva.");
     } finally {
       setIsUploading(false);
     }
@@ -278,7 +278,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   }
 
   if (!caseDetail) {
-    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos del documento todavía.</div>;
+    return <div className="ep-card rounded-[2rem] p-6 text-secondary">Sin datos de la minuta todavía.</div>;
   }
 
   return (
@@ -337,17 +337,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         </div>
 
         <div className="mt-6">
-          {tab === "Documento" ? (
+          {tab === "Minuta" ? (
             <div className="space-y-5">
               <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
                 {caseDetail.final_signed_uploaded
-                  ? "El documento final ya está cargado."
+                  ? "La minuta final ya está cargada."
                   : caseDetail.current_state === "borrador"
-                    ? "Falta diligenciar el formulario para generar el Word."
+                    ? "Falta diligenciar el formulario para generar el Word de la minuta."
                     : caseDetail.current_state === "revision_cliente"
-                      ? "El documento está esperando revisión del cliente."
+                      ? "La minuta está esperando revisión del cliente."
                       : caseDetail.current_state === "revision_aprobador" || caseDetail.current_state === "revision_notario"
-                        ? "El documento está listo para revisión y decisión."
+                        ? "La minuta está lista para revisión y decisión."
                         : "Continúa el flujo desde aquí."}
               </div>
               <section className="space-y-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
@@ -493,7 +493,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-primary">Documento PDF final firmado</p>
+                <p className="text-sm font-semibold text-primary">Minuta PDF final firmada</p>
                 <label className="ep-card-muted flex items-center justify-between gap-3 rounded-2xl px-4 py-4 text-sm text-secondary">
                   <span className="inline-flex items-center gap-2">
                     <Upload className="h-4 w-4 text-primary" />
