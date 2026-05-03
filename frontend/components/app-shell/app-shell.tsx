@@ -98,8 +98,8 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   const userName = currentUser?.full_name ?? "Operación EasyPro";
-  const userSubtitle = currentUser?.roles?.[0] ?? "Sesión activa";
-  const normalizedRoles = (currentUser?.role_codes ?? []).map((role) => role.toLowerCase());
+  const userSubtitle = currentUser?.role_codes?.[0] ?? currentUser?.roles?.[0] ?? "Sesión activa";
+  const normalizedRoles = Array.from(new Set([...(currentUser?.role_codes ?? []), ...(currentUser?.roles ?? [])].map((role) => role.toLowerCase())));
   const recognizedRoles = new Set(["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]);
   const hasRecognizedRole = normalizedRoles.some((role) => recognizedRoles.has(role));
 

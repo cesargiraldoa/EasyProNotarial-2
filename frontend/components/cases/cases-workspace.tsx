@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Filter, RefreshCw } from "lucide-react";
-import { getCaseFilters, getCases, getCurrentUser, type CaseFilterOptions, type CaseFilters, type CaseRecord } from "@/lib/api";
+import { getCaseFilters, getCases, getCurrentUser, type CaseFilterOptions, type CaseFilters, type CaseRecord, type CurrentUser } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 
 const emptyFilters: CaseFilters = {
@@ -22,24 +22,32 @@ function statusSummary(cases: CaseRecord[]) {
   return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
 }
 
-function suggestedAction(item: CaseRecord) {
-  if (item.final_signed_uploaded) {
-    return "Descargar Word";
+function collectRoleCodes(user: CurrentUser | null) {
+  return Array.from(new Set([...(user?.role_codes ?? []), ...(user?.roles ?? [])].map((role) => role.toLowerCase())));
+}
+
+function suggestedAction(item: CaseRecord, roleCodes: string[]) {
+  const roles = new Set(roleCodes);
+  if (roles.has("super_admin")) {
+    return "Ver detalle / auditar";
   }
-  if (item.current_state === "borrador") {
-    return "Continuar diligenciamiento";
+  if (roles.has("protocolist")) {
+    if (item.final_signed_uploaded) {
+      return "Descargar Word";
+    }
+    if (item.current_state === "borrador" || item.current_state === "en_diligenciamiento") {
+      return "Continuar diligenciamiento";
+    }
+    if (item.current_state === "revision_cliente" || item.current_state === "ajustes_solicitados" || item.current_state === "revision_aprobador" || item.current_state === "revision_notario" || item.current_state === "devuelto_aprobador" || item.current_state === "rechazado_notario") {
+      return "Corregir según observaciones";
+    }
+    return "Generar Word";
   }
-  if (item.current_state === "en_diligenciamiento" || item.current_state === "revision_cliente" || item.current_state === "ajustes_solicitados") {
-    return "Continuar diligenciamiento";
-  }
-  if (item.current_state === "revision_aprobador" || item.current_state === "revision_notario") {
-    return "Revisar minuta";
-  }
-  if (item.current_state === "rechazado_notario" || item.current_state === "devuelto_aprobador") {
-    return "Continuar diligenciamiento";
-  }
-  if (item.current_state === "aprobado_notario" || item.current_state === "generado") {
-    return "Descargar Word";
+  if (roles.has("approver") || roles.has("notary") || roles.has("titular_notary") || roles.has("substitute_notary") || roles.has("admin_notary")) {
+    if (item.current_state === "revision_aprobador" || item.current_state === "revision_notario") {
+      return "Revisar minuta";
+    }
+    return "Aprobar / observar";
   }
   return "Ver detalle";
 }
@@ -48,7 +56,7 @@ export function CasesWorkspace() {
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [filters, setFilters] = useState<CaseFilters>(emptyFilters);
   const [filterOptions, setFilterOptions] = useState<CaseFilterOptions>({ case_types: [], act_types: [], states: [], owners: [], notaries: [] });
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,9 +88,9 @@ export function CasesWorkspace() {
   async function loadCurrentUser() {
     try {
       const user = await getCurrentUser();
-      setIsSuperAdmin(user?.roles?.includes("super_admin") ?? false);
+      setCurrentUser(user);
     } catch {
-      setIsSuperAdmin(false);
+      setCurrentUser(null);
     }
   }
 
@@ -95,6 +103,8 @@ export function CasesWorkspace() {
   const stateStats = useMemo(() => statusSummary(cases), [cases]);
   const clientReviewCount = useMemo(() => cases.filter((item) => item.requires_client_review).length, [cases]);
   const finalSignedCount = useMemo(() => cases.filter((item) => item.final_signed_uploaded).length, [cases]);
+  const normalizedRoleCodes = useMemo(() => collectRoleCodes(currentUser), [currentUser]);
+  const isSuperAdmin = normalizedRoleCodes.includes("super_admin");
 
   const ownerOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -194,7 +204,7 @@ export function CasesWorkspace() {
                   <div className="grid gap-2 text-sm text-secondary lg:min-w-[230px]">
                     <span className="ep-badge rounded-full px-3 py-1 font-semibold text-primary">{item.current_state}</span>
                     <span>Última actualización: {formatDateTime(item.updated_at)}</span>
-                    <span>Acción sugerida: {suggestedAction(item)}</span>
+                    <span>Acción sugerida: {suggestedAction(item, normalizedRoleCodes)}</span>
                     <span>Firmado final: {item.final_signed_uploaded ? "Cargado" : "Pendiente"}</span>
                   </div>
                 </div>
