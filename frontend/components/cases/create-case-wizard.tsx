@@ -1,8 +1,9 @@
 ﻿"use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, BadgeCheck, CheckCircle2 } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import {
@@ -10,15 +11,16 @@ import {
   getActiveTemplates,
   saveCaseActData,
   type DocumentFlowCase,
+  type TemplateField,
   type TemplateRecord,
 } from "@/lib/document-flow";
+import { getEasyPro1CatalogOptions } from "@/lib/easypro1-notarial-catalogs";
 import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/lib/api";
 
 const steps = [
   "Plantilla",
-  "Documento / minuta",
+  "Datos de la minuta",
   "Diligenciar",
-  "Revisar y generar Word",
 ];
 const documentTypes = ["CC", "CE", "TI", "PP", "NIT"];
 const sexOptions = ["F", "M", "No especifica"];
@@ -158,10 +160,360 @@ function parseTemplateFieldOptions(optionsJson: string | null | undefined): Sele
   }
 }
 
+function normalizeCatalogText(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesAnyCatalogSource(sources: string[], patterns: string[]) {
+  return patterns.some((pattern) => sources.some((source) => source.includes(pattern)));
+}
+
+function inferEasyPro1CatalogName(field: TemplateField): string | null {
+  const sources = [field.table_master, field.field_code, field.label, field.section]
+    .map((value) => normalizeCatalogText(safeString(value)))
+    .filter(Boolean);
+
+  const rules: Array<{ catalog: string; patterns: string[] }> = [
+    { catalog: "TIPO DE DOCUMENTO", patterns: ["TIPO DE DOCUMENTO", "TIPO DOCUMENTO"] },
+    { catalog: "ESTADO CIVIL", patterns: ["ESTADO CIVIL"] },
+    { catalog: "NACIONALIDAD", patterns: ["NACIONALIDAD"] },
+    { catalog: "SEXO", patterns: ["SEXO"] },
+    { catalog: "GENERO", patterns: ["GENERO", "HOMBRE O MUJER"] },
+    { catalog: "DE TRANSITO", patterns: ["DE TRANSITO", "TRANSITO", "ESTA DE TRANSITO"] },
+    { catalog: "SI O NO", patterns: ["SI O NO", "SELECCIONE SI", "ACEPTA", "TIENE INMUEBLE", "TIENE OTRO BIEN", "CUMPLE", "QUEDA AFECTADO", "AFECTACION", "INMUEBLE SERA SU CASA", "CASA DE HABITACION", "NOTIFICACION ELECTRONICA"] },
+    { catalog: "MES", patterns: ["MES"] },
+    { catalog: "DÍAS", patterns: ["DIA", "DIAS"] },
+    { catalog: "CUOTA INICIAL", patterns: ["CUOTA INICIAL", "ORIGEN CUOTA"] },
+    { catalog: "PATRIMONIO DE FAMILIA", patterns: ["PATRIMONIO DE FAMILIA", "PATRIMONIO"] },
+    { catalog: "PROTOCOLISTA", patterns: ["PROTOCOLISTA"] },
+    { catalog: "MUNICIPIO", patterns: ["MUNICIPIO"] },
+    { catalog: "PAIS", patterns: ["PAIS"] },
+    { catalog: "PADRES", patterns: ["PADRES", "PADRE O MADRE"] },
+    { catalog: "NOTARIO", patterns: ["NOTARIO"] },
+  ];
+
+  for (const rule of rules) {
+    if (matchesAnyCatalogSource(sources, rule.patterns)) {
+      return rule.catalog;
+    }
+  }
+
+  return null;
+}
+
+function resolveCatalogOptions(field: TemplateField): SelectOption[] {
+  const explicitOptions = parseTemplateFieldOptions(field.options_json);
+  if (explicitOptions.length > 0) {
+    return explicitOptions;
+  }
+
+  const inferredCatalogName = field.table_master || inferEasyPro1CatalogName(field);
+  if (!inferredCatalogName) {
+    return [];
+  }
+
+  return getEasyPro1CatalogOptions(inferredCatalogName);
+}
+
+function normalizeSelectValue(value: string) {
+  return normalizeCatalogText(value);
+}
+
+function resolveDemoSelectValue(targetValue: string, options: SelectOption[]) {
+  if (!options.length) {
+    return "";
+  }
+
+  const normalizedTarget = normalizeSelectValue(targetValue);
+  if (!normalizedTarget) {
+    return options[0]?.value ?? "";
+  }
+
+  const exactMatch = options.find((option) => normalizeSelectValue(option.value) === normalizedTarget || normalizeSelectValue(option.label) === normalizedTarget);
+  if (exactMatch) {
+    return exactMatch.value;
+  }
+
+  const includesMatch = options.find((option) => {
+    const optionValue = normalizeSelectValue(option.value);
+    const optionLabel = normalizeSelectValue(option.label);
+    return optionValue.includes(normalizedTarget) || optionLabel.includes(normalizedTarget) || normalizedTarget.includes(optionValue) || normalizedTarget.includes(optionLabel);
+  });
+  return includesMatch?.value ?? options[0]?.value ?? "";
+}
+
+function normalizeMoneyFieldCode(value: string) {
+  return safeString(value)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function toMasculineSpanishWords(value: string) {
+  return value
+    .replace(/\bVEINTIUNO\b/g, "VEINTIUN")
+    .replace(/\bUNO\b/g, "UN");
+}
+
+function convertUnderThousandToSpanish(value: number) {
+  const units = [
+    "",
+    "UNO",
+    "DOS",
+    "TRES",
+    "CUATRO",
+    "CINCO",
+    "SEIS",
+    "SIETE",
+    "OCHO",
+    "NUEVE",
+  ];
+  const teens = [
+    "DIEZ",
+    "ONCE",
+    "DOCE",
+    "TRECE",
+    "CATORCE",
+    "QUINCE",
+    "DIECISEIS",
+    "DIECISIETE",
+    "DIECIOCHO",
+    "DIECINUEVE",
+  ];
+  const tens = [
+    "",
+    "",
+    "VEINTE",
+    "TREINTA",
+    "CUARENTA",
+    "CINCUENTA",
+    "SESENTA",
+    "SETENTA",
+    "OCHENTA",
+    "NOVENTA",
+  ];
+  const hundreds = [
+    "",
+    "CIENTO",
+    "DOSCIENTOS",
+    "TRESCIENTOS",
+    "CUATROCIENTOS",
+    "QUINIENTOS",
+    "SEISCIENTOS",
+    "SETECIENTOS",
+    "OCHOCIENTOS",
+    "NOVECIENTOS",
+  ];
+
+  if (value === 0) {
+    return "";
+  }
+  if (value === 100) {
+    return "CIEN";
+  }
+
+  const parts: string[] = [];
+  const hundredPart = Math.floor(value / 100);
+  const remainder = value % 100;
+
+  if (hundredPart > 0) {
+    parts.push(hundreds[hundredPart] ?? "");
+  }
+
+  if (remainder > 0) {
+    if (remainder < 10) {
+      parts.push(units[remainder] ?? "");
+    } else if (remainder < 20) {
+      parts.push(teens[remainder - 10] ?? "");
+    } else if (remainder < 30) {
+      if (remainder === 20) {
+        parts.push("VEINTE");
+      } else {
+        const unitWord = units[remainder % 10] ?? "";
+        parts.push(`VEINTI${unitWord.toLowerCase()}`.toUpperCase());
+      }
+    } else {
+      const tenPart = Math.floor(remainder / 10);
+      const unitPart = remainder % 10;
+      const tenWord = tens[tenPart] ?? "";
+      if (unitPart === 0) {
+        parts.push(tenWord);
+      } else {
+        parts.push(`${tenWord} Y ${units[unitPart] ?? ""}`);
+      }
+    }
+  }
+
+  return parts.filter(Boolean).join(" ").trim();
+}
+
+function numberToColombianPesosWords(value: string): string {
+  const cleaned = safeString(value).replace(/[$\s.,]/g, "");
+  if (!cleaned || !/^\d+$/.test(cleaned)) {
+    return "";
+  }
+
+  const normalizedDigits = cleaned.replace(/^0+(?=\d)/, "");
+  if (normalizedDigits === "0") {
+    return "CERO PESOS MONEDA CORRIENTE";
+  }
+
+  const groups: string[] = [];
+  for (let index = normalizedDigits.length; index > 0; index -= 3) {
+    groups.unshift(normalizedDigits.slice(Math.max(0, index - 3), index));
+  }
+
+  const scaleNames = [
+    { singular: "", plural: "" },
+    { singular: "MIL", plural: "MIL" },
+    { singular: "MILLON", plural: "MILLONES" },
+    { singular: "MIL MILLONES", plural: "MIL MILLONES" },
+    { singular: "BILLON", plural: "BILLONES" },
+    { singular: "MIL BILLONES", plural: "MIL BILLONES" },
+    { singular: "TRILLON", plural: "TRILLONES" },
+  ];
+
+  const words = groups
+    .map((group, index) => {
+      const groupValue = Number(group);
+      if (!groupValue) {
+        return "";
+      }
+
+      const scaleIndex = groups.length - index - 1;
+      const scale = scaleNames[scaleIndex];
+      const baseWords = convertUnderThousandToSpanish(groupValue);
+
+      if (scaleIndex === 0) {
+        return toMasculineSpanishWords(baseWords);
+      }
+
+      if (scaleIndex === 1 || scaleIndex === 3 || scaleIndex === 5) {
+        if (groupValue === 1) {
+          return scale?.singular ?? "";
+        }
+        return `${toMasculineSpanishWords(baseWords)} ${scale?.singular ?? ""}`.trim();
+      }
+
+      if (groupValue === 1) {
+        return `UN ${scale?.singular ?? ""}`.trim();
+      }
+
+      return `${toMasculineSpanishWords(baseWords)} ${scale?.plural ?? ""}`.trim();
+    })
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  if (!words) {
+    return "";
+  }
+
+  return `${words} PESOS MONEDA CORRIENTE`.toUpperCase();
+}
+
+function resolveDerivedMoneyField(fieldCode: string, allFieldCodes: string[]): string | null {
+  const normalizedFieldCode = normalizeMoneyFieldCode(fieldCode);
+  if (!normalizedFieldCode) {
+    return null;
+  }
+
+  const normalizedFieldMap = new Map<string, string>();
+  for (const code of allFieldCodes) {
+    const normalizedCode = normalizeMoneyFieldCode(code);
+    if (normalizedCode && !normalizedFieldMap.has(normalizedCode)) {
+      normalizedFieldMap.set(normalizedCode, code);
+    }
+  }
+
+  const explicitMappings: Record<string, string[]> = {
+    valor_apartamento_en_letras: ["valor_de_la_venta_en_numeros", "en_numeros_valor_de_la_venta"],
+    en_letras_valor_de_la_venta: ["en_numeros_valor_de_la_venta", "valor_de_la_venta_en_numeros"],
+    valor_del_acto_de_la_hipoteca_en_letras: ["valor_del_acto_de_la_hipoteca", "numeros_valor_hipoteca"],
+    letras_valor_hipoteca: ["numeros_valor_hipoteca", "valor_del_acto_de_la_hipoteca"],
+    cuota_inicial_en_letras: ["cuota_inicial_en_numeros", "en_numeros_cuota_inicial"],
+    en_letras_cuota_inicial: ["en_numeros_cuota_inicial", "cuota_inicial_en_numeros"],
+    valor_del_credito_en_letras: ["valor_del_credito_en_numeros"],
+  };
+
+  const explicitSources = explicitMappings[normalizedFieldCode];
+  if (Array.isArray(explicitSources)) {
+    for (const sourceCode of explicitSources) {
+      const actualSourceCode = normalizedFieldMap.get(sourceCode);
+      if (actualSourceCode) {
+        return actualSourceCode;
+      }
+    }
+  }
+
+  if (!normalizedFieldCode.includes("letras")) {
+    return null;
+  }
+
+  const genericCandidates = [
+    normalizedFieldCode.replace(/_en_letras\b/g, "_en_numeros"),
+    normalizedFieldCode.replace(/\ben_letras\b/g, "en_numeros"),
+    normalizedFieldCode.replace(/letras\b/g, "numeros"),
+  ];
+
+  for (const candidate of genericCandidates) {
+    const actualCandidate = normalizedFieldMap.get(candidate);
+    if (actualCandidate) {
+      return actualCandidate;
+    }
+  }
+
+  return null;
+}
+
+function hydrateDerivedMoneyFields(
+  data: Record<string, string>,
+  fields: Array<{ field_code: string }>,
+) {
+  const fieldCodes = fields.map((field) => field.field_code);
+  if (fieldCodes.length === 0) {
+    return data;
+  }
+
+  let nextData = data;
+  for (const derivedFieldCode of fieldCodes) {
+    const sourceFieldCode = resolveDerivedMoneyField(derivedFieldCode, fieldCodes);
+    if (!sourceFieldCode) {
+      continue;
+    }
+
+    const derivedValue = numberToColombianPesosWords(nextData[sourceFieldCode] ?? "");
+    if ((nextData[derivedFieldCode] ?? "") === derivedValue) {
+      continue;
+    }
+
+    if (nextData === data) {
+      nextData = { ...data };
+    }
+    nextData[derivedFieldCode] = derivedValue;
+  }
+
+  return nextData;
+}
+
 export function CreateCaseWizard() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord | null>(null);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
   const [notaries, setNotaries] = useState<SelectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
@@ -200,6 +552,17 @@ export function CreateCaseWizard() {
     setActData(buildActDataFromTemplate(selectedTemplate));
   }, [selectedTemplate]);
 
+  const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
+  const templateFieldCodes = useMemo(() => templateFields.map((field) => field.field_code), [templateFields]);
+
+  useEffect(() => {
+    if (!selectedTemplate || templateFieldCodes.length === 0) {
+      return;
+    }
+
+    setActData((current) => hydrateDerivedMoneyFields(current, templateFields));
+  }, [selectedTemplate, templateFields, templateFieldCodes]);
+
   useEffect(() => {
     if (!selectedTemplate) {
       actDataReadyRef.current = false;
@@ -226,7 +589,23 @@ export function CreateCaseWizard() {
     if (source === "user") {
       cancelDemoFill();
     }
-    setActData((current) => ({ ...current, [fieldCode]: value }));
+    setActData((current) => {
+      const nextData = { ...current, [fieldCode]: value };
+      const normalizedFieldCode = normalizeMoneyFieldCode(fieldCode);
+
+      if (templateFieldCodes.length > 0 && normalizedFieldCode) {
+        for (const targetFieldCode of templateFieldCodes) {
+          const sourceFieldCode = resolveDerivedMoneyField(targetFieldCode, templateFieldCodes);
+          if (!sourceFieldCode || normalizeMoneyFieldCode(sourceFieldCode) !== normalizedFieldCode) {
+            continue;
+          }
+
+          nextData[targetFieldCode] = numberToColombianPesosWords(nextData[sourceFieldCode] ?? "");
+        }
+      }
+
+      return nextData;
+    });
   }
 
   function autoFillDemo() {
@@ -271,10 +650,9 @@ export function CreateCaseWizard() {
       }
 
       const fieldCode = fieldCodes[fieldIndex];
+      const field = templateFields.find((item) => item.field_code === fieldCode) ?? null;
+      const options = field ? resolveCatalogOptions(field) : [];
       const targetValue = demoData[fieldCode] ?? "";
-      let typedValue = "";
-      let charIndex = 0;
-
       const scheduleNextField = () => {
         if (runId !== demoFillRunIdRef.current) {
           return;
@@ -286,6 +664,18 @@ export function CreateCaseWizard() {
         const nextFieldTimer = window.setTimeout(() => scheduleField(fieldIndex + 1), 80);
         demoFillTimeoutsRef.current.push(nextFieldTimer);
       };
+
+      if (options.length > 0) {
+        const selectedValue = resolveDemoSelectValue(targetValue, options);
+        if (selectedValue) {
+          updateActField(fieldCode, selectedValue, "demo");
+        }
+        scheduleNextField();
+        return;
+      }
+
+      let typedValue = "";
+      let charIndex = 0;
 
       const typeNextChar = () => {
         if (runId !== demoFillRunIdRef.current) {
@@ -376,8 +766,63 @@ export function CreateCaseWizard() {
   }
 
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
-  const templateFields = useMemo(() => sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []), [selectedTemplate]);
-  const showAside = step >= 2;
+  const normalizedTemplateSearch = templateSearch.trim().toLowerCase();
+  const templateTypeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: Array<{ value: string; label: string }> = [];
+
+    for (const template of templates) {
+      const typeLabel = safeString(template.document_type).trim() || "Sin tipo definido";
+      if (seen.has(typeLabel)) {
+        continue;
+      }
+      seen.add(typeLabel);
+      options.push({
+        value: typeLabel,
+        label: typeLabel,
+      });
+    }
+
+    return options;
+  }, [templates]);
+  const filteredTemplates = useMemo(() => {
+    const query = normalizedTemplateSearch;
+
+    return templates.filter((template) => {
+      const typeLabel = safeString(template.document_type).trim() || "Sin tipo definido";
+      const matchesType = templateTypeFilter === "all" || typeLabel === templateTypeFilter;
+      if (!matchesType) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const searchableValues = [
+        template.name,
+        template.document_type,
+        template.description,
+        template.slug,
+        template.source_filename,
+      ]
+        .map((value) => safeString(value).toLowerCase())
+        .join(" ");
+
+      const normalizedSearchableValues = searchableValues.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalizedSearchableValues.includes(query.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+    });
+  }, [normalizedTemplateSearch, templateTypeFilter, templates]);
+  const selectedTemplateMatchesFilter = Boolean(
+    selectedTemplate && filteredTemplates.some((template) => template.id === selectedTemplate.id),
+  );
+  const selectedNotaryLabel = useMemo(() => {
+    if (!generalForm.notary_id) {
+      return "Notaría asignada";
+    }
+
+    return notaries.find((item) => item.value === generalForm.notary_id)?.label || "Notaría asignada";
+  }, [generalForm.notary_id, notaries]);
   const generalManagerFields = useMemo<Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }>>(() => [
     { key: "current_owner_user_id", label: "Responsable actual", value: generalForm.current_owner_user_id },
     { key: "protocolist_user_id", label: "Protocolista", value: generalForm.protocolist_user_id },
@@ -385,9 +830,67 @@ export function CreateCaseWizard() {
     { key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id },
   ], [generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.approver_user_id, generalForm.titular_notary_user_id]);
 
+  function renderTemplateSummary() {
+    if (!selectedTemplate) {
+      return (
+        <div className="ep-card-soft rounded-[1.5rem] p-5">
+          <p className="text-sm font-semibold text-primary">Plantilla seleccionada</p>
+          <p className="mt-2 text-sm text-secondary">Selecciona una plantilla para ver aquí el resumen destacado antes de continuar.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-[1.75rem] border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-[var(--panel)] to-[var(--panel-soft)] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+              <BadgeCheck className="h-4 w-4" />
+              Seleccionada
+            </div>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-secondary">Plantilla seleccionada</p>
+              <h3 className="mt-2 text-xl font-semibold text-primary">{selectedTemplate.name}</h3>
+            </div>
+            <p className="max-w-3xl text-sm leading-6 text-secondary">
+              Esta plantilla define el formulario dinámico que diligenciarás en el siguiente paso.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/80 px-4 py-2 text-sm font-semibold text-primary">
+            <CheckCircle2 className="h-4 w-4" />
+            Plantilla seleccionada
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--panel)] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-secondary">Minuta</p>
+            <p className="mt-2 text-sm font-semibold text-primary">{selectedTemplate.name}</p>
+          </div>
+          <div className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--panel)] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-secondary">Tipo de minuta</p>
+            <p className="mt-2 text-sm font-semibold text-primary">{selectedTemplate.document_type ?? "Sin definir"}</p>
+          </div>
+          <div className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--panel)] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-secondary">Campos detectados</p>
+            <p className="mt-2 text-sm font-semibold text-primary">{selectedTemplate.fields?.length ?? 0} campos configurados</p>
+          </div>
+          <div className="rounded-[1.1rem] border border-[var(--line)] bg-[var(--panel)] px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-secondary">Intervinientes</p>
+            <p className="mt-2 text-sm font-semibold text-primary">{selectedTemplate.required_roles?.length ?? 0} roles requeridos</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function updateGeneralManager(field: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id", value: string) {
     setGeneralForm((current) => ({ ...current, [field]: value }));
     setExpandedGeneralField(null);
+  }
+
+  function clearTemplateFilters() {
+    setTemplateSearch("");
+    setTemplateTypeFilter("all");
   }
 
   async function handleCreateCase() {
@@ -410,25 +913,29 @@ export function CreateCaseWizard() {
     return created;
   }
 
-  async function continueStep() {
+  async function handlePrimaryAction() {
     setError(null);
     setFeedback(null);
     setIsSaving(true);
     try {
-      let activeCase = caseDetail;
       if (step === 0) {
         if (!selectedTemplate) {
           throw new Error("Selecciona una plantilla antes de continuar.");
         }
+        setStep((current) => Math.min(current + 1, steps.length - 1));
+        return;
       }
-      if (step === 1 && !activeCase) {
-        activeCase = await handleCreateCase();
+      if (step === 1) {
+        await handleCreateCase();
+        setStep((current) => Math.min(current + 1, steps.length - 1));
+        return;
       }
-      if (step === 2 && activeCase) {
-        const updated = await saveCaseActData(activeCase.id, { data_json: JSON.stringify(actData) });
+      if (step === 2) {
+        if (!caseDetail) {
+          throw new Error("Primero debes crear la minuta para guardar y generar el Word.");
+        }
+        const updated = await saveCaseActData(caseDetail.id, { data_json: JSON.stringify(actData) });
         setCaseDetail(updated);
-      }
-      if (step === 3 && caseDetail) {
         const base = process.env.NEXT_PUBLIC_API_URL ?? "";
         const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
         const response = await fetch(`${base}/api/v1/document-flow/cases/${caseDetail.id}/generate-from-template`, {
@@ -444,9 +951,10 @@ export function CreateCaseWizard() {
           const text = await response.text();
           throw new Error(text);
         }
-        setFeedback("Documento generado correctamente. Puedes descargarlo desde el detalle de la minuta.");
+        setFeedback("Minuta guardada y Word generado. Abriendo detalle de la minuta...");
+        router.replace(`/dashboard/casos/${caseDetail.id}`);
+        return;
       }
-      setStep((current) => Math.min(current + 1, steps.length - 1));
     } catch (stepError) {
       setError(stepError instanceof Error ? stepError.message : "No fue posible avanzar en el wizard.");
     } finally {
@@ -460,16 +968,16 @@ export function CreateCaseWizard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">
-              {caseDetail?.internal_case_number ? `Documento / minuta · ${caseDetail.internal_case_number}` : "Documento / minuta"}
+              {caseDetail?.internal_case_number ? `Minuta · ${caseDetail.internal_case_number}` : "Minuta"}
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">Crear documento desde una plantilla Word</h1>
+            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">Crear minuta desde plantilla Word</h1>
             <p className="mt-3 max-w-3xl text-base leading-7 text-secondary">
-              Escoge una plantilla, diligencia el formulario dinámico que el sistema detecta y genera el Word sin salir de este flujo.
+              Escoge una plantilla, completa los datos de la minuta, diligencia el formulario dinámico y guarda para generar el Word sin salir de este flujo.
             </p>
           </div>
           {caseDetail ? (
             <Link href={`/dashboard/casos/${caseDetail.id}`} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white">
-              Abrir detalle del documento <ArrowRight className="h-4 w-4" />
+              Abrir detalle de la minuta <ArrowRight className="h-4 w-4" />
             </Link>
           ) : null}
         </div>
@@ -490,7 +998,7 @@ export function CreateCaseWizard() {
         </div>
       </section>
 
-      <section className={`grid gap-6 ${showAside ? "xl:grid-cols-[minmax(0,1.2fr)_360px]" : "xl:grid-cols-1"}`}>
+      <section className="space-y-6">
         <div className="ep-card z-0 rounded-[2rem] p-6 space-y-6">
           <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
             La plantilla seleccionada define los campos visibles. Si cambias de plantilla, el formulario cambia con ella.
@@ -504,43 +1012,131 @@ export function CreateCaseWizard() {
               {step === 0 ? (
                 <div className="space-y-6">
                   <h2 className="text-2xl font-semibold text-primary">1. Seleccionar plantilla</h2>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {templates.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedTemplate(item)}
-                        className={`rounded-[1.5rem] border p-5 text-left transition-colors ${
-                          selectedTemplate?.id === item.id
-                            ? "border-primary/40 bg-primary/8"
-                            : "border-[var(--line)] hover:border-primary/20"
-                        }`}
-                      >
-                        <p className="text-lg font-semibold text-primary">{item.name}</p>
-                        <p className="mt-1 text-sm text-secondary">Documento / minuta: {item.document_type}</p>
-                        {item.description && (
-                          <p className="mt-2 text-xs text-secondary">{item.description}</p>
-                        )}
-                        <p className="mt-3 text-xs text-secondary">
-                          Campos detectados: {item.fields?.length ?? 0} · Intervinientes: {item.required_roles?.length ?? 0}
+                  <div className="rounded-[1.75rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-secondary">Buscar y filtrar plantillas</p>
+                          <p className="mt-2 text-sm text-secondary">
+                            Filtra por nombre, tipo de minuta, descripción y archivos relacionados.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,0.9fr)_auto] lg:items-end">
+                        <label className="grid gap-2 text-sm font-medium text-primary">
+                          <span>Buscar plantilla</span>
+                          <input
+                            type="search"
+                            value={templateSearch}
+                            onChange={(event) => setTemplateSearch(event.target.value)}
+                            placeholder="Buscar por nombre, tipo de minuta o descripción..."
+                            className="ep-input h-12 rounded-2xl px-4"
+                          />
+                        </label>
+                        <label className="grid gap-2 text-sm font-medium text-primary">
+                          <span>Tipo de minuta</span>
+                          <select
+                            value={templateTypeFilter}
+                            onChange={(event) => setTemplateTypeFilter(event.target.value)}
+                            className="ep-input h-12 rounded-2xl px-4"
+                          >
+                            <option value="all">Todos</option>
+                            {templateTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={clearTemplateFilters}
+                          className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-white px-4 text-sm font-semibold text-primary transition-colors hover:border-primary/30 hover:text-primary lg:mt-auto"
+                        >
+                          Limpiar búsqueda
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-2 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-medium text-secondary">
+                          Mostrando {filteredTemplates.length} de {templates.length} plantillas disponibles
                         </p>
-                        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Usar esta plantilla para crear documento</p>
-                      </button>
-                    ))}
+                      </div>
+                    </div>
                   </div>
+                  {renderTemplateSummary()}
+                  {filteredTemplates.length > 0 ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {filteredTemplates.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSelectedTemplate(item)}
+                          aria-pressed={selectedTemplate?.id === item.id}
+                          className={`relative overflow-hidden rounded-[1.5rem] border p-5 text-left transition-all ${
+                            selectedTemplate?.id === item.id
+                              ? "border-2 border-primary/70 bg-gradient-to-br from-primary/10 via-white to-[var(--panel-soft)] shadow-[0_18px_40px_rgba(15,23,42,0.1)] ring-2 ring-primary/10"
+                              : "border-[var(--line)] bg-[var(--panel-soft)] hover:border-primary/25 hover:bg-[var(--panel)]"
+                          }`}
+                        >
+                          {selectedTemplate?.id === item.id ? (
+                            <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white shadow-sm">
+                              <CheckCircle2 className="h-4 w-4" />
+                              Seleccionada
+                            </div>
+                          ) : null}
+                          <div className="flex items-start gap-3 pr-24">
+                            <div className={`flex h-10 w-10 flex-none items-center justify-center rounded-2xl ${selectedTemplate?.id === item.id ? "bg-primary text-white" : "bg-white text-primary ring-1 ring-[var(--line)]"}`}>
+                              <CheckCircle2 className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-lg font-semibold text-primary">{item.name}</p>
+                              <p className="mt-1 text-sm text-secondary">Tipo de minuta: {item.document_type || "Sin tipo definido"}</p>
+                            </div>
+                          </div>
+                          {item.description && (
+                            <p className="mt-2 text-xs text-secondary">{item.description}</p>
+                          )}
+                          <p className="mt-3 text-xs text-secondary">
+                            Campos detectados: {item.fields?.length ?? 0} · Intervinientes: {item.required_roles?.length ?? 0}
+                          </p>
+                          <p className={`mt-4 text-xs font-semibold uppercase tracking-[0.18em] ${selectedTemplate?.id === item.id ? "text-primary" : "text-secondary"}`}>
+                            {selectedTemplate?.id === item.id ? "Plantilla seleccionada" : "Usar esta plantilla"}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="ep-card-soft rounded-[1.5rem] px-5 py-8 text-center">
+                      <p className="text-base font-semibold text-primary">No encontramos plantillas con ese criterio.</p>
+                      <p className="mt-2 text-sm text-secondary">Limpia la búsqueda o sube una nueva plantilla Word.</p>
+                    </div>
+                  )}
+                  {selectedTemplate && !selectedTemplateMatchesFilter ? (
+                    <div className="ep-card-soft rounded-[1.5rem] px-5 py-4 text-sm text-secondary">
+                      La plantilla seleccionada sigue activa aunque no aparezca en el filtro actual.
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
               {step === 1 ? (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">2. Documento / minuta</h2>
+                  <h2 className="text-2xl font-semibold text-primary">2. Datos de la minuta</h2>
                   <p className="text-sm text-secondary">
-                    Define la notaría y quién trabajará el documento. El formulario de abajo sigue siendo dinámico, no está quemado por tipo documental.
+                    {canSelectNotary
+                      ? "Selecciona la notaría donde se creará la minuta."
+                      : "La minuta se creará en tu notaría asignada."}
                   </p>
+                  {renderTemplateSummary()}
                   <div className="grid gap-4">
                     {canSelectNotary ? (
                       <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
-                    ) : null}
+                    ) : (
+                      <div className="ep-card-soft rounded-[1.6rem] p-4">
+                        <p className="text-sm font-medium text-primary">Notaría</p>
+                        <p className="mt-2 text-sm text-secondary">{selectedNotaryLabel}</p>
+                      </div>
+                    )}
                     {generalManagerFields.map((field) => {
                       const isExpanded = expandedGeneralField === field.key;
                       const selectedLabel = userOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
@@ -597,8 +1193,9 @@ export function CreateCaseWizard() {
                 <div className="space-y-5">
                   <h2 className="text-2xl font-semibold text-primary">3. Diligenciar</h2>
                   <p className="text-sm text-secondary">
-                    Completa solo los campos detectados por la plantilla seleccionada.
+                    Completa solo los campos detectados por la plantilla seleccionada. Al terminar, guarda y genera el Word para abrir el detalle de la minuta.
                   </p>
+                  {renderTemplateSummary()}
                   {(() => {
                     const templateFields = sortByStepOrder(Array.isArray(selectedTemplate?.fields) ? selectedTemplate.fields : []);
 
@@ -611,9 +1208,28 @@ export function CreateCaseWizard() {
                         {templateFields.map((field) => {
                           const label = `${field.label || field.field_code}${field.is_required ? " *" : ""}`;
                           const value = actData[field.field_code] ?? "";
-                          const options = parseTemplateFieldOptions(field.options_json);
+                          const derivedSourceFieldCode = resolveDerivedMoneyField(field.field_code, templateFieldCodes);
+                          const derivedValue = derivedSourceFieldCode ? numberToColombianPesosWords(actData[derivedSourceFieldCode] ?? "") : "";
+                          const options = resolveCatalogOptions(field);
 
-                          if (field.field_type === "select" && options.length > 0) {
+                          if (derivedSourceFieldCode) {
+                            return (
+                              <label key={field.field_code} className="grid gap-2 text-sm font-medium text-primary">
+                                <span>{label}</span>
+                                <input
+                                  value={derivedValue}
+                                  type="text"
+                                  readOnly
+                                  aria-readonly="true"
+                                  placeholder={field.placeholder_key || ""}
+                                  className="ep-input h-12 rounded-2xl px-4 text-secondary"
+                                />
+                                <span className="text-xs font-normal text-secondary">Calculado automáticamente desde el valor numérico.</span>
+                              </label>
+                            );
+                          }
+
+                          if (options.length > 0) {
                             return (
                               <div key={field.field_code} className="w-full">
                                 <SearchableSelect
@@ -658,68 +1274,27 @@ export function CreateCaseWizard() {
                   })()}
                 </div>
               ) : null}
-
-              {step === 3 ? (
-                <div className="space-y-5">
-                  <h2 className="text-2xl font-semibold text-primary">4. Revisar y generar Word</h2>
-                  <div className="ep-card-soft rounded-[1.5rem] p-5 space-y-3">
-                    <p className="text-sm font-semibold text-primary">Plantilla seleccionada</p>
-                    <p className="text-sm text-secondary">
-                      {selectedTemplate?.name ?? "Sin plantilla"}
-                    </p>
-                    <p className="mt-3 text-sm font-semibold text-primary">Documento / minuta</p>
-                    <p className="text-sm text-secondary">
-                      {selectedTemplate?.document_type ?? "Sin definir"}
-                    </p>
-                    <p className="mt-3 text-sm font-semibold text-primary">Campos detectados</p>
-                    <p className="text-sm text-secondary">
-                      {selectedTemplate?.fields?.length ?? 0} campos configurados
-                    </p>
-                    <p className="mt-3 text-sm font-semibold text-primary">Número interno</p>
-                    <p className="text-sm text-secondary">{caseDetail?.internal_case_number ?? ""}</p>
-                  </div>
-                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-4 text-sm text-secondary">
-                    Todo listo. Al continuar, el sistema generará el Word y podrás abrir el detalle para descargarlo o seguir con la revisión.
-                  </div>
-                </div>
-              ) : null}
             </>
           ) : null}
 
           {error && !(isLoading && templates.length === 0) ? <div className="ep-kpi-critical rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
           {feedback ? <div className="ep-kpi-success rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
-          {!isLoading && templates.length > 0 && step < 3 ? (
-            <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
+          {!isLoading && templates.length > 0 && step < steps.length - 1 ? (
+            <button
+              type="button"
+              onClick={() => void handlePrimaryAction()}
+              disabled={isSaving || (step === 0 && !selectedTemplate)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
               Continuar <ArrowRight className="h-4 w-4" />
             </button>
           ) : null}
-          {!isLoading && templates.length > 0 && step === 3 ? (
-            <button type="button" onClick={() => void continueStep()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-              Generar Word <ArrowRight className="h-4 w-4" />
+          {!isLoading && templates.length > 0 && step === steps.length - 1 ? (
+            <button type="button" onClick={() => void handlePrimaryAction()} disabled={isSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
+              Guardar y generar Word <ArrowRight className="h-4 w-4" />
             </button>
           ) : null}
         </div>
-
-        {showAside ? (
-          <aside className="space-y-4">
-            <div className="ep-card z-0 rounded-[1.8rem] p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Documento / minuta activa</p>
-              <p className="mt-2 text-lg font-semibold text-primary">{caseDetail?.internal_case_number || "Aún no creado"}</p>
-              <p className="mt-3 text-sm text-secondary">Plantilla: {selectedTemplate?.name || "Sin selección"}</p>
-              <p className="mt-2 text-sm text-secondary">Estado: {caseDetail?.current_state || "borrador"}</p>
-              <p className="mt-2 text-sm text-secondary">Escritura oficial: {caseDetail?.official_deed_number || "Pendiente de aprobación"}</p>
-            </div>
-            <div className="ep-card z-0 rounded-[1.8rem] p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-secondary">Flujo de trabajo</p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-secondary">
-                <li>La plantilla define el trámite.</li>
-                <li>El número oficial no se asigna al crear.</li>
-                <li>Poderdante y apoderado son obligatorios.</li>
-                <li>Las personas se reutilizan por tipo y número.</li>
-              </ul>
-            </div>
-          </aside>
-        ) : null}
       </section>
     </div>
   );
