@@ -348,9 +348,9 @@ def extract_highlighted_fields_from_docx(source_path: str | Path) -> list[dict]:
             field_code = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
             if not field_code or field_code in seen_codes:
                 continue
-            label = raw.replace("_", " ").title().strip()
+            label = raw.replace("_", " ").title().strip() or field_code
             if len(label) < 2:
-                continue
+                label = field_code
             seen_codes[field_code] = order
             etiqueta_fields.append({
                 "field_code": field_code,
@@ -380,9 +380,9 @@ def extract_highlighted_fields_from_docx(source_path: str | Path) -> list[dict]:
             field_code = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
             if not field_code or field_code in seen_codes:
                 continue
-            label = raw.replace("_", " ").strip()
+            label = raw.replace("_", " ").strip() or field_code
             if len(label) < 2:
-                continue
+                label = field_code
             color_name = "turquoise" if run.font.highlight_color == WD_COLOR_INDEX.TURQUOISE else "yellow"
             seen_codes[field_code] = order
             highlight_fields.append({

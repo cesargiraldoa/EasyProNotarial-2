@@ -49,7 +49,7 @@ def serialize_template(template: DocumentTemplate) -> TemplateSummary:
         created_at=template.created_at,
         updated_at=template.updated_at,
         required_roles=[TemplateRequiredRoleSummary.model_validate(item) for item in template.required_roles],
-        fields=[TemplateFieldSummary.model_validate(item) for item in template.fields if item.label and len(item.label.strip()) >= 2],
+        fields=[TemplateFieldSummary.model_validate(item) for item in template.fields],
     )
 
 

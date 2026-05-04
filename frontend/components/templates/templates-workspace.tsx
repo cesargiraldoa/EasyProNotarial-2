@@ -108,6 +108,31 @@ export function TemplatesWorkspace() {
       const upload = uploadFile
         ? { filename: uploadFile.name, content_base64: await fileToBase64(uploadFile) }
         : null;
+      const payloadFields = uploadFile
+        ? []
+        : selected?.fields?.length
+          ? selected.fields.map((field) => ({
+              field_code: field.field_code,
+              label: field.label,
+              field_type: field.field_type,
+              section: field.section,
+              is_required: field.is_required,
+              options_json: field.options_json ?? null,
+              placeholder_key: field.placeholder_key ?? null,
+              help_text: field.help_text ?? null,
+              step_order: field.step_order,
+            }))
+          : [
+              { field_code: "dia_elaboracion", label: "Día elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "DIA_ELABORACION_ESCRITURA", help_text: null, step_order: 1 },
+              { field_code: "mes_elaboracion", label: "Mes elaboración", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "MES_ELABORACION_ESCRITURA", help_text: null, step_order: 2 },
+              { field_code: "ano_elaboracion", label: "Año elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "ANO_ELABORACION_ESCRITURA", help_text: null, step_order: 3 },
+              { field_code: "derechos_notariales", label: "Derechos notariales", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "DERECHOS_NOTARIALES", help_text: null, step_order: 4 },
+              { field_code: "iva", label: "IVA", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "IVA", help_text: null, step_order: 5 },
+              { field_code: "aporte_superintendencia", label: "Aporte superintendencia", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "APORTE_SUPERINTENDENCIA", help_text: null, step_order: 6 },
+              { field_code: "fondo_notariado", label: "Fondo notariado", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "FONDO_NOTARIADO", help_text: null, step_order: 7 },
+              { field_code: "consecutivos_hojas_papel_notarial", label: "Consecutivos hojas papel notarial", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "CONSECUTIVOS_HOJAS_PAPEL_NOTARIAL", help_text: null, step_order: 8 },
+              { field_code: "extension", label: "Extensión", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "EXTENSION", help_text: null, step_order: 9 },
+            ];
       const payload = {
         ...form,
         notary_id: form.notary_id ? Number(form.notary_id) : null,
@@ -115,17 +140,7 @@ export function TemplatesWorkspace() {
           { role_code: "poderdante", label: "Poderdante", is_required: true, step_order: 1 },
           { role_code: "apoderado", label: "Apoderado(a)", is_required: true, step_order: 2 },
         ],
-        fields: uploadFile ? [] : [
-          { field_code: "dia_elaboracion", label: "Día elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "DIA_ELABORACION_ESCRITURA", help_text: null, step_order: 1 },
-          { field_code: "mes_elaboracion", label: "Mes elaboración", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "MES_ELABORACION_ESCRITURA", help_text: null, step_order: 2 },
-          { field_code: "ano_elaboracion", label: "Año elaboración", field_type: "number", section: "acto", is_required: true, options_json: null, placeholder_key: "ANO_ELABORACION_ESCRITURA", help_text: null, step_order: 3 },
-          { field_code: "derechos_notariales", label: "Derechos notariales", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "DERECHOS_NOTARIALES", help_text: null, step_order: 4 },
-          { field_code: "iva", label: "IVA", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "IVA", help_text: null, step_order: 5 },
-          { field_code: "aporte_superintendencia", label: "Aporte superintendencia", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "APORTE_SUPERINTENDENCIA", help_text: null, step_order: 6 },
-          { field_code: "fondo_notariado", label: "Fondo notariado", field_type: "currency", section: "acto", is_required: true, options_json: null, placeholder_key: "FONDO_NOTARIADO", help_text: null, step_order: 7 },
-          { field_code: "consecutivos_hojas_papel_notarial", label: "Consecutivos hojas papel notarial", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "CONSECUTIVOS_HOJAS_PAPEL_NOTARIAL", help_text: null, step_order: 8 },
-          { field_code: "extension", label: "Extensión", field_type: "text", section: "acto", is_required: true, options_json: null, placeholder_key: "EXTENSION", help_text: null, step_order: 9 },
-        ],
+        fields: payloadFields,
         upload,
       };
       const saved = selected ? await updateTemplate(selected.id, payload) : await createTemplate(payload);
