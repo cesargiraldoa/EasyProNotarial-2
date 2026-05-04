@@ -14,7 +14,7 @@ from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User
 from app.schemas.template import TemplateCreate, TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary, TemplateUpdate
 from app.services.document_generation import extract_highlighted_fields_from_docx
-from app.services.storage import save_template_upload
+from app.services.storage import resolve_template_source_path, save_template_upload
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
@@ -78,7 +78,7 @@ def persist_template_payload(db: Session, template: DocumentTemplate, payload: T
         template.source_filename = source_filename
         template.storage_path = storage_path
         if (payload.upload.filename or "").lower().endswith(".docx"):
-            extracted_fields = extract_highlighted_fields_from_docx(storage_path)
+            extracted_fields = extract_highlighted_fields_from_docx(resolve_template_source_path(storage_path))
 
     template.required_roles.clear()
     template.fields.clear()

@@ -63,7 +63,7 @@ from app.services.gari_document_service import (
     resolver_escritura_desde_template,
     save_gari_document_as_docx,
 )
-from app.services.storage import next_case_file_path, save_base64_file
+from app.services.storage import next_case_file_path, resolve_template_source_path, save_base64_file
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
@@ -504,7 +504,8 @@ def generate_draft_for_case(db: Session, case: Case, current_user: User, comment
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador.")
     replacements = build_placeholder_replacements(case)
     temp_output = next_case_file_path(case.id, "draft-temp", 1, "docx", f"draft_case_{case.id}.docx")
-    render_docx_template(case.template.storage_path, temp_output, replacements)
+    template_source = resolve_template_source_path(case.template.storage_path)
+    render_docx_template(template_source, temp_output, replacements)
     version = add_document_version(db, case, "draft", "Borrador documental", "docx", temp_output, f"{case.template.slug}.docx", current_user.id, case.template_id, serialize_placeholder_snapshot(replacements))
     previous_state = case.current_state
     if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
@@ -651,7 +652,8 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     template_reference_text = None
     if case.template and case.template.storage_path:
         try:
-            template_reference_text = extract_text_from_docx(case.template.storage_path)
+            template_source = resolve_template_source_path(case.template.storage_path)
+            template_reference_text = extract_text_from_docx(template_source)
         except Exception:
             template_reference_text = None
 
@@ -1050,7 +1052,8 @@ def generate_from_template(
     os.makedirs(destination_path.parent, exist_ok=True)
 
     replacements = {f"{{{{{key.upper()}}}}}": value for key, value in act_data.items()}
-    render_docx_template(template.storage_path, destination_path, replacements)
+    template_source = resolve_template_source_path(template.storage_path)
+    render_docx_template(template_source, destination_path, replacements)
 
     draft_document = db.query(CaseDocument).filter(CaseDocument.case_id == case.id, CaseDocument.category == "draft").first()
     if draft_document is None:
