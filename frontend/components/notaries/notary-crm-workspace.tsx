@@ -14,6 +14,7 @@ import {
   type UserOption
 } from "@/lib/api";
 import { formatDateTime, getCurrentBogotaDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
+import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 const commercialStatuses = [
   "prospecto",
@@ -201,7 +202,7 @@ export function NotaryCrmWorkspace({ notaryId }: { notaryId: number }) {
 
           <div>
             <h1 className="text-3xl font-semibold tracking-[-0.05em] text-primary sm:text-4xl">
-              {notary.notary_label} · {notary.municipality}
+              {formatNotaryOptionLabel(notary)}
             </h1>
           </div>
 

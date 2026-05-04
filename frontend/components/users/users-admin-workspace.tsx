@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { Copy, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
 import {
   createUser,
   getCurrentUser,
@@ -85,6 +85,12 @@ function normalizePayload(state: UserEditorState): UserPayload {
   };
 }
 
+function notaryDisplayLabel(notary: NotaryRecord): string {
+  return [notary.notary_label, notary.municipality, notary.department]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function UsersAdminWorkspace() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -104,6 +110,7 @@ export function UsersAdminWorkspace() {
   const [editorState, setEditorState] = useState<UserEditorState>(EMPTY_EDITOR);
   const [roleDraft, setRoleDraft] = useState<AssignmentDraft>({ role_code: "", notary_id: null });
   const [showAddRole, setShowAddRole] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isSavingRoles, setIsSavingRoles] = useState(false);
@@ -188,6 +195,7 @@ export function UsersAdminWorkspace() {
     setEditorState(user ? toEditorState(user) : EMPTY_EDITOR);
     setRoleDraft({ role_code: "", notary_id: null });
     setShowAddRole(false);
+    setShowPassword(false);
     setFeedback(null);
   }
 
@@ -202,6 +210,7 @@ export function UsersAdminWorkspace() {
       setOpenUserId(null);
       setFeedback(null);
       setShowAddRole(false);
+      setShowPassword(false);
       return;
     }
     setOpenUserId(user.id);
@@ -210,6 +219,28 @@ export function UsersAdminWorkspace() {
 
   function updateField<K extends keyof UserEditorState>(key: K, value: UserEditorState[K]) {
     setEditorState((current) => ({ ...current, [key]: value }));
+  }
+
+  async function copyPasswordToClipboard() {
+    const password = editorState.password.trim();
+    if (password === "") {
+      setFeedback({ kind: "error", message: "No hay contraseña para copiar." });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(editorState.password);
+      setFeedback({ kind: "success", message: "Contraseña copiada al portapapeles." });
+    } catch {
+      setFeedback({ kind: "error", message: "No fue posible copiar la contraseña." });
+    }
+  }
+
+  function generateTemporaryPassword() {
+    const suffix = Math.floor(1000 + Math.random() * 9000);
+    updateField("password", `EasyPro2026-${suffix}*`);
+    setShowPassword(true);
+    setFeedback({ kind: "success", message: "Contraseña temporal generada. Cópiala antes de guardar o compartir." });
   }
 
   function removeAssignment(index: number) {
@@ -342,10 +373,9 @@ export function UsersAdminWorkspace() {
   }
 
   function notaryLabelFromId(id: number | null): string {
-    if (id === null) {
-      return "Global";
-    }
-    return notaries.find((notary) => notary.id === id)?.notary_label ?? "Sin notaría";
+    if (id === null) return "Global";
+    const notary = notaries.find((item) => item.id === id);
+    return notary ? notaryDisplayLabel(notary) : "Sin notaría";
   }
 
   function renderAccordion(userId: number | "new") {
@@ -378,13 +408,49 @@ export function UsersAdminWorkspace() {
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-primary">Contraseña</label>
-              <input
-                type="password"
-                value={editorState.password}
-                onChange={(event) => updateField("password", event.target.value)}
-                placeholder="Dejar vacío para conservar"
-                className="ep-input h-12 w-full rounded-2xl px-4"
-              />
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 lg:flex-row">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={editorState.password}
+                    onChange={(event) => updateField("password", event.target.value)}
+                    placeholder={isNew ? "Define o genera una contraseña" : "Dejar vacío para conservar"}
+                    className="ep-input h-12 min-w-0 flex-1 rounded-2xl px-4"
+                  />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex lg:gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-[var(--panel)] px-4 text-sm font-semibold text-primary"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? "Ocultar" : "Ver"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={generateTemporaryPassword}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-[var(--panel)] px-4 text-sm font-semibold text-primary"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Generar contraseña
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyPasswordToClipboard()}
+                      disabled={editorState.password.trim() === ""}
+                      className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-[var(--panel)] px-4 text-sm font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-secondary">
+                  {isNew
+                    ? "Define o genera una contraseña temporal para entregar al usuario."
+                    : "Déjala vacía si no deseas cambiar la contraseña."}
+                </p>
+              </div>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-primary">Teléfono</label>
@@ -424,7 +490,7 @@ export function UsersAdminWorkspace() {
                   <option value="">Sin notaría por defecto</option>
                   {notaries.map((notary) => (
                     <option key={notary.id} value={notary.id}>
-                      {notary.notary_label}
+                      {notaryDisplayLabel(notary)}
                     </option>
                   ))}
                 </select>
@@ -526,7 +592,7 @@ export function UsersAdminWorkspace() {
                       <option value="">{draftIsGlobal ? "Ámbito global" : "Selecciona una notaría"}</option>
                       {notaries.map((notary) => (
                         <option key={notary.id} value={notary.id}>
-                          {notary.notary_label}
+                          {notaryDisplayLabel(notary)}
                         </option>
                       ))}
                     </select>
@@ -640,7 +706,7 @@ export function UsersAdminWorkspace() {
               <option value="all">Todas las notarías</option>
               {notaries.map((notary) => (
                 <option key={notary.id} value={notary.id}>
-                  {notary.notary_label}
+                  {notaryDisplayLabel(notary)}
                 </option>
               ))}
             </select>

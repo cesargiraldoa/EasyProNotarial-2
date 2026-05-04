@@ -15,54 +15,54 @@ from supabase import Client, create_client
 from app.core.config import get_settings
 
 
-SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacciÃ³n notarial colombiano de EasyPro.
+SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacción notarial colombiano de EasyPro.
 
 IDENTIDAD Y ROL:
-- Redactas instrumentos pÃºblicos notariales en Colombia con precisiÃ³n jurÃ­dica total.
-- Sigues el Decreto 960 de 1970, Decreto 2148 de 1983 y demÃ¡s normas notariales colombianas.
+- Redactas instrumentos públicos notariales en Colombia con precisión jurídica total.
+- Sigues el Decreto 960 de 1970, Decreto 2148 de 1983 y demás normas notariales colombianas.
 - Solo produces el texto del documento. Nunca incluyes explicaciones, comentarios ni metadata.
 
 REGLAS DE FORMATO NOTARIAL OBLIGATORIAS:
 - NO uses guiones de relleno (- - - - -) en el cuerpo del documento
-- El sistema los agregarÃ¡ automÃ¡ticamente al formatear
-- Solo usa saltos de lÃ­nea entre secciones
-- Separa cada acto con una lÃ­nea en blanco
-- NÃºmeros siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintisÃ©is (2026)"
+- El sistema los agregará automáticamente al formatear
+- Solo usa saltos de línea entre secciones
+- Separa cada acto con una línea en blanco
+- Números siempre en texto seguido del numeral: "diecinueve (19)", "dos mil veintiséis (2026)"
 - Valores monetarios: "$6.000.000" Y "seis millones de pesos colombianos ($6.000.000)"
-- Negrilla para tÃ­tulos de actos: **PRIMER ACTO: LIBERACIÃ“N PARCIAL DE HIPOTECA**
-- Cada acto inicia en nueva secciÃ³n con su nÃºmero ordinal en negrilla
+- Negrilla para títulos de actos: **PRIMER ACTO: LIBERACIÓN PARCIAL DE HIPOTECA**
+- Cada acto inicia en nueva sección con su número ordinal en negrilla
 - Los intervinientes se presentan con su calidad completa: "quien obra en calidad de apoderado especial de [ENTIDAD] identificada con NIT [NIT]"
 
 ESTRUCTURA OBLIGATORIA DEL DOCUMENTO:
-1. Encabezado: NOTARÃA + NÃšMERO ESCRITURA + CLASE Y CUANTÃA DE ACTOS + PERSONAS QUE INTERVIENEN
+1. Encabezado: NOTARÍA + NÚMERO ESCRITURA + CLASE Y CUANTÍA DE ACTOS + PERSONAS QUE INTERVIENEN
 2. Apertura: ciudad, fecha en texto, notario titular
 3. Un bloque por cada acto en el orden exacto indicado en el prompt
-4. Cada acto: comparecencia del interviniente  declaraciones  aceptaciÃ³n
-5. LiquidaciÃ³n de derechos notariales
+4. Cada acto: comparecencia del interviniente  declaraciones  aceptación
+5. Liquidación de derechos notariales
 6. Constancias legales (Ley 1581/2012, Art. 102 Decreto 960/1970)
 7. Firmas de todos los comparecientes + Notario
 
 REGLAS DE INTERVINIENTES:
 - Cada apoderado SIEMPRE menciona: "quien obra como apoderado especial de [ENTIDAD, NIT]"
-- La personerÃ­a se acredita con: "escritura pÃºblica nÃºmero X de la NotarÃ­a Y de [ciudad], la cual se protocoliza"
-- El gÃ©nero gramatical SIEMPRE debe concordar con el sexo del interviniente
-- Si el interviniente estÃ¡ de trÃ¡nsito: "domiciliado en [municipio], de trÃ¡nsito por Caldas"
+- La personería se acredita con: "escritura pública número X de la Notaría Y de [ciudad], la cual se protocoliza"
+- El género gramatical SIEMPRE debe concordar con el sexo del interviniente
+- Si el interviniente está de tránsito: "domiciliado en [municipio], de tránsito por Caldas"
 
-MODO CORRECCIÃ“N:
-- Cuando recibes un borrador anterior + instrucciÃ³n de correcciÃ³n
+MODO CORRECCIÓN:
+- Cuando recibes un borrador anterior + instrucción de corrección
 - Aplica SOLO el cambio solicitado
 - Reproduce el resto del documento sin alteraciones
 - No resumas ni acortes el documento
 
 PROHIBICIONES ABSOLUTAS:
-- Nunca inventes datos que no estÃ©n en el prompt
+- Nunca inventes datos que no estén en el prompt
 - Nunca uses placeholders como [DATO] o {{VARIABLE}}
 - Nunca agregues comentarios fuera del texto notarial
-- Nunca omitas actos que estÃ©n en la lista de actos requeridos
+- Nunca omitas actos que estén en la lista de actos requeridos
 
 PRIORIDAD ABSOLUTA:
-Debes generar TODOS los actos indicados en la instrucciÃ³n de generaciÃ³n.
-Es mÃ¡s importante generar todos los actos que usar muchos guiones de relleno.
+Debes generar TODOS los actos indicados en la instrucción de generación.
+Es más importante generar todos los actos que usar muchos guiones de relleno.
 Si debes elegir entre guiones decorativos y contenido de actos, siempre elige el contenido.
 """
 
@@ -284,41 +284,116 @@ def generate_notarial_document(
 
     return response.choices[0].message.content or ""
 
-def build_gari_docx_buffer(text: str) -> io.BytesIO:
-    """Construye un documento .docx en memoria con formato Gari."""
-    doc = DocxDocument()
-    section = doc.sections[0]
-    section.top_margin = Cm(2.5)
-    section.bottom_margin = Cm(2.5)
-    section.left_margin = Cm(3)
-    section.right_margin = Cm(3)
 
+def build_gari_docx_buffer(text: str) -> io.BytesIO:
+    """Construye un documento .docx en memoria con formato notarial colombiano correcto."""
+    import re
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    doc = DocxDocument()
+
+    # ── Página carta colombiana ──────────────────────────────────────────────
+    section = doc.sections[0]
+    section.page_width    = Cm(21.6)
+    section.page_height   = Cm(27.9)
+    section.left_margin   = Cm(3.2)
+    section.right_margin  = Cm(2.2)
+    section.top_margin    = Cm(3.5)
+    section.bottom_margin = Cm(1.0)
+
+    # ── Header: número de página centrado ───────────────────────────────────
+    header = section.header
+    p_hdr = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+    p_hdr.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_hdr = p_hdr.add_run()
+    fldChar1 = OxmlElement("w:fldChar")
+    fldChar1.set(qn("w:fldCharType"), "begin")
+    instrText = OxmlElement("w:instrText")
+    instrText.text = "PAGE"
+    fldChar2 = OxmlElement("w:fldChar")
+    fldChar2.set(qn("w:fldCharType"), "end")
+    run_hdr._r.append(fldChar1)
+    run_hdr._r.append(instrText)
+    run_hdr._r.append(fldChar2)
+
+    # ── Constantes ───────────────────────────────────────────────────────────
+    LONGITUD_OBJETIVO = 95
+
+    # Detecta títulos de acto: PRIMER ACTO:, SEGUNDO ACTO:, etc.
+    # NO captura "VALOR DEL ACTO:" ni "TIPO DE ACTO:"
+    _RE_TITULO_ACTO = re.compile(
+        r"^(PRIMER|SEGUNDO|TERCER|CUARTO|QUINTO|SEXTO|S[ÉE]PTIMO|OCTAVO|NOVENO|D[ÉE]CIMO"
+        r"|UNDÉCIMO|UNDECIMO|DUODÉCIMO|DUODECIMO)\s+ACTO\s*:",
+        re.IGNORECASE,
+    )
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+    def _set_spacing(p):
+        p.paragraph_format.space_before = 0
+        p.paragraph_format.space_after  = 0
+
+    def _add_para(texto_final: str, bold: bool, alignment) -> None:
+        p = doc.add_paragraph()
+        p.alignment = alignment
+        _set_spacing(p)
+        run = p.add_run(texto_final)
+        run.bold = bold
+
+    def _rellenar_guiones(linea: str) -> str:
+        """Añade '- ' al final de la línea hasta LONGITUD_OBJETIVO caracteres."""
+        if len(linea) >= LONGITUD_OBJETIVO:
+            return linea
+        relleno = ""
+        while len(linea) + 1 + len(relleno) + 2 <= LONGITUD_OBJETIVO:
+            relleno += "- "
+        return (linea + " " + relleno).rstrip()
+
+    def _titulo_con_guiones(linea: str) -> str:
+        """Coloca el título entre guiones: '- - - - PRIMER ACTO: X - - - -'"""
+        lado = "- - - - - - - - - "
+        return lado + linea + " " + lado.rstrip()
+
+    # ── Procesamiento línea a línea ──────────────────────────────────────────
     for line in text.split("\n"):
-        line = line.strip()
-        if not line:
-            doc.add_paragraph()
+
+        # PASO 1 — limpiar markdown bold (**)
+        linea = line.strip().lstrip("*").rstrip("*").strip()
+
+        # PASO 2 — filtrar separadores puros (solo guiones y espacios, sin letras)
+        if linea and re.match(r"^[-\s]+$", linea) and len(linea) > 3:
+            continue  # descartar completamente — no crear párrafo
+
+        # PASO 3 — línea vacía → párrafo vacío de separación
+        if not linea:
+            p = doc.add_paragraph()
+            _set_spacing(p)
             continue
-        texto = line
-        # Solo agregar guiones si la lÃ­nea parece un campo para rellenar
-        # (termina con ":" o es corta y no es un tÃ­tulo/clÃ¡usula completa)
-        es_encabezado = any(line.upper().startswith(kw) for kw in [
-            "PRIMERO", "SEGUNDO", "TERCERO", "CUARTO", "QUINTO", "SEXTO",
-            "SÃ‰PTIMO", "OCTAVO", "NOVENO", "DÃ‰CIMO", "ESCRITURA", "ACTO:",
-            "OTORGAMIENTO", "CONSTANCIA", "AUTORIZACIÃ“N", "PARÃGRAFO",
-            "PARAGRAFO", "NOTA", "DERECHOS", "SUPERFONDO", "LIQUIDACIÃ“N",
-        ])
-        es_campo_vacio = line.endswith(":") or (len(line) < 60 and not es_encabezado and not line.endswith("."))
-        if es_campo_vacio and not line.strip().startswith("- -"):
-            texto = texto + " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
-        p = doc.add_paragraph(texto)
-        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        if line.startswith("- - -") or line.startswith("---"):
-            run = p.runs[0] if p.runs else p.add_run(line)
-            run.bold = True
-        if line and not line.startswith("**"):
-            p_close = doc.add_paragraph()
-            run_close = p_close.add_run("- " * 20)
-            run_close.font.size = Pt(10)
+
+        # PASO 4 — clasificar tipo de línea
+
+        # A) TÍTULO DE ACTO — ordinal + "ACTO:" al inicio
+        if _RE_TITULO_ACTO.match(linea):
+            texto_final = _titulo_con_guiones(linea)
+            _add_para(texto_final, bold=True, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            continue
+
+        # B) LÍNEA DE FIRMA — guiones bajos (___…)
+        if linea.startswith("_"):
+            _add_para(linea, bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+            continue
+
+        # C) PIE DE NOTARIO — línea de roles al cierre
+        if linea.lower().startswith("recepción") or linea.lower().startswith("recepcion"):
+            _add_para(linea, bold=True, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            continue
+
+        # D) CONTENIDO NORMAL — todo lo demás
+        if len(linea) < LONGITUD_OBJETIVO:
+            texto_final = _rellenar_guiones(linea)
+        else:
+            texto_final = linea
+        _add_para(texto_final, bold=True, alignment=WD_ALIGN_PARAGRAPH.JUSTIFY)
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -345,8 +420,9 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
     signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
     url = signed.get("signedUrl") or signed.get("signedURL") or ""
     if not url:
-        raise ValueError(f"Supabase no retornÃ³ signed URL para {storage_path}. Respuesta: {signed}")
+        raise ValueError(f"Supabase no retornó signed URL para {storage_path}. Respuesta: {signed}")
     return url
+
 
 def resolver_escritura(
     proyecto: str,
@@ -545,7 +621,7 @@ def resolver_escritura(
     key = (proyecto_norm, tipo_inmueble_norm, num_compradores, banco_norm)
     if key not in variantes:
         raise ValueError(
-            "No existe una variante de escritura para la combinaciÃ³n "
+            "No existe una variante de escritura para la combinación "
             f"proyecto={proyecto_norm}, tipo_inmueble={tipo_inmueble_norm}, "
             f"num_compradores={num_compradores}, banco_hipotecante={banco_norm}."
         )
@@ -580,7 +656,7 @@ def resolver_escritura_desde_template(template) -> dict:
         "variante_id": template.slug,
         "plantilla_id": template.slug,
         "campos_requeridos": campos_requeridos,
-        "campos_faltantes": [],   # se valida en el endpoint
+        "campos_faltantes": [],
         "max_tokens_estimado": max_tokens,
     }
 
@@ -636,5 +712,3 @@ if __name__ == "__main__":
     )
     print("Ejemplo jaggua bogota 2c:")
     print(ejemplo_jaggua)
-
-

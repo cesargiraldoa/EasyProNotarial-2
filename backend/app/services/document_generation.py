@@ -1,41 +1,189 @@
 from __future__ import annotations
 
-import html
 import json
 import re
+import shutil
+import subprocess
 import zipfile
+from bisect import bisect_right
+from os import environ
 from pathlib import Path
 
+from docx import Document
+from docx.enum.text import WD_COLOR_INDEX
+
 PLACEHOLDER_PATTERN = re.compile(r"\{\{.*?\}\}", re.DOTALL)
-XML_TAG_PATTERN = re.compile(r"<[^>]+>")
+DASH_PLACEHOLDER = "[[--]]"
+TAB_NOTARIAL = "\t"
 
 
 def normalize_placeholder(raw: str) -> str:
-    plain = XML_TAG_PATTERN.sub("", raw)
-    plain = plain.replace("\n", "").replace("\r", "").replace("\t", "")
+    plain = raw.replace("\n", "").replace("\r", "").replace("\t", "")
     plain = re.sub(r"\s+", "", plain)
     return plain
+
+
+def build_notarial_dash_fill(text: str | None = None) -> str:
+    """
+    EasyPro_1 no construye una cadena de guiones a mano.
+    Inserta un tab literal y deja que Word/LibreOffice aplique
+    el tab stop con líder de dashes definido en la plantilla.
+    """
+    return TAB_NOTARIAL
+
+
+def _iter_paragraphs(container):
+    paragraphs = getattr(container, "paragraphs", [])
+    for paragraph in paragraphs:
+        yield paragraph
+
+    for table in getattr(container, "tables", []):
+        for row in table.rows:
+            for cell in row.cells:
+                yield from _iter_paragraphs(cell)
+
+
+def _replace_tokens_in_paragraph(paragraph, replacements: dict[str, str]) -> bool:
+    runs = list(paragraph.runs)
+    if not runs:
+        return False
+
+    original_texts = [run.text or "" for run in runs]
+    full_text = "".join(original_texts)
+    if not full_text:
+        return False
+
+    matches: list[tuple[int, int, str]] = []
+    for match in PLACEHOLDER_PATTERN.finditer(full_text):
+        token = normalize_placeholder(match.group(0))
+        if token in replacements:
+            matches.append((match.start(), match.end(), str(replacements[token] or "")))
+
+    if not matches and DASH_PLACEHOLDER not in full_text:
+        return False
+
+    run_starts: list[int] = []
+    cursor = 0
+    for text in original_texts:
+        run_starts.append(cursor)
+        cursor += len(text)
+
+    mutated_texts = list(original_texts)
+
+    for start, end, replacement in reversed(matches):
+        start_run = bisect_right(run_starts, start) - 1
+        end_run = bisect_right(run_starts, end - 1) - 1
+        if start_run < 0 or end_run < 0:
+            continue
+
+        start_offset = start - run_starts[start_run]
+        end_offset = end - run_starts[end_run]
+
+        if start_run == end_run:
+            mutated_texts[start_run] = (
+                mutated_texts[start_run][:start_offset]
+                + replacement
+                + mutated_texts[start_run][end_offset:]
+            )
+            continue
+
+        mutated_texts[start_run] = mutated_texts[start_run][:start_offset] + replacement
+        for index in range(start_run + 1, end_run):
+            mutated_texts[index] = ""
+        mutated_texts[end_run] = mutated_texts[end_run][end_offset:]
+
+    paragraph_text_after = "".join(mutated_texts)
+    if DASH_PLACEHOLDER in paragraph_text_after:
+        dash_fill = build_notarial_dash_fill(paragraph_text_after)
+        dash_run_starts: list[int] = []
+        cursor = 0
+        for text in mutated_texts:
+            dash_run_starts.append(cursor)
+            cursor += len(text)
+
+        dash_matches = list(re.finditer(re.escape(DASH_PLACEHOLDER), paragraph_text_after))
+        for start, end in reversed([(m.start(), m.end()) for m in dash_matches]):
+            start_run = bisect_right(dash_run_starts, start) - 1
+            end_run = bisect_right(dash_run_starts, end - 1) - 1
+            if start_run < 0 or end_run < 0:
+                continue
+
+            start_offset = start - dash_run_starts[start_run]
+            end_offset = end - dash_run_starts[end_run]
+
+            if start_run == end_run:
+                mutated_texts[start_run] = (
+                    mutated_texts[start_run][:start_offset]
+                    + dash_fill
+                    + mutated_texts[start_run][end_offset:]
+                )
+                continue
+
+            mutated_texts[start_run] = mutated_texts[start_run][:start_offset] + dash_fill
+            for index in range(start_run + 1, end_run):
+                mutated_texts[index] = ""
+            mutated_texts[end_run] = mutated_texts[end_run][end_offset:]
+
+    changed = False
+    for run, new_text in zip(runs, mutated_texts):
+        if run.text != new_text:
+            run.text = new_text
+            changed = True
+    return changed
+
+
+def _replace_tokens_in_container(container, replacements: dict[str, str]) -> bool:
+    changed = False
+    for paragraph in _iter_paragraphs(container):
+        changed = _replace_tokens_in_paragraph(paragraph, replacements) or changed
+    return changed
 
 
 def render_docx_template(source_path: str | Path, destination_path: str | Path, replacements: dict[str, str]) -> None:
     source = Path(source_path)
     destination = Path(destination_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(source, "r") as source_zip, zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as dest_zip:
-        for item in source_zip.infolist():
-            data = source_zip.read(item.filename)
-            if item.filename.endswith(".xml"):
-                text = data.decode("utf-8", errors="ignore")
+    document = Document(str(source))
+    _replace_tokens_in_container(document, replacements)
+    for section in document.sections:
+        _replace_tokens_in_container(section.header, replacements)
+        _replace_tokens_in_container(section.footer, replacements)
+    document.save(str(destination))
 
-                def replace_match(match: re.Match[str]) -> str:
-                    token = normalize_placeholder(match.group(0))
-                    if token in replacements:
-                        return html.escape(str(replacements[token] or ""))
-                    return match.group(0)
 
-                text = PLACEHOLDER_PATTERN.sub(replace_match, text)
-                data = text.encode("utf-8")
-            dest_zip.writestr(item, data)
+def recalculate_dash_fills(docx_path: str | Path) -> None:
+    """
+    Después de render_docx_template(), recorre cada párrafo del docx
+    y ajusta los runs de guiones '- - -' al final para que llenen
+    exactamente hasta el margen derecho (seguridad antifraude notarial).
+
+    Lógica:
+    - Cada párrafo notarial termina con un run de guiones "- - - - -"
+    - Detectar runs que son SOLO guiones y espacios al final del párrafo
+    - Calcular el texto real del párrafo sin los guiones finales
+    - Calcular cuántos guiones caben para llegar a LONGITUD_OBJETIVO = 90 chars
+    - Reemplazar el run de guiones con la cantidad correcta
+    """
+    doc = Document(str(docx_path))
+
+    for paragraph in _iter_paragraphs(doc):
+        runs = list(paragraph.runs)
+        if not runs:
+            continue
+        full_text = "".join(run.text or "" for run in runs)
+        if DASH_PLACEHOLDER not in full_text:
+            continue
+        _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill(full_text)})
+
+    for section in doc.sections:
+        for paragraph in _iter_paragraphs(section.header):
+            if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs))})
+        for paragraph in _iter_paragraphs(section.footer):
+            if DASH_PLACEHOLDER in "".join(run.text or "" for run in paragraph.runs):
+                _replace_tokens_in_paragraph(paragraph, {DASH_PLACEHOLDER: build_notarial_dash_fill("".join(run.text or "" for run in paragraph.runs))})
+
+    doc.save(str(docx_path))
 
 
 def extract_text_from_docx(source_path: str | Path) -> str:
@@ -95,6 +243,67 @@ def generate_plain_pdf(destination_path: str | Path, title: str, lines: list[str
         handle.write(f"trailer<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode("ascii"))
 
 
+def _resolve_libreoffice_executable() -> Path:
+    candidates = []
+    env_path = (environ.get("LIBREOFFICE_PATH") or "").strip()
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend([
+        Path(r"C:\Program Files\LibreOffice\program\soffice.exe"),
+        Path(r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"),
+    ])
+
+    which_path = shutil.which("soffice")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+
+    raise FileNotFoundError("No se encontró LibreOffice/soffice para convertir DOCX a PDF.")
+
+
+def convert_docx_to_pdf(source_docx: Path, output_dir: Path) -> Path:
+    source = Path(source_docx)
+    if not source.exists():
+        raise FileNotFoundError(f"El documento DOCX no existe: {source}")
+    if source.suffix.lower() != ".docx":
+        raise ValueError("La conversión PDF solo admite archivos .docx.")
+
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    soffice = _resolve_libreoffice_executable()
+
+    result = subprocess.run(
+        [
+            str(soffice),
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(output),
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Conversión DOCX a PDF fallida.").strip()
+        raise RuntimeError(detail)
+
+    expected_pdf = output / f"{source.stem}.pdf"
+    if expected_pdf.exists():
+        return expected_pdf
+
+    pdf_candidates = sorted(output.glob("*.pdf"), key=lambda item: item.stat().st_mtime, reverse=True)
+    if pdf_candidates:
+        return pdf_candidates[0]
+
+    raise FileNotFoundError("LibreOffice no generó el PDF esperado.")
+
+
 def build_case_text_snapshot(case_number: str, act_type: str, participants: list[dict], act_data: dict) -> list[str]:
     lines = [
         f"Caso: {case_number}",
@@ -111,3 +320,77 @@ def build_case_text_snapshot(case_number: str, act_type: str, participants: list
 
 def serialize_placeholder_snapshot(replacements: dict[str, str]) -> str:
     return json.dumps(replacements, ensure_ascii=False, indent=2)
+
+
+def extract_highlighted_fields_from_docx(source_path: str | Path) -> list[dict]:
+    from docx import Document
+    from docx.enum.text import WD_COLOR_INDEX
+    import re
+
+    source = Path(source_path)
+    doc = Document(str(source))
+
+    VALID_HIGHLIGHTS = {WD_COLOR_INDEX.TURQUOISE, WD_COLOR_INDEX.YELLOW}
+
+    # PASO 1: buscar etiquetas {{CAMPO}} - prioridad alta
+    seen_codes: dict[str, int] = {}
+    etiqueta_fields: list[dict] = []
+    order = 1
+
+    for para in doc.paragraphs:
+        matches = re.findall(r"\{\{([^}]+)\}\}", para.text)
+        for match in matches:
+            raw = match.strip()
+            if not raw or len(raw) < 2:
+                continue
+            if re.match(r"^[\s\.\-\_\,\;\:]+$", raw):
+                continue
+            field_code = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+            if not field_code or field_code in seen_codes:
+                continue
+            label = raw.replace("_", " ").title().strip()
+            if len(label) < 2:
+                continue
+            seen_codes[field_code] = order
+            etiqueta_fields.append({
+                "field_code": field_code,
+                "label": label,
+                "display_order": order,
+                "highlight_color": "none",
+            })
+            order += 1
+
+    if etiqueta_fields:
+        return etiqueta_fields
+
+    # PASO 2: fallback - buscar highlights turquesa o amarillo
+    seen_codes = {}
+    highlight_fields: list[dict] = []
+    order = 1
+
+    for para in doc.paragraphs:
+        for run in para.runs:
+            if run.font.highlight_color not in VALID_HIGHLIGHTS:
+                continue
+            raw = (run.text or "").strip()
+            if not raw or len(raw) < 2:
+                continue
+            if re.match(r"^[\s\.\-\_\,\;\:]+$", raw):
+                continue
+            field_code = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+            if not field_code or field_code in seen_codes:
+                continue
+            label = raw.replace("_", " ").strip()
+            if len(label) < 2:
+                continue
+            color_name = "turquoise" if run.font.highlight_color == WD_COLOR_INDEX.TURQUOISE else "yellow"
+            seen_codes[field_code] = order
+            highlight_fields.append({
+                "field_code": field_code,
+                "label": label,
+                "display_order": order,
+                "highlight_color": color_name,
+            })
+            order += 1
+
+    return highlight_fields

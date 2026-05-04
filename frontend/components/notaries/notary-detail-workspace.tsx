@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { getNotary, getUserOptions, updateNotary, type NotaryDetail, type NotaryPayload, type UserOption } from "@/lib/api";
+import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 type NotaryDetailTab = "informacion" | "branding" | "usuarios";
 
@@ -107,7 +108,7 @@ export function NotaryDetailWorkspace({ notaryId }: { notaryId: number }) {
 
   const title = useMemo(() => {
     if (!notary) return "Detalle de notaría";
-    return `${notary.notary_label} · ${notary.municipality}`;
+    return formatNotaryOptionLabel(notary);
   }, [notary]);
 
   if (isLoading || !formState || !notary) {

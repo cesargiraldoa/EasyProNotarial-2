@@ -88,6 +88,16 @@ def load_user_or_404(db: Session, user_id: int) -> User:
     return user
 
 
+def get_manageable_notary_ids(user: User) -> set[int]:
+    ids: set[int] = set()
+    if user.default_notary_id is not None:
+        ids.add(user.default_notary_id)
+    for assignment in user.role_assignments or []:
+        if assignment.notary_id is not None:
+            ids.add(assignment.notary_id)
+    return ids
+
+
 def get_assignable_roles(db: Session, current_user: User) -> list[Role]:
     query = db.query(Role)
     if not has_role(current_user, "super_admin"):

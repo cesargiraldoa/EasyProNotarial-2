@@ -1,8 +1,7 @@
 import { cleanNullableText, cleanText, repairText, sanitizeTextDeep } from "@/lib/text";
-import { getToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
-const SESSION_KEY = "easypro2_session";
 
 export type LoginPayload = {
   email: string;
@@ -243,6 +242,9 @@ export type CaseDetail = CaseRecord & {
 export type CaseFilters = {
   current_state?: string;
   case_type?: string;
+  act_type?: string;
+  date_from?: string;
+  date_to?: string;
   notary_id?: string;
   current_owner_user_id?: string;
   q?: string;
@@ -341,44 +343,21 @@ export type ExecutiveDashboard = {
   pilot_reference?: DashboardPilotReference | null;
   latest_import_reference?: string | null;
 };
-function getCookieToken() {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  const match = document.cookie.match(new RegExp(`(?:^|; )${SESSION_KEY}=([^;]+)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function getStoredToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    return window.localStorage.getItem(SESSION_KEY) || window.sessionStorage.getItem(SESSION_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-function getSessionToken() {
-  return getCookieToken() || getStoredToken();
-}
-
 function persistSessionToken(token: string, rememberSession: boolean) {
   if (typeof document !== "undefined") {
     const cookie = rememberSession
-      ? `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=None; Secure`
-      : `${SESSION_KEY}=${encodeURIComponent(token)}; path=/; SameSite=None; Secure`;
+      ? `easypro2_session=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=None; Secure`
+      : `easypro2_session=${encodeURIComponent(token)}; path=/; SameSite=None; Secure`;
     document.cookie = cookie;
   }
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.removeItem(SESSION_KEY);
-      window.sessionStorage.removeItem(SESSION_KEY);
+      window.localStorage.removeItem("easypro2_session");
+      window.sessionStorage.removeItem("easypro2_session");
       if (rememberSession) {
-        window.localStorage.setItem(SESSION_KEY, token);
+        window.localStorage.setItem("easypro2_session", token);
       } else {
-        window.sessionStorage.setItem(SESSION_KEY, token);
+        window.sessionStorage.setItem("easypro2_session", token);
       }
     } catch {
       // ignore storage failures in local env
@@ -390,7 +369,8 @@ async function parseResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error("La sesión expiró o no es válida.");
+      clearToken();
+      throw new Error("La sesión expiró. Ingresa nuevamente.");
     }
     if (response.status === 403) {
       throw new Error("No tienes permisos para ejecutar esta acción.");
@@ -425,7 +405,7 @@ function normalizeApiError(error: unknown, fallbackMessage = "No fue posible com
 type JsonRequestInit = Omit<RequestInit, "body"> & { body?: unknown };
 
 export async function apiFetch<T>(path: string, init: JsonRequestInit = {}): Promise<T> {
-  const token = getSessionToken();
+  const token = getToken();
   const headers = new Headers(init.headers ?? {});
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -514,15 +494,7 @@ export function completeLogin(token: string, rememberSession: boolean) {
 }
 
 export function logout() {
-  document.cookie = `${SESSION_KEY}=; path=/; max-age=0; SameSite=Lax`;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.removeItem(SESSION_KEY);
-      window.sessionStorage.removeItem(SESSION_KEY);
-    } catch {
-      // ignore storage failures
-    }
-  }
+  clearToken();
 }
 
 function decodeJwtPayload(token: string | null): Record<string, unknown> {

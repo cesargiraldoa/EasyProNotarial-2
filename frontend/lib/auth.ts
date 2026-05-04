@@ -16,5 +16,20 @@ function getStoredToken() {
 }
 
 export function getToken() {
-  return getCookieToken() || getStoredToken();
+  return getStoredToken() || getCookieToken();
+}
+
+export function clearToken() {
+  if (typeof document !== "undefined") {
+    document.cookie = `${SESSION_KEY}=; path=/; max-age=0; SameSite=Lax`;
+    document.cookie = `${SESSION_KEY}=; path=/; max-age=0; SameSite=None; Secure`;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(SESSION_KEY);
+      window.sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore storage failures in local env
+    }
+  }
 }

@@ -3,7 +3,7 @@
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db, require_roles
@@ -13,6 +13,7 @@ from app.models.template_field import TemplateField
 from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User
 from app.schemas.template import TemplateCreate, TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary, TemplateUpdate
+from app.services.document_generation import extract_highlighted_fields_from_docx
 from app.services.storage import save_template_upload
 
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -48,7 +49,7 @@ def serialize_template(template: DocumentTemplate) -> TemplateSummary:
         created_at=template.created_at,
         updated_at=template.updated_at,
         required_roles=[TemplateRequiredRoleSummary.model_validate(item) for item in template.required_roles],
-        fields=[TemplateFieldSummary.model_validate(item) for item in template.fields],
+        fields=[TemplateFieldSummary.model_validate(item) for item in template.fields if item.label and len(item.label.strip()) >= 2],
     )
 
 
@@ -71,21 +72,40 @@ def persist_template_payload(db: Session, template: DocumentTemplate, payload: T
     template.is_active = payload.is_active
     template.internal_variable_map_json = json.dumps(json.loads(payload.internal_variable_map_json or "{}"), ensure_ascii=False)
 
+    extracted_fields = None
     if payload.upload:
         source_filename, storage_path = save_template_upload(payload.upload.filename, payload.upload.content_base64, template.slug or slugify(payload.name))
         template.source_filename = source_filename
         template.storage_path = storage_path
+        if (payload.upload.filename or "").lower().endswith(".docx"):
+            extracted_fields = extract_highlighted_fields_from_docx(storage_path)
 
     template.required_roles.clear()
     template.fields.clear()
     db.flush()
     for item in payload.required_roles:
         template.required_roles.append(TemplateRequiredRole(role_code=item.role_code.strip(), label=item.label.strip(), is_required=item.is_required, step_order=item.step_order))
-    for item in payload.fields:
-        options_json = None
-        if item.options_json:
-            options_json = json.dumps(json.loads(item.options_json), ensure_ascii=False)
-        template.fields.append(TemplateField(field_code=item.field_code.strip(), label=item.label.strip(), field_type=item.field_type.strip(), section=item.section.strip(), is_required=item.is_required, options_json=options_json, placeholder_key=item.placeholder_key.strip() if item.placeholder_key else None, help_text=item.help_text.strip() if item.help_text else None, step_order=item.step_order))
+    if extracted_fields:
+        for item in extracted_fields:
+            template.fields.append(
+                TemplateField(
+                    field_code=item["field_code"].strip(),
+                    label=item["label"].strip(),
+                    field_type="text",
+                    section="general",
+                    is_required=True,
+                    options_json=None,
+                    placeholder_key=None,
+                    help_text=None,
+                    step_order=item["display_order"],
+                )
+            )
+    else:
+        for item in payload.fields:
+            options_json = None
+            if item.options_json:
+                options_json = json.dumps(json.loads(item.options_json), ensure_ascii=False)
+            template.fields.append(TemplateField(field_code=item.field_code.strip(), label=item.label.strip(), field_type=item.field_type.strip(), section=item.section.strip(), is_required=item.is_required, options_json=options_json, placeholder_key=item.placeholder_key.strip() if item.placeholder_key else None, help_text=item.help_text.strip() if item.help_text else None, step_order=item.step_order))
     return template
 
 
@@ -109,7 +129,7 @@ def get_template(template_id: int, db: Session = Depends(get_db), current_user: 
 
 
 @router.post("", response_model=TemplateSummary, status_code=status.HTTP_201_CREATED)
-def create_template(payload: TemplateCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
+def create_template(payload: TemplateCreate = Body(...), db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
     template = DocumentTemplate(slug=slugify(payload.name))
     persist_template_payload(db, template, payload)
     db.add(template)
@@ -119,7 +139,7 @@ def create_template(payload: TemplateCreate, db: Session = Depends(get_db), curr
 
 
 @router.put("/{template_id}", response_model=TemplateSummary)
-def update_template(template_id: int, payload: TemplateUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
+def update_template(template_id: int, payload: TemplateUpdate = Body(...), db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
     template = load_template_or_404(db, template_id)
     persist_template_payload(db, template, payload)
     db.commit()

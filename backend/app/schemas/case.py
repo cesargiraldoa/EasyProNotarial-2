@@ -107,6 +107,10 @@ class CaseActDataPayload(BaseModel):
     data_json: str = "{}"
 
 
+class GenerateFromTemplatePayload(BaseModel):
+    act_data: dict[str, str] = {}
+
+
 class CaseActDataSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -226,6 +230,10 @@ class GariGenerationRequest(BaseModel):
 class ApprovalRequest(BaseModel):
     role_code: str = Field(min_length=2, max_length=80)
     comment: str | None = None
+
+
+class ReviewTransitionRequest(BaseModel):
+    comment: str | None = Field(default=None, max_length=4000)
 
 
 class ExportRequest(BaseModel):

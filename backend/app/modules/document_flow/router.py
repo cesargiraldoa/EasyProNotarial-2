@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import io
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -48,11 +50,13 @@ from app.schemas.case import (
     ExportRequest,
     FinalUploadRequest,
     GariGenerationRequest,
+    GenerateFromTemplatePayload,
+    ReviewTransitionRequest,
 )
 from app.schemas.act_catalog import CaseActOut, CaseActsPayload
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
-from app.services.document_generation import build_case_text_snapshot, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
+from app.services.document_generation import build_case_text_snapshot, convert_docx_to_pdf, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
 from app.services.gari_document_service import (
     build_gari_docx_buffer,
     generate_notarial_document,
@@ -324,6 +328,20 @@ def append_timeline(db: Session, case_id: int, actor_user_id: int | None, event_
 
 def append_workflow(db: Session, case: Case, actor_user: User | None, event_type: str, actor_role_code: str | None = None, field_name: str | None = None, old_value: str | None = None, new_value: str | None = None, comment: str | None = None, approved_version_id: int | None = None, metadata: dict | None = None, from_state: str | None = None, to_state: str | None = None) -> None:
     db.add(CaseWorkflowEvent(case_id=case.id, actor_user_id=actor_user.id if actor_user else None, actor_role_code=actor_role_code, event_type=event_type, field_name=field_name, old_value=old_value, new_value=new_value, comment=comment, approved_version_id=approved_version_id, metadata_json=json.dumps(metadata or {}, ensure_ascii=False) if metadata is not None else None, from_state=from_state, to_state=to_state))
+
+
+def require_transition_comment(comment: str | None) -> str:
+    text = (comment or "").strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El comentario es obligatorio.")
+    return text
+
+
+def resolve_actor_role_code(actor_roles: set[str], preferred_roles: tuple[str, ...]) -> str | None:
+    for role_code in preferred_roles:
+        if role_code in actor_roles:
+            return role_code
+    return None
 
 
 def resolve_existing_max_sequence(db: Session, sequence_type: str, notary_id: int, year: int) -> int:
@@ -689,6 +707,14 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="No fue posible generar el documento con Gari.") from exc
 
+    # Reparar encoding UTF-8 si viene roto (latin-1 leído como utf-8)
+    if isinstance(generated_text, bytes):
+        generated_text = generated_text.decode('utf-8')
+    try:
+        generated_text = generated_text.encode('latin-1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+
     case.act_data.gari_draft_text = generated_text
     db.flush()
 
@@ -707,6 +733,8 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
         case.template_id,
         json.dumps({"source": "gari", "model": "gpt-4o"}, ensure_ascii=False),
     )
+    version.storage_path = output_path
+    db.flush()
 
     previous_state = case.current_state
     if case.current_state in {"borrador", "en_diligenciamiento", "revision_cliente", "ajustes_solicitados"}:
@@ -754,6 +782,52 @@ def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(g
         case.approved_document_version_id = latest_draft.id
         append_workflow(db, case, current_user, "case_approved", actor_role_code=payload.role_code, approved_version_id=latest_draft.id, comment=payload.comment or "Documento aprobado", from_state=previous_state, to_state=case.current_state, new_value=case.official_deed_number)
     append_timeline(db, case.id, current_user.id, "state_changed", previous_state, case.current_state, payload.comment or "Aprobación registrada")
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/send-to-review", response_model=CaseDetail)
+def send_case_to_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    previous_state = case.current_state
+    review_comment = (payload.comment or "").strip() or "Caso enviado a revisión"
+    case.current_state = "revision_aprobador"
+    actor_role_code = resolve_actor_role_code(actor_roles, ("protocolist", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_sent_to_review", previous_state, case.current_state, review_comment, {"transition": "send_to_review"})
+    append_workflow(db, case, current_user, "case_sent_to_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "send_to_review"})
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/return-review", response_model=CaseDetail)
+def return_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    review_comment = require_transition_comment(payload.comment)
+    previous_state = case.current_state
+    if "approver" in actor_roles:
+        case.current_state = "devuelto_aprobador"
+        actor_role_code = "approver"
+    else:
+        case.current_state = "ajustes_solicitados"
+        actor_role_code = resolve_actor_role_code(actor_roles, ("notary", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_returned_review", previous_state, case.current_state, review_comment, {"transition": "return_review"})
+    append_workflow(db, case, current_user, "case_returned_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "return_review"})
+    db.commit()
+    return serialize_case_detail(load_case_or_404(db, case.id))
+
+
+@router.post("/cases/{case_id}/reject-review", response_model=CaseDetail)
+def reject_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+    case = load_case_or_404(db, case_id)
+    actor_roles = get_role_codes(current_user)
+    review_comment = require_transition_comment(payload.comment)
+    previous_state = case.current_state
+    case.current_state = "rechazado_notario"
+    actor_role_code = resolve_actor_role_code(actor_roles, ("approver", "notary", "admin_notary", "super_admin"))
+    append_timeline(db, case.id, current_user.id, "case_rejected_review", previous_state, case.current_state, review_comment, {"transition": "reject_review"})
+    append_workflow(db, case, current_user, "case_rejected_review", actor_role_code=actor_role_code, comment=review_comment, from_state=previous_state, to_state=case.current_state, metadata={"transition": "reject_review"})
     db.commit()
     return serialize_case_detail(load_case_or_404(db, case.id))
 
@@ -813,15 +887,26 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
                 break
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+
+    # Detectar si es documento Gari y regenerar en tiempo real desde el texto
+    snapshot = json.loads(version.placeholder_snapshot_json or "{}")
+    if snapshot.get("source") == "gari" and case.act_data and case.act_data.gari_draft_text:
+        buf = build_gari_docx_buffer(case.act_data.gari_draft_text)
+        filename = version.original_filename or f"{case.internal_case_number or case.id}_gari.docx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     storage = version.storage_path or ""
+
+    # 1) Si es URL completa ya firmada → regenerar signed URL o redirigir
     if storage.startswith("http://") or storage.startswith("https://"):
-        # Intentar regenerar signed URL desde Supabase
         try:
             from app.services.gari_document_service import get_supabase_client
             import re
 
-            # Extraer el path relativo del storage_path original
-            # El path en Supabase es: cases/case-{id}/draft/...
             match = re.search(r"(cases/.*)", storage)
             if match:
                 supabase_path = match.group(1).split("?")[0]
@@ -834,25 +919,69 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
         except Exception:
             pass
         return RedirectResponse(url=storage, status_code=302)
+
+    # 2) Si existe como archivo local → servir directo
     path = Path(storage)
-    if not path.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
-    return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+    if path.exists():
+        return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+
+    # 3) Si es path relativo de Supabase (no existe local) → generar signed URL
+    try:
+        from app.services.gari_document_service import get_supabase_client
+        supabase = get_supabase_client()
+        result = supabase.storage.from_("documentos").create_signed_url(storage, 300)
+        new_url = result.get("signedURL") or result.get("signedUrl")
+        if new_url:
+            return RedirectResponse(url=new_url, status_code=302)
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/preview-pdf")
+def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+
+    version = next((item for item in document.versions if item.id == version_id), None)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+    if version.file_format.lower() != "docx":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para versiones DOCX.")
+
+    storage = (version.storage_path or "").strip()
+    if storage.startswith("http://") or storage.startswith("https://"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para archivos locales.")
+
+    source_docx = Path(storage)
+    if not source_docx.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El DOCX vigente no está disponible en almacenamiento local.")
+
+    preview_dir = Path(tempfile.mkdtemp(prefix=f"easypro2-preview-case-{case.id}-version-{version.id}-"))
+    try:
+        pdf_path = convert_docx_to_pdf(source_docx, preview_dir)
+    except Exception as exc:
+        background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+    background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{source_docx.stem}.pdf")
 
 
 @router.get("/cases/{case_id}/gari-download")
 def download_gari_document(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     case = load_case_or_404(db, case_id)
-    gari_text = (case.act_data.gari_draft_text if case.act_data else None) or ""
-    if not gari_text.strip():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay documento Gari generado")
-    buffer = build_gari_docx_buffer(gari_text)
+    if not (case.act_data and case.act_data.gari_draft_text and case.act_data.gari_draft_text.strip()):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay borrador Gari para este caso")
+    buf = build_gari_docx_buffer(case.act_data.gari_draft_text)
     filename = f"{case.internal_case_number or case.id}_gari.docx"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(
-        io.BytesIO(buffer.getvalue()),
+        buf,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers=headers,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -892,3 +1021,66 @@ def lookup_person(document_type: str | None = Query(default=None), document_numb
         }
         for item in query.limit(25).all()
     ]
+
+
+@router.post("/cases/{case_id}/generate-from-template")
+def generate_from_template(
+    case_id: int,
+    payload: GenerateFromTemplatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary")),
+):
+    case = load_case_or_404(db, case_id)
+    if case.template_id is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El caso no tiene plantilla configurada.")
+
+    template = db.query(DocumentTemplate).filter(DocumentTemplate.id == case.template_id).first()
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La plantilla asociada al caso no existe.")
+    if not template.storage_path:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La plantilla no tiene archivo base configurado")
+
+    act_data = {str(key): str(value) for key, value in (payload.act_data or {}).items()}
+    if case.act_data is None:
+        case.act_data = CaseActData(case_id=case.id, data_json=json.dumps(act_data, ensure_ascii=False))
+    else:
+        case.act_data.data_json = json.dumps(act_data, ensure_ascii=False)
+
+    destination_path = Path(__file__).resolve().parents[3] / "storage" / "cases" / f"case-{case.id}" / "draft" / "borrador_v1.docx"
+    os.makedirs(destination_path.parent, exist_ok=True)
+
+    replacements = {f"{{{{{key.upper()}}}}}": value for key, value in act_data.items()}
+    render_docx_template(template.storage_path, destination_path, replacements)
+
+    draft_document = db.query(CaseDocument).filter(CaseDocument.case_id == case.id, CaseDocument.category == "draft").first()
+    if draft_document is None:
+        draft_document = CaseDocument(case_id=case.id, category="draft", title="Borrador documental", current_version_number=0)
+        db.add(draft_document)
+        db.flush()
+
+    version_number = (draft_document.current_version_number or 0) + 1
+    draft_document.current_version_number = version_number
+    db.add(
+        CaseDocumentVersion(
+            case_document_id=draft_document.id,
+            version_number=version_number,
+            file_format="docx",
+            storage_path=str(destination_path),
+            original_filename=destination_path.name,
+            generated_from_template_id=template.id,
+            placeholder_snapshot_json=json.dumps(replacements, ensure_ascii=False, indent=2),
+            created_by_user_id=current_user.id,
+        )
+    )
+    append_timeline(
+        db,
+        case.id,
+        current_user.id,
+        "draft_generated",
+        case.current_state,
+        case.current_state,
+        comment="Documento generado desde plantilla",
+        metadata={"template_id": template.id, "version_number": version_number},
+    )
+    db.commit()
+    return {"status": "ok", "message": "Documento generado correctamente.", "case_id": case.id, "docx_path": str(destination_path)}
