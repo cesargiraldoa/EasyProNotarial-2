@@ -8,12 +8,14 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from jose import jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
+from app.core.config import get_settings
 from app.models.case import Case
 from app.models.case_act import CaseAct
 from app.models.case_act_data import CaseActData
@@ -67,6 +69,7 @@ from app.services.storage import next_case_file_path, resolve_template_source_pa
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
+settings = get_settings()
 
 NOTARY_APPROVER_ROLES = {"titular_notary", "substitute_notary"}
 
@@ -939,6 +942,78 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
         pass
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+
+
+def _resolve_public_api_base(request: Request) -> str:
+    configured = (settings.api_public_url or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/files/{version_lookup_id}")
+def onlyoffice_file(case_id: int, document_id: int, version_id: int, version_lookup_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if version_lookup_id != version_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+    return download_case_document(case_id, document_id, version_id, db, current_user)
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice-config")
+def onlyoffice_config(case_id: int, document_id: int, version_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+    version = next((item for item in document.versions if item.id == version_id), None)
+    if version is None or version.file_format.lower() != "docx":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión DOCX no encontrada.")
+    base_url = _resolve_public_api_base(request)
+    file_url = f"{base_url}/api/v1/document-flow/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/files/{version_id}"
+    callback_url = f"{base_url}/api/v1/document-flow/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/callback/{case_id}/{document_id}/{version_id}"
+    payload = {
+        "document": {"fileType": "docx", "key": f"case-{case_id}-doc-{document_id}-v-{version_id}-{version.updated_at.timestamp()}", "title": version.original_filename or f"case_{case_id}.docx", "url": file_url},
+        "documentType": "word",
+        "editorConfig": {"callbackUrl": callback_url, "mode": "edit", "lang": "es", "user": {"id": str(current_user.id), "name": current_user.full_name or current_user.email}},
+    }
+    secret = (settings.onlyoffice_jwt_secret or "").strip()
+    if secret:
+        payload["token"] = jwt.encode(payload, secret, algorithm="HS256")
+    return payload
+
+
+@router.post("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/callback/{callback_case_id}/{callback_document_id}/{callback_version_id}")
+async def onlyoffice_callback(case_id: int, document_id: int, version_id: int, callback_case_id: int, callback_document_id: int, callback_version_id: int, request: Request, db: Session = Depends(get_db)):
+    if (case_id, document_id, version_id) != (callback_case_id, callback_document_id, callback_version_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Callback inválido.")
+    payload = await request.json()
+    status_code = int(payload.get("status", 0))
+    if status_code not in (2, 6, 7):
+        return {"error": 0}
+    url = payload.get("url")
+    if not url:
+        return {"error": 0}
+    import requests
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+    current_version = next((item for item in document.versions if item.id == version_id), None)
+    if current_version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+    target = next_case_file_path(case.id, "draft", document.current_version_number + 1, "docx", current_version.original_filename or f"case_{case.id}.docx")
+    target.write_bytes(response.content)
+    new_version = CaseDocumentVersion(case_document_id=document.id, version_number=document.current_version_number + 1, file_format="docx", storage_path=str(target), original_filename=current_version.original_filename or target.name, generated_from_template_id=current_version.generated_from_template_id, placeholder_snapshot_json=current_version.placeholder_snapshot_json, created_by_user_id=current_version.created_by_user_id)
+    document.current_version_number += 1
+    db.add(new_version)
+    db.commit()
+    return {"error": 0}
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/download-pdf")
+def download_version_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return preview_case_document_pdf(case_id, document_id, version_id, background_tasks, db, current_user)
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/preview-pdf")

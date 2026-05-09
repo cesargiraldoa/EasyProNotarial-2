@@ -386,6 +386,9 @@ export async function rejectCaseReview(caseId: number, comment: string) {
   return normalizeCase(await response.json());
 }
 export async function exportDocumentCase(caseId: number, file_format: "docx" | "pdf") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { file_format } })); }
+export async function getOnlyOfficeConfig(caseId: number, documentId: number, versionId: number) {
+  return apiFetch<Record<string, unknown>>(`/api/v1/document-flow/cases/${caseId}/documents/${documentId}/versions/${versionId}/onlyoffice-config`);
+}
 export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { filename, content_base64, comment: comment || null } })); }
 export async function lookupPersons(params: { document_type?: string; document_number?: string; q?: string }) { const query = new URLSearchParams(); if (params.document_type) query.set("document_type", params.document_type); if (params.document_number) query.set("document_number", params.document_number); if (params.q) query.set("q", params.q); return asArray(await apiFetch<unknown>(`/api/v1/document-flow/persons/lookup?${query.toString()}`), normalizePerson); }
 export async function createTemplate(payload: unknown) {
@@ -451,5 +454,4 @@ export async function saveCaseActs(caseId: number, acts: CaseActItem[]): Promise
     body: { acts },
   });
 }
-
 
