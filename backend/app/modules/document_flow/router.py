@@ -5,7 +5,7 @@ import os
 import shutil
 import io
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
@@ -952,10 +952,38 @@ def _resolve_public_api_base(request: Request) -> str:
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/files/{version_lookup_id}")
-def onlyoffice_file(case_id: int, document_id: int, version_id: int, version_lookup_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def onlyoffice_file(
+    case_id: int,
+    document_id: int,
+    version_id: int,
+    version_lookup_id: int,
+    token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
     if version_lookup_id != version_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
-    return download_case_document(case_id, document_id, version_id, db, current_user)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de OnlyOffice requerido.")
+    secret = (settings.onlyoffice_jwt_secret or "").strip()
+    if not secret:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OnlyOffice JWT secret no configurado.")
+    try:
+        token_payload = jwt.decode(token, secret, algorithms=["HS256"])
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de OnlyOffice inválido.") from exc
+    token_case_id = token_payload.get("case_id")
+    token_document_id = token_payload.get("document_id")
+    token_version_id = token_payload.get("version_id")
+    if (token_case_id, token_document_id, token_version_id) != (case_id, document_id, version_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token de OnlyOffice no autorizado para este archivo.")
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+    version = next((item for item in document.versions if item.id == version_id), None)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Versión documental no autorizada para este documento.")
+    return download_case_document(case_id, document_id, version_id, db, current_user=None)
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice-config")
@@ -968,14 +996,28 @@ def onlyoffice_config(case_id: int, document_id: int, version_id: int, request: 
     if version is None or version.file_format.lower() != "docx":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión DOCX no encontrada.")
     base_url = _resolve_public_api_base(request)
+    secret = (settings.onlyoffice_jwt_secret or "").strip()
+    file_token = None
+    if secret:
+        file_token = jwt.encode(
+            {
+                "case_id": case_id,
+                "document_id": document_id,
+                "version_id": version_id,
+                "exp": datetime.utcnow() + timedelta(hours=1),
+            },
+            secret,
+            algorithm="HS256",
+        )
     file_url = f"{base_url}/api/v1/document-flow/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/files/{version_id}"
+    if file_token:
+        file_url = f"{file_url}?token={file_token}"
     callback_url = f"{base_url}/api/v1/document-flow/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice/callback/{case_id}/{document_id}/{version_id}"
     payload = {
         "document": {"fileType": "docx", "key": f"case-{case_id}-doc-{document_id}-v-{version_id}-{version.updated_at.timestamp()}", "title": version.original_filename or f"case_{case_id}.docx", "url": file_url},
         "documentType": "word",
         "editorConfig": {"callbackUrl": callback_url, "mode": "edit", "lang": "es", "user": {"id": str(current_user.id), "name": current_user.full_name or current_user.email}},
     }
-    secret = (settings.onlyoffice_jwt_secret or "").strip()
     if secret:
         payload["token"] = jwt.encode(payload, secret, algorithm="HS256")
     return payload
