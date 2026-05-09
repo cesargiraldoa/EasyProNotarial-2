@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     frontend_url: str = "http://localhost:5179"
     api_public_url: str = ""
+    onlyoffice_documentserver_url: str = "http://localhost:8082"
+    onlyoffice_jwt_secret: str = ""
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480
