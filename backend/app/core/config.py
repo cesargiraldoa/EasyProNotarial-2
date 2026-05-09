@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
     frontend_url: str = "http://localhost:5179"
+    api_public_url: str = "http://127.0.0.1:8001"
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480

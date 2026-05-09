@@ -32,6 +32,14 @@ def load_template_or_404(db: Session, template_id: int) -> DocumentTemplate:
 
 
 def serialize_template(template: DocumentTemplate) -> TemplateSummary:
+    valid_fields = []
+    for item in template.fields:
+        field_code = (item.field_code or "").strip()
+        label = (item.label or "").strip()
+        if len(field_code) < 2 or len(label) < 2:
+            continue
+        valid_fields.append(item)
+
     return TemplateSummary(
         id=template.id,
         name=template.name,
@@ -49,7 +57,7 @@ def serialize_template(template: DocumentTemplate) -> TemplateSummary:
         created_at=template.created_at,
         updated_at=template.updated_at,
         required_roles=[TemplateRequiredRoleSummary.model_validate(item) for item in template.required_roles],
-        fields=[TemplateFieldSummary.model_validate(item) for item in template.fields],
+        fields=[TemplateFieldSummary.model_validate(item) for item in valid_fields],
     )
 
 
