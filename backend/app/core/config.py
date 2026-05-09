@@ -1,4 +1,4 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     debug: bool = True
     api_v1_prefix: str = "/api/v1"
     frontend_url: str = "http://localhost:5179"
+    api_public_url: str = ""
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480
