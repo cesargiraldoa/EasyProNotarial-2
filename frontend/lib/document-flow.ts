@@ -453,3 +453,17 @@ export async function saveCaseActs(caseId: number, acts: CaseActItem[]): Promise
 }
 
 
+
+export async function getOnlyOfficeConfig(caseId:number, documentId:number, versionId:number): Promise<Record<string, unknown>> {
+  return apiFetch(`/api/v1/document-flow/cases/${caseId}/documents/${documentId}/versions/${versionId}/onlyoffice-config`);
+}
+
+export async function downloadDocumentPdf(caseId:number, documentId:number, versionId:number): Promise<Blob> {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/documents/${documentId}/versions/${versionId}/download-pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.blob();
+}

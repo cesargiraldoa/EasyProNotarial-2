@@ -5,10 +5,12 @@ import os
 import shutil
 import io
 import tempfile
-from datetime import datetime
+import subprocess
+import hashlib
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -64,12 +66,32 @@ from app.services.gari_document_service import (
     save_gari_document_as_docx,
 )
 from app.services.storage import next_case_file_path, resolve_template_source_path, save_base64_file
+from app.core.config import get_settings
+from jose import jwt, JWTError
+from urllib.request import urlopen
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
 
 NOTARY_APPROVER_ROLES = {"titular_notary", "substitute_notary"}
 
+
+
+
+def _onlyoffice_token(payload: dict) -> str | None:
+    settings = get_settings()
+    secret = (settings.onlyoffice_jwt_secret or "").strip()
+    if not secret:
+        return None
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def _resolve_local_version_file(version: CaseDocumentVersion) -> Path:
+    storage = (version.storage_path or "").strip()
+    path = Path(storage)
+    if path.exists():
+        return path
+    raise HTTPException(status_code=404, detail="Archivo DOCX no disponible localmente para edición/convertir PDF.")
 
 def guess_media_type(path: Path) -> str:
     ext = path.suffix.lower()
@@ -972,6 +994,77 @@ def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, b
     background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"{source_docx.stem}.pdf")
 
+
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice-config")
+def onlyoffice_config(case_id:int, document_id:int, version_id:int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((d for d in case.documents if d.id==document_id), None)
+    version = next((v for v in (document.versions if document else []) if v.id==version_id), None)
+    if not document or not version: raise HTTPException(status_code=404, detail="Versión documental no encontrada.")
+    settings=get_settings()
+    if not settings.onlyoffice_document_server_url:
+        raise HTTPException(status_code=422, detail="ONLYOFFICE_DOCUMENT_SERVER_URL no configurado.")
+    key=hashlib.sha256(f"{case_id}:{document_id}:{version_id}:{version.created_at}".encode()).hexdigest()[:32]
+    file_token=_onlyoffice_token({"version_id":version_id,"case_id":case_id,"document_id":document_id,"exp":int((datetime.utcnow()+timedelta(minutes=30)).timestamp())})
+    file_url=f"{settings.frontend_url.replace('5179','8001')}{get_settings().api_v1_prefix}/document-flow/onlyoffice/files/{version_id}"
+    if file_token: file_url += f"?token={file_token}"
+    callback_url=f"{settings.frontend_url.replace('5179','8001')}{get_settings().api_v1_prefix}/document-flow/onlyoffice/callback/{case_id}/{document_id}/{version_id}"
+    cfg={"document":{"fileType":"docx","key":key,"title":version.original_filename or f'case_{case_id}_v{version.version_number}.docx',"url":file_url,"permissions":{"edit":True,"download":True,"print":True}},"editorConfig":{"callbackUrl":callback_url,"user":{"id":str(current_user.id),"name":current_user.full_name or current_user.email}},"documentType":"word"}
+    token=_onlyoffice_token(cfg)
+    if token: cfg["token"]=token
+    return cfg
+
+@router.get("/onlyoffice/files/{version_id}")
+def onlyoffice_file(version_id:int, token:str|None=Query(default=None), db: Session = Depends(get_db)):
+    settings=get_settings()
+    if (settings.onlyoffice_jwt_secret or '').strip():
+        if not token: raise HTTPException(status_code=401, detail='Token requerido.')
+        try: payload=jwt.decode(token, settings.onlyoffice_jwt_secret, algorithms=['HS256'])
+        except JWTError as exc: raise HTTPException(status_code=401, detail='Token inválido.') from exc
+        if int(payload.get('version_id',0))!=version_id: raise HTTPException(status_code=403, detail='Token no corresponde a versión.')
+    version=db.query(CaseDocumentVersion).filter(CaseDocumentVersion.id==version_id).first()
+    if not version: raise HTTPException(status_code=404, detail='Versión no encontrada.')
+    path=_resolve_local_version_file(version)
+    return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
+
+@router.post("/onlyoffice/callback/{case_id}/{document_id}/{version_id}")
+def onlyoffice_callback(case_id:int, document_id:int, version_id:int, payload: dict, db: Session = Depends(get_db)):
+    status_code = int(payload.get('status') or 0)
+    if status_code not in (2,6):
+        return {"error":0,"message":"Estado ignorado"}
+    url = payload.get('url')
+    if not url: raise HTTPException(status_code=422, detail='Callback sin URL de documento.')
+    case = load_case_or_404(db, case_id)
+    document = next((d for d in case.documents if d.id==document_id and d.category=='draft'), None)
+    if not document: raise HTTPException(status_code=404, detail='Documento borrador no encontrado.')
+    content = urlopen(url).read()
+    new_version_number=(document.current_version_number or 0)+1
+    target=next_case_file_path(case.id, 'draft', new_version_number, 'docx', f'borrador_v{new_version_number}.docx')
+    target.write_bytes(content)
+    source_v = next((v for v in document.versions if v.id==version_id), None)
+    newv=CaseDocumentVersion(document_id=document.id,version_number=new_version_number,file_format='docx',storage_path=str(target),original_filename=target.name,generated_from_template_id=document.case.template_id if document.case else None,created_by_user_id=None,placeholder_snapshot_json=source_v.placeholder_snapshot_json if source_v else '{}')
+    db.add(newv); document.current_version_number=new_version_number
+    append_workflow(db, case, None, 'draft_word_edited_saved', comment='OnlyOffice guardó nueva versión de borrador', approved_version_id=None, metadata={"source":"onlyoffice","base_version_id":version_id})
+    db.commit()
+    return {"error":0}
+
+@router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/download-pdf")
+def download_pdf(case_id:int, document_id:int, version_id:int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((d for d in case.documents if d.id==document_id), None)
+    version = next((v for v in (document.versions if document else []) if v.id==version_id), None)
+    if not version: raise HTTPException(status_code=404, detail='Versión no encontrada.')
+    if version.file_format.lower()!='docx': raise HTTPException(status_code=422, detail='Solo DOCX convertible a PDF.')
+    try:
+        source=_resolve_local_version_file(version)
+        outdir = Path(tempfile.mkdtemp(prefix='easypro2-onlyoffice-pdf-'))
+        pdf_path=convert_docx_to_pdf(source,outdir)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f'No fue posible convertir a PDF con LibreOffice. {exc}') from exc
+    background_tasks.add_task(shutil.rmtree, outdir, ignore_errors=True)
+    return FileResponse(pdf_path, media_type='application/pdf', filename=f'{Path(version.original_filename).stem}.pdf')
 
 @router.get("/cases/{case_id}/gari-download")
 def download_gari_document(case_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

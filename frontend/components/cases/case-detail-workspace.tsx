@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, downloadDocumentPdf, downloadDocumentPreviewPdf, getDocumentCase, getOnlyOfficeConfig, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
@@ -131,6 +131,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
   const [pdfPreviewError, setPdfPreviewError] = useState<string | null>(null);
+
+  const [onlyOfficeConfigError, setOnlyOfficeConfigError] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const editorRef = useRef<any>(null);
 
   useEffect(() => {
     if (!Number.isFinite(caseId) || caseId <= 0) {
@@ -376,6 +380,37 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Error al descargar.");
     }
+  }
+
+  async function handleOpenEditorWord() {
+    if (!draftDocument?.id || !latestWordVersion?.id) return;
+    const ds = process.env.NEXT_PUBLIC_ONLYOFFICE_DOCUMENT_SERVER_URL;
+    if (!ds) { setOnlyOfficeConfigError("Editor Word no configurado. Falta ONLYOFFICE_DOCUMENT_SERVER_URL."); return; }
+    try {
+      setOnlyOfficeConfigError(null);
+      const config = await getOnlyOfficeConfig(caseId, draftDocument.id, latestWordVersion.id);
+      const scriptId = "onlyoffice-api";
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script'); script.id = scriptId; script.src = `${ds}/web-apps/apps/api/documents/api.js`; script.async = true; document.body.appendChild(script);
+        await new Promise((resolve, reject)=>{script.onload=resolve; script.onerror=reject;});
+      }
+      setEditorOpen(true);
+      setTimeout(()=>{
+        const DocsAPI = (window as any).DocsAPI;
+        if (!DocsAPI) return;
+        if (editorRef.current?.destroyEditor) editorRef.current.destroyEditor();
+        editorRef.current = new DocsAPI.DocEditor("onlyoffice-editor", config);
+      },100);
+    } catch (e) { setOnlyOfficeConfigError(e instanceof Error ? e.message : 'Error inicializando OnlyOffice'); }
+  }
+
+  async function handleDownloadPdfCurrent() {
+    if (!draftDocument?.id || !latestWordVersion?.id) return;
+    try {
+      const blob = await downloadDocumentPdf(caseId, draftDocument.id, latestWordVersion.id);
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=`v${latestWordVersion.version_number}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (issue) { setError(issue instanceof Error ? issue.message : 'No fue posible descargar PDF.'); }
   }
 
   async function handleApprove() {
@@ -835,6 +870,19 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     {isGenerating ? "Generando..." : "Generar Word"}
                   </button>
                 ) : null}
+                <section className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                  <p className="text-sm font-semibold text-primary">Editor Word</p>
+                  <p className="text-xs text-secondary">Versión actual: {latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin versión"}</p>
+                  {onlyOfficeConfigError ? <p className="text-xs text-rose-600">{onlyOfficeConfigError}</p> : null}
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void handleOpenEditorWord()} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white">Abrir/Editar Word</button>
+                    <button type="button" onClick={() => latestWordVersion && void handleDownload(latestWordVersion.download_url || "", `v${latestWordVersion.version_number}.docx`)} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Descargar Word</button>
+                    <button type="button" onClick={() => void handleDownloadPdfCurrent()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Descargar PDF</button>
+                    <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
+                  </div>
+                  {editorOpen ? <div id="onlyoffice-editor" className="min-h-[700px] w-full rounded-xl border border-[var(--line)] bg-white" /> : null}
+                </section>
+
                 {draftDocument?.versions?.[0] ? (
                   <button
                     type="button"
