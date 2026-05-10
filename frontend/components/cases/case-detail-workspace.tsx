@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, getDocumentCase, getOnlyOfficeConfig, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
@@ -379,16 +379,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   }
   async function handleOpenOnlyOffice() {
     if (!draftDocument?.id || !latestWordVersion?.id) return;
-    try {
-      const config = await getOnlyOfficeConfig(caseId, draftDocument.id, latestWordVersion.id);
-      const docServer = (process.env.NEXT_PUBLIC_ONLYOFFICE_DOCS_URL ?? "").replace(/\/$/, "");
-      if (!docServer) throw new Error("Configura NEXT_PUBLIC_ONLYOFFICE_DOCS_URL para abrir el editor.");
-      const editor = window.open("", "_blank");
-      if (!editor) throw new Error("No fue posible abrir la ventana del editor.");
-      editor.document.write(`<!doctype html><html><body><div id="placeholder" style="height:100vh"></div><script src="${docServer}/web-apps/apps/api/documents/api.js"></script><script>new DocsAPI.DocEditor('placeholder', ${JSON.stringify(config)});</script></body></html>`);
-      editor.document.close();
-    } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "No fue posible abrir OnlyOffice.");
+    const editorPath = `/dashboard/casos/${caseId}/editor/${draftDocument.id}/${latestWordVersion.id}`;
+    const opened = window.open(editorPath, "_blank");
+    if (!opened) {
+      setError("No fue posible abrir la pestaña del editor. Verifica el bloqueador de ventanas emergentes.");
     }
   }
 
