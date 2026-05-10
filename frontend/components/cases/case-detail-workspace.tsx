@@ -379,7 +379,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   }
   async function handleOpenOnlyOffice() {
     if (!draftDocument?.id || !latestWordVersion?.id) return;
-    const editorPath = `/dashboard/casos/${caseId}/editor/${draftDocument.id}/${latestWordVersion.id}`;
+    const editorPath = `/dashboard/onlyoffice-editor/${caseId}/${draftDocument.id}/${latestWordVersion.id}`;
     const editorUrl = new URL(editorPath, window.location.origin).toString();
 
     const opened = window.open(editorUrl, "_blank", "noopener,noreferrer");
@@ -855,6 +855,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                   <button
                     type="button"
                     onClick={() => void handleOpenOnlyOffice()}
+                    title="Abrir editor OnlyOffice v2"
                     className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
                   >
                     Abrir/Editar Word
