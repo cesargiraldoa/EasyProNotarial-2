@@ -15,6 +15,7 @@ STORAGE_ROOT = BASE_DIR / "storage"
 TEMPLATE_STORAGE = STORAGE_ROOT / "templates"
 CASE_STORAGE = STORAGE_ROOT / "cases"
 SUPABASE_TEMPLATE_BUCKET = os.environ.get("SUPABASE_TEMPLATES_BUCKET", "documentos").strip() or "documentos"
+SUPABASE_CASE_BUCKET = os.environ.get("SUPABASE_CASES_BUCKET", "documentos").strip() or "documentos"
 
 
 def ensure_storage_dirs() -> None:
@@ -63,6 +64,65 @@ def _download_from_supabase(bucket: str, path: str) -> bytes:
     raise TypeError(f"No fue posible descargar el archivo {path} desde Supabase.")
 
 
+
+
+def build_case_storage_key(case_id: int, category: str, version_number: int, filename: str) -> str:
+    safe_name = sanitize_filename(filename)
+    return f"cases/case-{case_id}/{sanitize_filename(category)}/v{version_number}/{safe_name}"
+
+
+def save_case_file(content: bytes, case_id: int, category: str, version_number: int, filename: str, content_type: str) -> tuple[str, str]:
+    ensure_storage_dirs()
+    safe_name = sanitize_filename(filename)
+    storage_key = build_case_storage_key(case_id, category, version_number, safe_name)
+    if _has_supabase_credentials():
+        _upload_to_supabase(SUPABASE_CASE_BUCKET, storage_key, content, content_type)
+        return safe_name, f"supabase://{SUPABASE_CASE_BUCKET}/{storage_key}"
+
+    target = next_case_file_path(case_id, category, version_number, Path(safe_name).suffix or content_type.split('/')[-1], safe_name)
+    target.write_bytes(content)
+    return safe_name, str(target)
+
+
+def parse_supabase_storage_path(storage_path: str | Path) -> tuple[str, str]:
+    raw = str(storage_path or "").strip()
+    if not raw.startswith("supabase://"):
+        raise ValueError("Ruta de storage no es Supabase")
+    without_scheme = raw[len("supabase://") :]
+    bucket, _, key = without_scheme.partition("/")
+    if not bucket or not key:
+        raise ValueError("Ruta Supabase inválida")
+    return bucket, key
+
+
+def download_storage_bytes(storage_path: str | Path) -> bytes:
+    raw = str(storage_path or "").strip()
+    if not raw:
+        raise FileNotFoundError("Ruta de almacenamiento vacía")
+    if raw.startswith("supabase://"):
+        bucket, key = parse_supabase_storage_path(raw)
+        return _download_from_supabase(bucket, key)
+    path = Path(raw)
+    if path.exists():
+        return path.read_bytes()
+    if _has_supabase_credentials() and "/" in raw and not raw.startswith("http"):
+        return _download_from_supabase(SUPABASE_CASE_BUCKET, raw)
+    raise FileNotFoundError(f"Archivo no disponible: {raw}")
+
+
+def create_signed_storage_url(storage_path: str | Path, expires_in: int = 300) -> str | None:
+    raw = str(storage_path or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("supabase://"):
+        bucket, key = parse_supabase_storage_path(raw)
+    elif raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    else:
+        bucket, key = SUPABASE_CASE_BUCKET, raw
+    supabase = get_supabase_client()
+    result = supabase.storage.from_(bucket).create_signed_url(key, expires_in)
+    return result.get("signedURL") or result.get("signedUrl")
 def sanitize_filename(filename: str) -> str:
     keep = [char if char.isalnum() or char in {"-", "_", "."} else "_" for char in filename.strip()]
     sanitized = "".join(keep).strip("._") or "archivo"
