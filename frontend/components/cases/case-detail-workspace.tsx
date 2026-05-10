@@ -924,7 +924,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 </button>
               ) : null}
               {draftDocument?.id && latestWordVersion?.id ? (
-                <button type="button" onClick={() => void handleDownload(`/api/v1/document-flow/cases/${caseId}/documents/${draftDocument.id}/versions/${latestWordVersion.id}/download-pdf`, `v${latestWordVersion.version_number}.pdf`)} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Descargar PDF</button>
+                <button type="button" onClick={() => void handleDownload(`/api/v1/document-flow/cases/${caseId}/documents/${draftDocument.id}/download-pdf`, `v${latestWordVersion.version_number}.pdf`)} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Generar / Descargar PDF</button>
               ) : null}
               <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
               </div>
