@@ -190,7 +190,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const latestWordVersion = draftDocument?.versions?.[0] ?? null;
   const hasWordVersion = Boolean(draftDocument?.versions?.[0]);
   const canEditCaseData = tab !== "Diligenciamiento";
-  const canGenerateWord = isProtocolist || isAdminNotary;
+  const canGenerateWord = isProtocolist || isAdminNotary || isSuperAdmin;
   const generateWordLabel = hasWordVersion ? "Regenerar Word" : "Generar Word";
   const canSendToReview = Boolean(caseDetail) && (isProtocolist || isAdminNotary || isSuperAdmin) && ["borrador", "en_diligenciamiento", "generado"].includes(caseDetail?.current_state ?? "");
   const canReviewRevision = Boolean(caseDetail) && (isApprover || isAdminNotary || isSuperAdmin || caseDetail?.approver_user_id === currentUser?.id) && caseDetail?.current_state === "revision_aprobador";
