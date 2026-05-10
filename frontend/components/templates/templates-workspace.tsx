@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileUp, Save } from "lucide-react";
 import { createTemplate, getTemplates, updateTemplate, type TemplateRecord } from "@/lib/document-flow";
-import { getNotaries } from "@/lib/api";
+import { getCurrentUser, getNotaries } from "@/lib/api";
 import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 async function fileToBase64(file: File) {
@@ -47,6 +47,8 @@ export function TemplatesWorkspace() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [canManageAllNotaries, setCanManageAllNotaries] = useState(false);
+  const [defaultNotaryId, setDefaultNotaryId] = useState<string>("");
 
   useEffect(() => {
     void load();
@@ -56,15 +58,23 @@ export function TemplatesWorkspace() {
     setIsLoading(true);
     setError(null);
     try {
-      const [templateData, notaryData] = await Promise.all([getTemplates(), getNotaries()]);
+      const [templateData, notaryData, currentUser] = await Promise.all([getTemplates(), getNotaries(), getCurrentUser()]);
       const safeTemplates = Array.isArray(templateData) ? templateData : [];
+      const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
+      const currentDefaultNotaryId = String(currentUser?.default_notary_id ?? "");
+      setCanManageAllNotaries(isSuperAdmin);
+      setDefaultNotaryId(currentDefaultNotaryId);
       setTemplates(safeTemplates);
       setNotaries(Array.isArray(notaryData) ? notaryData.map((item) => ({ id: item.id, notary_label: formatNotaryOptionLabel(item), municipality: item.municipality || "Sin municipio" })) : []);
       if (safeTemplates.length > 0) {
-        selectTemplate(safeTemplates[0]);
+        selectTemplate(safeTemplates[0], { canManageAllNotaries: isSuperAdmin, defaultNotaryId: currentDefaultNotaryId });
       } else {
         setSelected(null);
-        setForm(emptyForm);
+        setForm((current) => ({
+          ...emptyForm,
+          scope_type: isSuperAdmin ? emptyForm.scope_type : "notary",
+          notary_id: isSuperAdmin ? "" : currentDefaultNotaryId,
+        }));
       }
     } catch (loadError) {
       setTemplates([]);
@@ -76,15 +86,15 @@ export function TemplatesWorkspace() {
     }
   }
 
-  function selectTemplate(item: TemplateRecord) {
+  function selectTemplate(item: TemplateRecord, options?: { canManageAllNotaries?: boolean; defaultNotaryId?: string }) {
     setSelected(item);
     setForm({
       name: item.name || emptyForm.name,
       case_type: item.case_type || emptyForm.case_type,
       document_type: item.document_type || emptyForm.document_type,
       description: item.description || "",
-      scope_type: item.scope_type || emptyForm.scope_type,
-      notary_id: item.notary_id ? String(item.notary_id) : "",
+      scope_type: (options?.canManageAllNotaries ?? canManageAllNotaries) ? (item.scope_type || emptyForm.scope_type) : "notary",
+      notary_id: (options?.canManageAllNotaries ?? canManageAllNotaries) ? (item.notary_id ? String(item.notary_id) : "") : (options?.defaultNotaryId ?? defaultNotaryId),
       is_active: item.is_active,
       internal_variable_map_json: item.internal_variable_map_json || defaultVariableMap,
     });
@@ -135,7 +145,8 @@ export function TemplatesWorkspace() {
             ];
       const payload = {
         ...form,
-        notary_id: form.notary_id ? Number(form.notary_id) : null,
+        scope_type: canManageAllNotaries ? form.scope_type : "notary",
+        notary_id: canManageAllNotaries ? (form.notary_id ? Number(form.notary_id) : null) : (defaultNotaryId ? Number(defaultNotaryId) : null),
         required_roles: [
           { role_code: "poderdante", label: "Poderdante", is_required: true, step_order: 1 },
           { role_code: "apoderado", label: "Apoderado(a)", is_required: true, step_order: 2 },
@@ -168,7 +179,7 @@ export function TemplatesWorkspace() {
         <aside className="ep-card rounded-[2rem] p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-primary">Plantillas disponibles</h2>
-            <button type="button" onClick={() => { setSelected(null); setUploadFile(null); setForm(emptyForm); }} className="text-sm font-semibold text-primary">Nueva plantilla</button>
+            <button type="button" onClick={() => { setSelected(null); setUploadFile(null); setForm({ ...emptyForm, scope_type: canManageAllNotaries ? "global" : "notary", notary_id: canManageAllNotaries ? "" : defaultNotaryId }); }} className="text-sm font-semibold text-primary">Nueva plantilla</button>
           </div>
           <div className="mt-4 space-y-3">
             {isLoading ? <div className="ep-card-muted rounded-[1.3rem] px-4 py-4 text-sm text-secondary">Cargando plantillas Word...</div> : null}
@@ -189,8 +200,8 @@ export function TemplatesWorkspace() {
             <label className="grid gap-2 text-sm font-medium text-primary">Nombre<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Tipo de documento<input value={form.document_type} onChange={(event) => setForm((current) => ({ ...current, document_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Documento / minuta<input value={form.case_type} onChange={(event) => setForm((current) => ({ ...current, case_type: event.target.value }))} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Alcance<select value={form.scope_type} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="global">Global</option><option value="notary">Por notaría</option></select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary">Notaría<select value={form.notary_id} onChange={(event) => setForm((current) => ({ ...current, notary_id: event.target.value }))} className="ep-select h-12 rounded-2xl px-4"><option value="">Todas</option>{notaries.map((item) => <option key={item.id} value={item.id}>{item.notary_label}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Alcance<select value={form.scope_type} onChange={(event) => setForm((current) => ({ ...current, scope_type: event.target.value }))} disabled={!canManageAllNotaries} className="ep-select h-12 rounded-2xl px-4 disabled:opacity-60"><option value="global">Global</option><option value="notary">Por notaría</option></select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Notaría<select value={form.notary_id} onChange={(event) => setForm((current) => ({ ...current, notary_id: event.target.value }))} disabled={!canManageAllNotaries} className="ep-select h-12 rounded-2xl px-4 disabled:opacity-60"><option value="">Todas</option>{notaries.map((item) => <option key={item.id} value={item.id}>{item.notary_label}</option>)}</select></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Plantilla activa<select value={form.is_active ? "active" : "inactive"} onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.value === "active" }))} className="ep-select h-12 rounded-2xl px-4"><option value="active">Activa</option><option value="inactive">Inactiva</option></select></label>
           </div>
           <label className="grid gap-2 text-sm font-medium text-primary">Descripción<textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={3} className="ep-textarea rounded-2xl px-4 py-3" /></label>
@@ -226,4 +237,3 @@ export function TemplatesWorkspace() {
     </div>
   );
 }
-
