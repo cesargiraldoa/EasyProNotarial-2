@@ -1198,32 +1198,37 @@ def generate_from_template(
     else:
         case.act_data.data_json = json.dumps(act_data, ensure_ascii=False)
 
-    destination_path = Path(__file__).resolve().parents[3] / "storage" / "cases" / f"case-{case.id}" / "draft" / "borrador_v1.docx"
-    os.makedirs(destination_path.parent, exist_ok=True)
-
     replacements = {f"{{{{{key.upper()}}}}}": value for key, value in act_data.items()}
-    template_source = resolve_template_source_path(template.storage_path)
-    render_docx_template(template_source, destination_path, replacements)
-
-    draft_document = db.query(CaseDocument).filter(CaseDocument.case_id == case.id, CaseDocument.category == "draft").first()
-    if draft_document is None:
-        draft_document = CaseDocument(case_id=case.id, category="draft", title="Borrador documental", current_version_number=0)
-        db.add(draft_document)
-        db.flush()
-
-    version_number = (draft_document.current_version_number or 0) + 1
-    draft_document.current_version_number = version_number
-    db.add(
-        CaseDocumentVersion(
-            case_document_id=draft_document.id,
-            version_number=version_number,
+    with tempfile.TemporaryDirectory(prefix=f"easypro-generate-case-{case.id}-") as temp_dir:
+        temp_output = Path(temp_dir) / "borrador.docx"
+        template_source = resolve_template_source_path(template.storage_path, temp_dir=temp_dir)
+        render_docx_template(template_source, temp_output, replacements)
+        version = add_document_version(
+            db=db,
+            case=case,
+            category="draft",
+            title="Borrador documental",
             file_format="docx",
-            storage_path=str(destination_path),
-            original_filename=destination_path.name,
-            generated_from_template_id=template.id,
-            placeholder_snapshot_json=json.dumps(replacements, ensure_ascii=False, indent=2),
+            source_path=temp_output,
+            original_filename=f"borrador_v{(latest_document_version(case, 'draft', 'docx').version_number + 1) if latest_document_version(case, 'draft', 'docx') else 1}.docx",
             created_by_user_id=current_user.id,
+            template_id=template.id,
+            placeholder_snapshot_json=json.dumps(replacements, ensure_ascii=False, indent=2),
         )
+    db.refresh(version)
+    document = db.query(CaseDocument).filter(CaseDocument.id == version.case_document_id).first()
+    storage_backend = "supabase" if str(version.storage_path).startswith("supabase://") else "local"
+    bucket = str(version.storage_path).split("/")[2] if str(version.storage_path).startswith("supabase://") else None
+    logger.info(
+        "generate-from-template completado",
+        extra={
+            "case_id": case.id,
+            "document_id": version.case_document_id,
+            "version_id": version.id,
+            "storage_path": version.storage_path,
+            "storage_backend": storage_backend,
+            "bucket": bucket,
+        },
     )
     append_timeline(
         db,
@@ -1233,7 +1238,16 @@ def generate_from_template(
         case.current_state,
         case.current_state,
         comment="Documento generado desde plantilla",
-        metadata={"template_id": template.id, "version_number": version_number},
+        metadata={"template_id": template.id, "version_number": version.version_number},
     )
     db.commit()
-    return {"status": "ok", "message": "Documento generado correctamente.", "case_id": case.id, "docx_path": str(destination_path)}
+    return {
+        "status": "ok",
+        "message": "Documento generado correctamente.",
+        "case_id": case.id,
+        "document_id": document.id if document else version.case_document_id,
+        "version_id": version.id,
+        "version_number": version.version_number,
+        "storage_path": version.storage_path,
+        "original_filename": version.original_filename,
+    }
