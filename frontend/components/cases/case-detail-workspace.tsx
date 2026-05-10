@@ -380,9 +380,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   async function handleOpenOnlyOffice() {
     if (!draftDocument?.id || !latestWordVersion?.id) return;
     const editorPath = `/dashboard/casos/${caseId}/editor/${draftDocument.id}/${latestWordVersion.id}`;
-    const opened = window.open(editorPath, "_blank");
+    const editorUrl = new URL(editorPath, window.location.origin).toString();
+
+    const opened = window.open(editorUrl, "_blank", "noopener,noreferrer");
     if (!opened) {
-      setError("No fue posible abrir la pestaña del editor. Verifica el bloqueador de ventanas emergentes.");
+      const anchor = document.createElement("a");
+      anchor.href = editorUrl;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
     }
   }
 
