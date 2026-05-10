@@ -13,6 +13,7 @@ from openai import OpenAI
 from supabase import Client, create_client
 
 from app.core.config import get_settings
+from app.services.storage import SUPABASE_CASE_BUCKET
 
 
 SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacción notarial colombiano de EasyPro.
@@ -408,7 +409,7 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
 
     supabase = get_supabase_client()
     storage_path = str(output_path).replace("\\", "/")
-    supabase.storage.from_("documentos").upload(
+    supabase.storage.from_(SUPABASE_CASE_BUCKET).upload(
         path=storage_path,
         file=file_bytes,
         file_options={
@@ -417,7 +418,7 @@ def save_gari_document_as_docx(text: str, output_path: str | Path) -> str:
         },
     )
 
-    signed = supabase.storage.from_("documentos").create_signed_url(storage_path, 3600)
+    signed = supabase.storage.from_(SUPABASE_CASE_BUCKET).create_signed_url(storage_path, 3600)
     url = signed.get("signedUrl") or signed.get("signedURL") or ""
     if not url:
         raise ValueError(f"Supabase no retornó signed URL para {storage_path}. Respuesta: {signed}")
