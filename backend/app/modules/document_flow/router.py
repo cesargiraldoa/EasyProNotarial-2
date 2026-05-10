@@ -1088,11 +1088,29 @@ async def onlyoffice_callback(case_id: int, document_id: int, version_id: int, c
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/download-pdf")
 def download_version_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return preview_case_document_pdf(case_id, document_id, version_id, background_tasks, db, current_user)
+    return preview_case_document_pdf(case_id, document_id, version_id, background_tasks, db, current_user, as_attachment=True)
+
+
+@router.get("/cases/{case_id}/documents/{document_id}/download-pdf")
+def download_latest_document_pdf(case_id: int, document_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    case = load_case_or_404(db, case_id)
+    document = next((item for item in case.documents if item.id == document_id), None)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado para este caso.")
+
+    latest_docx_version = max(
+        (item for item in document.versions if (item.file_format or "").lower() == "docx"),
+        key=lambda item: item.version_number,
+        default=None,
+    )
+    if latest_docx_version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No existe una versión DOCX vigente para este documento.")
+
+    return preview_case_document_pdf(case_id, document_id, latest_docx_version.id, background_tasks, db, current_user, as_attachment=True)
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/preview-pdf")
-def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), as_attachment: bool = False):
     case = load_case_or_404(db, case_id)
     document = next((item for item in case.documents if item.id == document_id), None)
     if document is None:
@@ -1105,22 +1123,49 @@ def preview_case_document_pdf(case_id: int, document_id: int, version_id: int, b
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para versiones DOCX.")
 
     storage = (version.storage_path or "").strip()
-    if storage.startswith("http://") or storage.startswith("https://"):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La previsualización PDF solo está disponible para archivos locales.")
-
-    source_docx = Path(storage)
-    if not source_docx.exists():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El DOCX vigente no está disponible en almacenamiento local.")
+    temp_source_path: Path | None = None
+    if storage and not storage.startswith("supabase://") and not storage.startswith("http://") and not storage.startswith("https://"):
+        local_source = Path(storage)
+        if local_source.exists():
+            source_docx = local_source
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El DOCX vigente no está disponible en almacenamiento local.")
+    else:
+        try:
+            source_bytes = download_storage_bytes(storage)
+        except Exception as exc:
+            logger.exception("No fue posible descargar DOCX para conversión a PDF", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage})
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No fue posible descargar la versión DOCX vigente desde storage.") from exc
+        temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+        try:
+            temp_docx.write(source_bytes)
+            temp_docx.flush()
+        finally:
+            temp_docx.close()
+        temp_source_path = Path(temp_docx.name)
+        source_docx = temp_source_path
 
     preview_dir = Path(tempfile.mkdtemp(prefix=f"easypro2-preview-case-{case.id}-version-{version.id}-"))
     try:
         pdf_path = convert_docx_to_pdf(source_docx, preview_dir)
-    except Exception as exc:
+    except FileNotFoundError as exc:
+        logger.exception("No se encontró LibreOffice/soffice para convertir DOCX a PDF", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage})
         background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+        if temp_source_path is not None:
+            background_tasks.add_task(Path.unlink, temp_source_path, True)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No se encontró LibreOffice/soffice en el servidor para convertir DOCX a PDF.") from exc
+    except Exception as exc:
+        logger.exception("Fallo la conversión de DOCX a PDF", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage})
+        background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
+        if temp_source_path is not None:
+            background_tasks.add_task(Path.unlink, temp_source_path, True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
     background_tasks.add_task(shutil.rmtree, preview_dir, ignore_errors=True)
-    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{source_docx.stem}.pdf")
+    if temp_source_path is not None:
+        background_tasks.add_task(Path.unlink, temp_source_path, True)
+    pdf_filename = f"{Path(version.original_filename or source_docx.name).stem}.pdf"
+    return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_filename, headers={"Content-Disposition": f'{"attachment" if as_attachment else "inline"}; filename="{pdf_filename}"'})
 
 
 @router.get("/cases/{case_id}/gari-download")
