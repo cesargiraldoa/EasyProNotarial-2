@@ -256,8 +256,8 @@ export function SystemStatusWorkspace() {
               <p className="mt-2 text-sm font-semibold text-primary">{dashboard.latest_import_reference ?? "Sin referencia disponible"}</p>
             </div>
             <div className="ep-card-muted rounded-[1.35rem] px-4 py-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">Piloto visible</p>
-              <p className="mt-2 text-sm font-semibold text-primary">{dashboard.pilot_reference ? `${dashboard.pilot_reference.municipality}, ${dashboard.pilot_reference.department}` : "Sin piloto definido"}</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">Notaría piloto / operación seleccionada</p>
+              <p className="mt-2 text-sm font-semibold text-primary">{dashboard.pilot_reference ? `${dashboard.pilot_reference.notary_label} · ${dashboard.pilot_reference.municipality}` : "Sin notaría seleccionada"}</p>
             </div>
             <div className="ep-card-muted rounded-[1.35rem] px-4 py-4">
               <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">Observación</p>

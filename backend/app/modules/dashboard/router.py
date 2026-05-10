@@ -156,16 +156,22 @@ def get_superadmin_dashboard(
     all_users = all_users_query.all()
     all_notaries = all_notaries_query.order_by(Notary.municipality.asc(), Notary.notary_label.asc()).all()
     active_users = [user for user in all_users if user.is_active]
-    pilot_notary = (
-        db.query(Notary)
-        .filter(Notary.id == scope_notary_id)
-        .first()
-        if not is_super_admin
-        else db.query(Notary)
-        .filter(Notary.department == "Antioquia", Notary.municipality == "Caldas")
-        .order_by(Notary.id.asc())
-        .first()
-    )
+    pilot_notary = None
+    if effective_notary_id is not None:
+        pilot_notary = db.query(Notary).filter(Notary.id == effective_notary_id).first()
+    elif not is_super_admin and scope_notary_id is not None:
+        pilot_notary = db.query(Notary).filter(Notary.id == scope_notary_id).first()
+    else:
+        recent_notary_row = (
+            db.query(Case.notary_id)
+            .filter(Case.notary_id.isnot(None))
+            .order_by(Case.updated_at.desc(), Case.id.desc())
+            .first()
+        )
+        if recent_notary_row is not None:
+            pilot_notary = db.query(Notary).filter(Notary.id == recent_notary_row[0]).first()
+        if pilot_notary is None:
+            pilot_notary = db.query(Notary).order_by(Notary.is_active.desc(), Notary.id.asc()).first()
 
     notary_counter: Counter[str] = Counter()
     state_counter: Counter[str] = Counter()
@@ -218,7 +224,7 @@ def get_superadmin_dashboard(
             DashboardAlert(
                 level="info",
                 title="Piloto operativo real",
-                detail="Caldas, Antioquia queda visible como referencia actual de operaci\u00f3n EasyPro 1.",
+                detail="La operación seleccionada queda visible como referencia actual del tablero.",
             )
         )
 
@@ -226,8 +232,6 @@ def get_superadmin_dashboard(
     latest_import_notary_query = db.query(Notary)
     if not is_super_admin:
         latest_import_notary_query = latest_import_notary_query.filter(Notary.id == scope_notary_id)
-    else:
-        latest_import_notary_query = latest_import_notary_query.filter(Notary.department == "Antioquia")
     latest_import_notary = latest_import_notary_query.order_by(Notary.updated_at.desc()).first()
     latest_import_reference = None
     if latest_import_notary is not None and latest_import_notary.updated_at is not None:
@@ -247,7 +251,7 @@ def get_superadmin_dashboard(
             total_cases=len(pilot_cases),
             active_cases=sum(1 for case in pilot_cases if case.current_state not in FINALIZED_STATES),
             finalized_cases=sum(1 for case in pilot_cases if case.current_state in FINALIZED_STATES),
-            notes="Notar\u00eda piloto real referenciada para demo ejecutiva y validaci\u00f3n operativa.",
+            notes="Notaría piloto / operación seleccionada para referencia ejecutiva y validación operativa.",
         )
 
     system_status = [
@@ -313,7 +317,7 @@ def get_superadmin_dashboard(
         temporal_trend=[DashboardTrendDatum(label=label, value=value) for label, value in sorted(trend_counter.items())],
         owner_ranking=top_counter(owner_counter, limit=6),
         operational_focus=[
-            DashboardChartDatum(label=clean_text(label), value=value, highlight=clean_text(label) == "EasyPro 1 Caldas")
+            DashboardChartDatum(label=clean_text(label), value=value, highlight=False)
             for label, value in active_project_counter.most_common(6)
         ],
         critical_alerts=alerts,
