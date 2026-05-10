@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from jose import jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -964,7 +964,43 @@ def onlyoffice_file(
     version = next((item for item in document.versions if item.id == version_id), None)
     if version is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Versión documental no autorizada para este documento.")
-    return download_case_document(case_id, document_id, version_id, db, current_user=None)
+    storage_path = (version.storage_path or "").strip()
+    filename = version.original_filename or Path(storage_path).name or f"document_{version.id}.docx"
+    try:
+        content = download_storage_bytes(storage_path)
+    except Exception:
+        logger.exception(
+            "Fallo al descargar DOCX de OnlyOffice desde storage",
+            extra={
+                "case_id": case_id,
+                "document_id": document_id,
+                "version_id": version_id,
+                "storage_path": storage_path,
+                "filename": filename,
+            },
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo DOCX no disponible para OnlyOffice.")
+
+    logger.info(
+        "DOCX de OnlyOffice entregado correctamente",
+        extra={
+            "case_id": case_id,
+            "document_id": document_id,
+            "version_id": version_id,
+            "storage_path": storage_path,
+            "filename": filename,
+            "byte_length": len(content),
+        },
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content)),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/versions/{version_id}/onlyoffice-config")
