@@ -6,7 +6,7 @@ import re
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user, get_db, require_roles
+from app.core.deps import get_current_user, get_db, has_role, require_roles
 from app.models.document_template import DocumentTemplate
 from app.models.notary import Notary
 from app.models.template_field import TemplateField
@@ -117,7 +117,7 @@ def persist_template_payload(db: Session, template: DocumentTemplate, payload: T
 @router.get("", response_model=list[TemplateSummary])
 def list_templates(active_only: bool = Query(default=False), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(DocumentTemplate).options(joinedload(DocumentTemplate.required_roles), joinedload(DocumentTemplate.fields), joinedload(DocumentTemplate.notary)).order_by(DocumentTemplate.updated_at.desc(), DocumentTemplate.id.desc())
-    if not current_user.has_role("super_admin"):
+    if not has_role(current_user, "super_admin"):
         if current_user.default_notary_id is None:
             return []
         query = query.filter(DocumentTemplate.notary_id == current_user.default_notary_id)
@@ -129,7 +129,7 @@ def list_templates(active_only: bool = Query(default=False), db: Session = Depen
 @router.get("/active", response_model=list[TemplateSummary])
 def list_active_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(DocumentTemplate).options(joinedload(DocumentTemplate.required_roles), joinedload(DocumentTemplate.fields), joinedload(DocumentTemplate.notary)).filter(DocumentTemplate.is_active.is_(True))
-    if not current_user.has_role("super_admin"):
+    if not has_role(current_user, "super_admin"):
         if current_user.default_notary_id is None:
             return []
         query = query.filter(DocumentTemplate.notary_id == current_user.default_notary_id)
@@ -144,7 +144,7 @@ def get_template(template_id: int, db: Session = Depends(get_db), current_user: 
 
 @router.post("", response_model=TemplateSummary, status_code=status.HTTP_201_CREATED)
 def create_template(payload: TemplateCreate = Body(...), db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
-    if not current_user.has_role("super_admin"):
+    if not has_role(current_user, "super_admin"):
         if current_user.default_notary_id is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El usuario no tiene notaría por defecto asignada.")
         payload.scope_type = "notary"
@@ -160,7 +160,7 @@ def create_template(payload: TemplateCreate = Body(...), db: Session = Depends(g
 @router.put("/{template_id}", response_model=TemplateSummary)
 def update_template(template_id: int, payload: TemplateUpdate = Body(...), db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
     template = load_template_or_404(db, template_id)
-    if not current_user.has_role("super_admin"):
+    if not has_role(current_user, "super_admin"):
         if current_user.default_notary_id is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El usuario no tiene notaría por defecto asignada.")
         if template.notary_id != current_user.default_notary_id:
