@@ -65,7 +65,7 @@ from app.services.gari_document_service import (
     resolver_escritura_desde_template,
     save_gari_document_as_docx,
 )
-from app.services.storage import next_case_file_path, resolve_template_source_path, save_base64_file
+from app.services.storage import create_signed_storage_url, download_storage_bytes, guess_media_type as storage_guess_media_type, next_case_file_path, resolve_template_source_path, save_base64_file, save_case_file
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
@@ -73,16 +73,6 @@ settings = get_settings()
 
 NOTARY_APPROVER_ROLES = {"titular_notary", "substitute_notary"}
 
-
-def guess_media_type(path: Path) -> str:
-    ext = path.suffix.lower()
-    types = {
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".pdf": "application/pdf",
-        ".doc": "application/msword",
-        ".txt": "text/plain",
-    }
-    return types.get(ext, "application/octet-stream")
 
 
 def safe_json(value: str | None) -> str:
@@ -475,18 +465,10 @@ def add_document_version(db: Session, case: Case, category: str, title: str, fil
     document = get_or_create_document(db, case, category, title)
     version_number = document.current_version_number + 1
 
-    source_raw = str(source_path)
-    is_remote_source = source_raw.startswith("http://") or source_raw.startswith("https://")
-    if is_remote_source:
-        storage_path = source_raw
-        stored_filename = original_filename
-    else:
-        target_path = next_case_file_path(case.id, category, version_number, file_format, original_filename)
-        source = Path(source_path)
-        if source != target_path:
-            shutil.copy2(source, target_path)
-        storage_path = str(target_path)
-        stored_filename = target_path.name
+    source_raw = str(source_path).strip()
+    source_bytes = download_storage_bytes(source_raw)
+    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if file_format.lower() == "docx" else storage_guess_media_type(original_filename)
+    stored_filename, storage_path = save_case_file(source_bytes, case.id, category, version_number, original_filename, media_type)
 
     document.current_version_number = version_number
     version = CaseDocumentVersion(case_document_id=document.id, version_number=version_number, file_format=file_format, storage_path=storage_path, original_filename=stored_filename, generated_from_template_id=template_id, placeholder_snapshot_json=placeholder_snapshot_json, created_by_user_id=created_by_user_id)
@@ -893,55 +875,32 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
 
-    # Detectar si es documento Gari y regenerar en tiempo real desde el texto
     snapshot = json.loads(version.placeholder_snapshot_json or "{}")
     if snapshot.get("source") == "gari" and case.act_data and case.act_data.gari_draft_text:
         buf = build_gari_docx_buffer(case.act_data.gari_draft_text)
         filename = version.original_filename or f"{case.internal_case_number or case.id}_gari.docx"
-        return StreamingResponse(
-            buf,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+        return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
-    storage = version.storage_path or ""
+    storage = (version.storage_path or "").strip()
+    local_path = Path(storage)
+    if storage and not storage.startswith("supabase://") and not storage.startswith("http") and local_path.exists():
+        return FileResponse(local_path, media_type=storage_guess_media_type(local_path), filename=version.original_filename)
 
-    # 1) Si es URL completa ya firmada → regenerar signed URL o redirigir
-    if storage.startswith("http://") or storage.startswith("https://"):
-        try:
-            from app.services.gari_document_service import get_supabase_client
-            import re
-
-            match = re.search(r"(cases/.*)", storage)
-            if match:
-                supabase_path = match.group(1).split("?")[0]
-                supabase = get_supabase_client()
-                result = supabase.storage.from_("documentos").create_signed_url(
-                    supabase_path, 300
-                )
-                new_url = result.get("signedURL") or result.get("signedUrl") or storage
-                return RedirectResponse(url=new_url, status_code=302)
-        except Exception:
-            pass
-        return RedirectResponse(url=storage, status_code=302)
-
-    # 2) Si existe como archivo local → servir directo
-    path = Path(storage)
-    if path.exists():
-        return FileResponse(path, media_type=guess_media_type(path), filename=version.original_filename)
-
-    # 3) Si es path relativo de Supabase (no existe local) → generar signed URL
     try:
-        from app.services.gari_document_service import get_supabase_client
-        supabase = get_supabase_client()
-        result = supabase.storage.from_("documentos").create_signed_url(storage, 300)
-        new_url = result.get("signedURL") or result.get("signedUrl")
-        if new_url:
-            return RedirectResponse(url=new_url, status_code=302)
+        signed_url = create_signed_storage_url(storage, 300)
     except Exception:
-        pass
+        signed_url = None
 
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+    if signed_url:
+        return RedirectResponse(url=signed_url, status_code=302)
+
+    try:
+        content = download_storage_bytes(storage)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+
+    filename = version.original_filename or Path(storage).name or f"document_{version.id}.{version.file_format}"
+    return StreamingResponse(io.BytesIO(content), media_type=storage_guess_media_type(filename), headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 def _resolve_public_api_base(request: Request) -> str:
@@ -1044,11 +1003,27 @@ async def onlyoffice_callback(case_id: int, document_id: int, version_id: int, c
     current_version = next((item for item in document.versions if item.id == version_id), None)
     if current_version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
-    target = next_case_file_path(case.id, "draft", document.current_version_number + 1, "docx", current_version.original_filename or f"case_{case.id}.docx")
-    target.write_bytes(response.content)
-    new_version = CaseDocumentVersion(case_document_id=document.id, version_number=document.current_version_number + 1, file_format="docx", storage_path=str(target), original_filename=current_version.original_filename or target.name, generated_from_template_id=current_version.generated_from_template_id, placeholder_snapshot_json=current_version.placeholder_snapshot_json, created_by_user_id=current_version.created_by_user_id)
-    document.current_version_number += 1
-    db.add(new_version)
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    try:
+        temp_file.write(response.content)
+        temp_file.flush()
+    finally:
+        temp_file.close()
+    try:
+        new_version = add_document_version(
+            db,
+            case,
+            document.category,
+            document.title,
+            "docx",
+            temp_file.name,
+            current_version.original_filename or f"case_{case.id}.docx",
+            current_version.created_by_user_id,
+            current_version.generated_from_template_id,
+            current_version.placeholder_snapshot_json,
+        )
+    finally:
+        Path(temp_file.name).unlink(missing_ok=True)
     db.commit()
     return {"error": 0}
 
