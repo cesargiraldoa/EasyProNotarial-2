@@ -5,11 +5,12 @@ import os
 import shutil
 import io
 import tempfile
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from jose import jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -65,11 +66,12 @@ from app.services.gari_document_service import (
     resolver_escritura_desde_template,
     save_gari_document_as_docx,
 )
-from app.services.storage import create_signed_storage_url, download_storage_bytes, guess_media_type as storage_guess_media_type, next_case_file_path, resolve_template_source_path, save_base64_file, save_case_file
+from app.services.storage import download_storage_bytes, guess_media_type as storage_guess_media_type, next_case_file_path, resolve_template_source_path, save_base64_file, save_case_file
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
 router = APIRouter(prefix="/document-flow", tags=["document-flow"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 NOTARY_APPROVER_ROLES = {"titular_notary", "substitute_notary"}
 
@@ -474,6 +476,20 @@ def add_document_version(db: Session, case: Case, category: str, title: str, fil
     version = CaseDocumentVersion(case_document_id=document.id, version_number=version_number, file_format=file_format, storage_path=storage_path, original_filename=stored_filename, generated_from_template_id=template_id, placeholder_snapshot_json=placeholder_snapshot_json, created_by_user_id=created_by_user_id)
     db.add(version)
     db.flush()
+    storage_backend = "supabase" if str(storage_path).startswith("supabase://") else "local"
+    bucket = str(storage_path).split("/")[2] if str(storage_path).startswith("supabase://") else None
+    logger.info(
+        "Versión documental persistida",
+        extra={
+            "case_id": case.id,
+            "document_id": document.id,
+            "version_id": version.id,
+            "storage_path": storage_path,
+            "bucket": bucket,
+            "storage_backend": storage_backend,
+            "file_format": file_format,
+        },
+    )
     return version
 
 
@@ -874,6 +890,16 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
                 break
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
+    logger.info(
+        "Descarga de documento solicitada",
+        extra={
+            "case_id": case_id,
+            "document_id": document_id,
+            "version_id": version_id,
+            "storage_path": version.storage_path,
+            "file_format": version.file_format,
+        },
+    )
 
     snapshot = json.loads(version.placeholder_snapshot_json or "{}")
     if snapshot.get("source") == "gari" and case.act_data and case.act_data.gari_draft_text:
@@ -884,20 +910,15 @@ def download_case_document(case_id: int, document_id: int, version_id: int, db: 
     storage = (version.storage_path or "").strip()
     local_path = Path(storage)
     if storage and not storage.startswith("supabase://") and not storage.startswith("http") and local_path.exists():
+        logger.info("Descarga resuelta desde archivo local", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage, "storage_backend": "local"})
         return FileResponse(local_path, media_type=storage_guess_media_type(local_path), filename=version.original_filename)
-
-    try:
-        signed_url = create_signed_storage_url(storage, 300)
-    except Exception:
-        signed_url = None
-
-    if signed_url:
-        return RedirectResponse(url=signed_url, status_code=302)
 
     try:
         content = download_storage_bytes(storage)
     except Exception:
+        logger.exception("Fallo al descargar documento desde storage", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage, "storage_backend": "supabase_or_remote"})
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El archivo solicitado no está disponible.")
+    logger.info("Descarga resuelta desde bytes de storage", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "storage_path": storage, "storage_backend": "supabase_or_remote"})
 
     filename = version.original_filename or Path(storage).name or f"document_{version.id}.{version.file_format}"
     return StreamingResponse(io.BytesIO(content), media_type=storage_guess_media_type(filename), headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -919,6 +940,7 @@ def onlyoffice_file(
     token: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
+    logger.info("OnlyOffice file endpoint llamado", extra={"case_id": case_id, "document_id": document_id, "version_id": version_id, "version_lookup_id": version_lookup_id})
     if version_lookup_id != version_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Versión documental no encontrada.")
     if not token:

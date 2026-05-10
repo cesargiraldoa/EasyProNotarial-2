@@ -5,6 +5,7 @@ import mimetypes
 import os
 import shutil
 import tempfile
+import logging
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -16,6 +17,7 @@ TEMPLATE_STORAGE = STORAGE_ROOT / "templates"
 CASE_STORAGE = STORAGE_ROOT / "cases"
 SUPABASE_TEMPLATE_BUCKET = os.environ.get("SUPABASE_TEMPLATES_BUCKET", "documentos").strip() or "documentos"
 SUPABASE_CASE_BUCKET = os.environ.get("SUPABASE_CASES_BUCKET", "documentos").strip() or "documentos"
+logger = logging.getLogger(__name__)
 
 
 def ensure_storage_dirs() -> None:
@@ -44,14 +46,18 @@ def _has_supabase_credentials() -> bool:
 
 def _upload_to_supabase(bucket: str, path: str, content: bytes, content_type: str) -> None:
     supabase = get_supabase_client()
-    supabase.storage.from_(bucket).upload(
-        path=path,
-        file=content,
-        file_options={
-            "content-type": content_type,
-            "upsert": "true",
-        },
-    )
+    try:
+        supabase.storage.from_(bucket).upload(
+            path=path,
+            file=content,
+            file_options={
+                "content-type": content_type,
+                "upsert": "true",
+            },
+        )
+    except Exception:
+        logger.exception("Error subiendo archivo a Supabase Storage", extra={"bucket": bucket, "storage_path": path})
+        raise
 
 
 def _download_from_supabase(bucket: str, path: str) -> bytes:
