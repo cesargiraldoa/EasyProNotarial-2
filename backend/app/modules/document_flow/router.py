@@ -976,7 +976,7 @@ def onlyoffice_file(
                 "document_id": document_id,
                 "version_id": version_id,
                 "storage_path": storage_path,
-                "filename": filename,
+                "document_filename": filename,
             },
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo DOCX no disponible para OnlyOffice.")
@@ -988,7 +988,7 @@ def onlyoffice_file(
             "document_id": document_id,
             "version_id": version_id,
             "storage_path": storage_path,
-            "filename": filename,
+            "document_filename": filename,
             "byte_length": len(content),
         },
     )
