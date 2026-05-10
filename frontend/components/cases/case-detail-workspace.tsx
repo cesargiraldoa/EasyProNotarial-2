@@ -188,6 +188,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const tabs = useMemo(() => (canSeeTechnicalHistory ? superAdminTabs : baseTabs), [canSeeTechnicalHistory]);
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
   const latestWordVersion = draftDocument?.versions?.[0] ?? null;
+  const hasWordVersion = Boolean(draftDocument?.versions?.[0]);
+  const canEditCaseData = tab !== "Diligenciamiento";
+  const canGenerateWord = isProtocolist || isAdminNotary;
+  const generateWordLabel = hasWordVersion ? "Regenerar Word" : "Generar Word";
   const canSendToReview = Boolean(caseDetail) && (isProtocolist || isAdminNotary || isSuperAdmin) && ["borrador", "en_diligenciamiento", "generado"].includes(caseDetail?.current_state ?? "");
   const canReviewRevision = Boolean(caseDetail) && (isApprover || isAdminNotary || isSuperAdmin || caseDetail?.approver_user_id === currentUser?.id) && caseDetail?.current_state === "revision_aprobador";
   const canApprove = canReviewRevision;
@@ -601,6 +605,54 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         </div>
       </section>
 
+      <section className="ep-card rounded-[2rem] p-4">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Acciones rápidas</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setTab("Diligenciamiento")}
+              disabled={!canEditCaseData}
+              className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+            >
+              Editar datos
+            </button>
+            {canGenerateWord ? (
+              <button
+                type="button"
+                onClick={() => void handleGenerateDocument()}
+                disabled={isGenerating}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <Upload className="h-4 w-4" />
+                {isGenerating ? "Generando..." : generateWordLabel}
+              </button>
+            ) : null}
+            {hasWordVersion ? (
+              <button
+                type="button"
+                onClick={() => void handleOpenOnlyOffice()}
+                title="Abrir editor OnlyOffice v2"
+                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
+              >
+                Abrir / Editar Word
+              </button>
+            ) : null}
+            {hasWordVersion ? (
+              <button
+                type="button"
+                onClick={() => void handleDownload(draftDocument?.versions?.[0]?.download_url || "", `v${draftDocument?.versions?.[0]?.version_number}.${draftDocument?.versions?.[0]?.file_format || "docx"}`)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
+              >
+                <Download className="h-4 w-4" />
+                Descargar Word
+              </button>
+            ) : null}
+            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
+          </div>
+        </div>
+      </section>
+
       <section className="ep-card rounded-[2rem] p-6">
         <div className="flex flex-wrap gap-2">
           {tabs.map((item) => (
@@ -848,7 +900,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     <Upload className="h-4 w-4" />
-                    {isGenerating ? "Generando..." : "Generar Word"}
+                    {isGenerating ? "Generando..." : generateWordLabel}
                   </button>
                 ) : null}
                 {draftDocument?.versions?.[0] ? (
@@ -858,7 +910,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     title="Abrir editor OnlyOffice v2"
                     className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
                   >
-                    Abrir/Editar Word
+                    Abrir / Editar Word
                   </button>
                 ) : null}
                 {draftDocument?.versions?.[0] ? (
