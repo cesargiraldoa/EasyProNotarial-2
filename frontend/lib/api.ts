@@ -538,6 +538,7 @@ export async function createCommercialActivity(id: number, payload: CommercialAc
 export async function importAntioquiaSource(overwriteExisting = true): Promise<NotaryImportSummary> { return apiFetch<NotaryImportSummary>("/api/v1/notaries/imports/antioquia-source", { method: "POST", headers: { "Content-Type": "application/json" }, body: { overwrite_existing: overwriteExisting } }); }
 export async function getRoleCatalog(): Promise<RoleCatalogItem[]> { return apiFetch<RoleCatalogItem[]>("/api/v1/users/roles"); }
 export async function getUsers(): Promise<UserRecord[]> { return apiFetch<UserRecord[]>("/api/v1/users"); }
+export async function getUser(id: number): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`); }
 export async function getUserOptions(activeOnly = true): Promise<UserOption[]> { return normalizeUserOptionsResponse(await apiFetch<UserOption[]>(`/api/v1/users/options${activeOnly ? "?active_only=true" : "?active_only=false"}`)); }
 export async function createUser(payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>("/api/v1/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }
 export async function updateUser(id: number, payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }

@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
 import {
   createUser,
   getCurrentUser,
   getNotaries,
+  getUser,
   getRoleCatalog,
   getUsers,
   updateUser,
@@ -111,10 +112,15 @@ export function UsersAdminWorkspace() {
   const [roleDraft, setRoleDraft] = useState<AssignmentDraft>({ role_code: "", notary_id: null });
   const [showAddRole, setShowAddRole] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedEditorUserId, setSelectedEditorUserId] = useState<number | null>(null);
+  const [loadedEditorUserId, setLoadedEditorUserId] = useState<number | null>(null);
+  const [isLoadingEditorUser, setIsLoadingEditorUser] = useState(false);
+  const [editorLoadError, setEditorLoadError] = useState<string | null>(null);
 
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isSavingRoles, setIsSavingRoles] = useState(false);
   const [feedback, setFeedback] = useState<EditorFeedback | null>(null);
+  const editorSelectionRef = useRef<number | null>(null);
 
   const roleCodes = useMemo(
     () => (currentUser?.role_codes ?? []).map((item) => item.toLowerCase()),
@@ -191,30 +197,87 @@ export function UsersAdminWorkspace() {
     }
   }, [page, totalPages]);
 
-  function resetEditor(user: UserRecord | null) {
-    setEditorState(user ? toEditorState(user) : EMPTY_EDITOR);
+  function resetEditor() {
+    setEditorState(EMPTY_EDITOR);
     setRoleDraft({ role_code: "", notary_id: null });
     setShowAddRole(false);
     setShowPassword(false);
     setFeedback(null);
+    setEditorLoadError(null);
+  }
+
+  function closeEditor() {
+    setOpenUserId(null);
+    setSelectedEditorUserId(null);
+    setLoadedEditorUserId(null);
+    setIsLoadingEditorUser(false);
+    setEditorLoadError(null);
+    editorSelectionRef.current = null;
+    resetEditor();
+  }
+
+  function validatePassword(isNew: boolean, password: string | null): string | null {
+    if (isNew) {
+      if (!password || password.length < 8) {
+        return "La contraseña es obligatoria y debe tener al menos 8 caracteres.";
+      }
+      return null;
+    }
+    if (password !== null && password.length > 0 && password.length < 8) {
+      return "La nueva contraseña debe tener al menos 8 caracteres.";
+    }
+    return null;
   }
 
   function openNewAccordion() {
+    setSelectedEditorUserId(null);
+    setLoadedEditorUserId(null);
+    setIsLoadingEditorUser(false);
+    setEditorLoadError(null);
+    editorSelectionRef.current = null;
     setOpenUserId("new");
-    resetEditor(null);
+    resetEditor();
     setPage(1);
   }
 
-  function toggleUserAccordion(user: UserRecord) {
+  async function toggleUserAccordion(user: UserRecord) {
     if (openUserId === user.id) {
-      setOpenUserId(null);
-      setFeedback(null);
-      setShowAddRole(false);
-      setShowPassword(false);
+      closeEditor();
       return;
     }
+    setSelectedEditorUserId(user.id);
+    setLoadedEditorUserId(null);
+    setIsLoadingEditorUser(true);
+    setEditorLoadError(null);
+    editorSelectionRef.current = user.id;
     setOpenUserId(user.id);
-    resetEditor(user);
+    resetEditor();
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[users-editor] click", { selectedEditorUserId: user.id });
+    }
+    try {
+      const detailedUser = await getUser(user.id);
+      if (editorSelectionRef.current === user.id) {
+        if (process.env.NODE_ENV === "development") {
+          console.debug("[users-editor] loaded", { loadedEditorUserId: user.id, email: detailedUser.email });
+        }
+        setEditorState(toEditorState(detailedUser));
+        setRoleDraft({ role_code: "", notary_id: null });
+        setLoadedEditorUserId(user.id);
+      }
+    } catch (error) {
+      if (editorSelectionRef.current === user.id) {
+        setFeedback({
+          kind: "error",
+          message: error instanceof Error ? error.message : "No fue posible cargar el usuario seleccionado."
+        });
+        setEditorLoadError(error instanceof Error ? error.message : "No fue posible cargar el usuario seleccionado.");
+      }
+    } finally {
+      if (editorSelectionRef.current === user.id) {
+        setIsLoadingEditorUser(false);
+      }
+    }
   }
 
   function updateField<K extends keyof UserEditorState>(key: K, value: UserEditorState[K]) {
@@ -274,9 +337,16 @@ export function UsersAdminWorkspace() {
     setIsSavingUser(true);
     setFeedback(null);
     try {
-      await createUser(normalizePayload(editorState));
+      const payload = normalizePayload(editorState);
+      const passwordError = validatePassword(true, payload.password);
+      if (passwordError) {
+        throw new Error(passwordError);
+      }
+      await createUser(payload);
       await loadWorkspace();
       setOpenUserId(null);
+      editorSelectionRef.current = null;
+      resetEditor();
       setFeedback({ kind: "success", message: "Usuario creado correctamente." });
     } catch (error) {
       setFeedback({
@@ -292,11 +362,18 @@ export function UsersAdminWorkspace() {
     setIsSavingUser(true);
     setFeedback(null);
     try {
-      await updateUser(userId, normalizePayload(editorState));
+      if (openUserId !== userId || selectedEditorUserId !== userId || loadedEditorUserId !== userId) {
+        throw new Error("El usuario seleccionado no está listo para guardar.");
+      }
+      const payload = normalizePayload(editorState);
+      const passwordError = validatePassword(false, payload.password);
+      if (passwordError) {
+        throw new Error(passwordError);
+      }
+      const updatedUser = await updateUser(userId, payload);
       await loadWorkspace();
-      const refreshedUser = users.find((item) => item.id === userId) ?? null;
-      if (refreshedUser) {
-        setEditorState(toEditorState(refreshedUser));
+      if (editorSelectionRef.current === userId) {
+        setEditorState(toEditorState(updatedUser));
       }
       setFeedback({ kind: "success", message: "Usuario actualizado correctamente." });
     } catch (error) {
@@ -313,18 +390,17 @@ export function UsersAdminWorkspace() {
     setIsSavingRoles(true);
     setFeedback(null);
     try {
-      const source = users.find((item) => item.id === userId);
-      if (!source) {
-        throw new Error("No se encontró el usuario seleccionado.");
+      if (openUserId !== userId || selectedEditorUserId !== userId || loadedEditorUserId !== userId) {
+        throw new Error("El usuario seleccionado no está listo para guardar.");
       }
       await updateUser(userId, {
-        email: source.email,
-        full_name: source.full_name,
+        email: editorState.email,
+        full_name: editorState.full_name,
         password: null,
-        is_active: source.is_active,
-        phone: source.phone ?? "",
-        job_title: source.job_title ?? "",
-        default_notary_id: source.default_notary_id ?? null,
+        is_active: editorState.is_active,
+        phone: editorState.phone,
+        job_title: editorState.job_title,
+        default_notary_id: editorState.default_notary_id,
         assignments: editorState.assignments
       });
       await loadWorkspace();
@@ -385,6 +461,25 @@ export function UsersAdminWorkspace() {
     const draftRole = roles.find((role) => role.code === roleDraft.role_code);
     const draftIsGlobal = draftRole?.scope === "global";
 
+    if (!isNew && loadedEditorUserId !== userId) {
+      if (!isLoadingEditorUser && editorLoadError && selectedEditorUserId === userId) {
+        return (
+          <div className="ep-card-muted p-6">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {editorLoadError}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className="ep-card-muted p-6">
+          <div className="rounded-2xl border border-line bg-[var(--panel)] px-4 py-3 text-sm text-secondary">
+            Cargando usuario seleccionado...
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="ep-card-muted p-6">
         <div className="grid gap-6 lg:grid-cols-2">
@@ -414,7 +509,7 @@ export function UsersAdminWorkspace() {
                     type={showPassword ? "text" : "password"}
                     value={editorState.password}
                     onChange={(event) => updateField("password", event.target.value)}
-                    placeholder={isNew ? "Define o genera una contraseña" : "Dejar vacío para conservar"}
+                    placeholder={isNew ? "Define o genera una contraseña" : "Deja vacio para conservar la contrasena actual"}
                     className="ep-input h-12 min-w-0 flex-1 rounded-2xl px-4"
                   />
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex lg:gap-2">
@@ -448,7 +543,7 @@ export function UsersAdminWorkspace() {
                 <p className="text-xs text-secondary">
                   {isNew
                     ? "Define o genera una contraseña temporal para entregar al usuario."
-                    : "Déjala vacía si no deseas cambiar la contraseña."}
+                    : "Deja vacio para conservar la contrasena actual."}
                 </p>
               </div>
             </div>
@@ -506,7 +601,7 @@ export function UsersAdminWorkspace() {
                     void handleSaveUser(userId);
                   }
                 }}
-                disabled={isSavingUser}
+                disabled={isSavingUser || (!isNew && (isLoadingEditorUser || loadedEditorUserId !== userId))}
                 className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingUser ? "Guardando..." : isNew ? "Crear usuario" : "Guardar cambios"}
@@ -625,7 +720,7 @@ export function UsersAdminWorkspace() {
                 <button
                   type="button"
                   onClick={() => void handleSaveRoles(userId)}
-                  disabled={isSavingRoles}
+                  disabled={isSavingRoles || isLoadingEditorUser || loadedEditorUserId !== userId}
                   className="rounded-2xl border border-line bg-[var(--panel)] px-5 py-3 text-sm font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSavingRoles ? "Guardando roles..." : "Guardar roles"}
@@ -852,3 +947,4 @@ export function UsersAdminWorkspace() {
     </div>
   );
 }
+
