@@ -39,6 +39,80 @@ const asNumber = (value: unknown, fallback = 0) => (typeof value === "number" &&
 const asNullableNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 const asBoolean = (value: unknown, fallback = false) => (typeof value === "boolean" ? value : fallback);
 const asArray = <T>(value: unknown, mapper: (item: unknown) => T): T[] => Array.isArray(value) ? value.map(mapper) : [];
+const TEMPLATE_SAVE_GENERIC_ERROR = "No fue posible guardar la plantilla Word. Verifica la conexión e intenta nuevamente.";
+
+function getTemplateSaveTimestamp() {
+  return new Date().toISOString();
+}
+
+function isTemplateSaveNetworkError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /networkerror|failed to fetch|load failed|fetch failed|network request failed/i.test(message);
+}
+
+function getControlledTemplateSaveHttpMessage(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return TEMPLATE_SAVE_GENERIC_ERROR;
+  }
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const detail = parsed.detail ?? parsed.message ?? parsed.error;
+      if (typeof detail === "string" && detail.trim()) {
+        return detail.trim();
+      }
+      if (Array.isArray(detail) && detail.length > 0) {
+        const first = detail[0];
+        if (typeof first === "string" && first.trim()) {
+          return first.trim();
+        }
+      }
+    } catch {
+      // Fall through to plain-text handling.
+    }
+  }
+  return trimmed.replace(/\s+/g, " ").slice(0, 500);
+}
+
+function logTemplateSaveDiagnostic(operation: "createTemplate" | "updateTemplate", data: {
+  endpoint: string;
+  status?: number;
+  filename?: string;
+  base64Size?: number;
+  timestamp: string;
+}) {
+  const parts = [
+    `[templates][${operation}]`,
+    `endpoint=${data.endpoint}`,
+    `timestamp=${data.timestamp}`,
+  ];
+  if (typeof data.status === "number") {
+    parts.push(`status=${data.status}`);
+  }
+  if (data.filename) {
+    parts.push(`filename=${data.filename}`);
+  }
+  if (typeof data.base64Size === "number") {
+    parts.push(`base64_size=${data.base64Size}`);
+  }
+  console.warn(parts.join(" "));
+}
+
+function getTemplateUploadDiagnostics(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return { filename: undefined as string | undefined, base64Size: undefined as number | undefined };
+  }
+  const upload = (payload as Record<string, unknown>).upload;
+  if (!upload || typeof upload !== "object") {
+    return { filename: undefined as string | undefined, base64Size: undefined as number | undefined };
+  }
+  const uploadRecord = upload as Record<string, unknown>;
+  return {
+    filename: typeof uploadRecord.filename === "string" && uploadRecord.filename.trim() ? uploadRecord.filename : undefined,
+    base64Size: typeof uploadRecord.content_base64 === "string" ? uploadRecord.content_base64.length : undefined,
+  };
+}
 
 export type TemplateRequiredRole = { id: number; role_code: string; label: string; is_required: boolean; step_order: number };
 export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; table_master?: string | null; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
@@ -394,38 +468,62 @@ export async function lookupPersons(params: { document_type?: string; document_n
 export async function createTemplate(payload: unknown) {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
   const token = getToken();
-  const response = await fetch(`${base}/api/v1/templates`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text);
+  const endpoint = `${base}/api/v1/templates`;
+  const { filename, base64Size } = getTemplateUploadDiagnostics(payload);
+  const timestamp = getTemplateSaveTimestamp();
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      logTemplateSaveDiagnostic("createTemplate", { endpoint, status: response.status, filename: filename || undefined, base64Size, timestamp });
+      throw new Error(getControlledTemplateSaveHttpMessage(text));
+    }
+    return normalizeTemplate(await response.json());
+  } catch (error) {
+    if (error instanceof Error && !isTemplateSaveNetworkError(error)) {
+      throw error;
+    }
+    logTemplateSaveDiagnostic("createTemplate", { endpoint, filename: filename || undefined, base64Size, timestamp });
+    throw new Error(TEMPLATE_SAVE_GENERIC_ERROR);
   }
-  return normalizeTemplate(await response.json());
 }
 export async function updateTemplate(id: number, payload: unknown) {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
   const token = getToken();
-  const response = await fetch(`${base}/api/v1/templates/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text);
+  const endpoint = `${base}/api/v1/templates/${id}`;
+  const { filename, base64Size } = getTemplateUploadDiagnostics(payload);
+  const timestamp = getTemplateSaveTimestamp();
+  try {
+    const response = await fetch(endpoint, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      logTemplateSaveDiagnostic("updateTemplate", { endpoint, status: response.status, filename: filename || undefined, base64Size, timestamp });
+      throw new Error(getControlledTemplateSaveHttpMessage(text));
+    }
+    return normalizeTemplate(await response.json());
+  } catch (error) {
+    if (error instanceof Error && !isTemplateSaveNetworkError(error)) {
+      throw error;
+    }
+    logTemplateSaveDiagnostic("updateTemplate", { endpoint, filename: filename || undefined, base64Size, timestamp });
+    throw new Error(TEMPLATE_SAVE_GENERIC_ERROR);
   }
-  return normalizeTemplate(await response.json());
 }
 
 export type ActCatalogItem = {

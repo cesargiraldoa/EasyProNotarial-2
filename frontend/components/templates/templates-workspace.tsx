@@ -37,6 +37,17 @@ const emptyForm = {
   internal_variable_map_json: defaultVariableMap,
 };
 
+function getFriendlyTemplateSaveMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/networkerror|failed to fetch|load failed|fetch failed|network request failed/i.test(message)) {
+    return "No fue posible guardar la plantilla Word. Verifica la conexión e intenta nuevamente.";
+  }
+  if (!message.trim()) {
+    return "No fue posible guardar la plantilla Word. Verifica la conexión e intenta nuevamente.";
+  }
+  return message.trim();
+}
+
 export function TemplatesWorkspace() {
   const [templates, setTemplates] = useState<TemplateRecord[]>([]);
   const [notaries, setNotaries] = useState<Array<{ id: number; notary_label: string; municipality: string }>>([]);
@@ -160,7 +171,7 @@ export function TemplatesWorkspace() {
       await load();
       setFeedback("Plantilla guardada correctamente.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No fue posible guardar la plantilla.");
+      setError(getFriendlyTemplateSaveMessage(saveError));
     } finally {
       setIsSaving(false);
     }

@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
+import logging
 import re
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -17,6 +18,7 @@ from app.services.document_generation import extract_highlighted_fields_from_doc
 from app.services.storage import resolve_template_source_path, save_template_upload
 
 router = APIRouter(prefix="/templates", tags=["templates"])
+logger = logging.getLogger(__name__)
 
 
 def slugify(value: str) -> str:
@@ -66,6 +68,14 @@ def validate_template_scope(db: Session, payload: TemplateCreate | TemplateUpdat
 
 
 def persist_template_payload(db: Session, template: DocumentTemplate, payload: TemplateCreate | TemplateUpdate) -> DocumentTemplate:
+    logger.info(
+        "templates.save.start name=%s scope=%s notary_id=%s upload=%s filename=%s",
+        payload.name.strip(),
+        payload.scope_type,
+        payload.notary_id,
+        bool(payload.upload),
+        getattr(payload.upload, "filename", None) if payload.upload else None,
+    )
     validate_template_scope(db, payload)
     template.name = payload.name.strip()
     template.slug = slugify(payload.name) if not template.slug else template.slug
@@ -79,11 +89,23 @@ def persist_template_payload(db: Session, template: DocumentTemplate, payload: T
 
     extracted_fields = None
     if payload.upload:
-        source_filename, storage_path = save_template_upload(payload.upload.filename, payload.upload.content_base64, template.slug or slugify(payload.name))
-        template.source_filename = source_filename
-        template.storage_path = storage_path
-        if (payload.upload.filename or "").lower().endswith(".docx"):
-            extracted_fields = extract_highlighted_fields_from_docx(resolve_template_source_path(storage_path))
+        logger.info(
+            "templates.save.upload filename=%s base64_size=%s",
+            payload.upload.filename,
+            len(payload.upload.content_base64 or ""),
+        )
+        try:
+            source_filename, storage_path = save_template_upload(payload.upload.filename, payload.upload.content_base64, template.slug or slugify(payload.name))
+            template.source_filename = source_filename
+            template.storage_path = storage_path
+            logger.info("templates.save.upload.saved filename=%s storage_path=%s", source_filename, storage_path)
+            if (payload.upload.filename or "").lower().endswith(".docx"):
+                logger.info("templates.save.extract.start filename=%s", payload.upload.filename)
+                extracted_fields = extract_highlighted_fields_from_docx(resolve_template_source_path(storage_path))
+                logger.info("templates.save.extract.ok filename=%s fields=%s", payload.upload.filename, len(extracted_fields or []))
+        except Exception:
+            logger.exception("templates.save.upload.failed filename=%s", payload.upload.filename)
+            raise
 
     template.required_roles.clear()
     template.fields.clear()
@@ -111,6 +133,12 @@ def persist_template_payload(db: Session, template: DocumentTemplate, payload: T
             if item.options_json:
                 options_json = json.dumps(json.loads(item.options_json), ensure_ascii=False)
             template.fields.append(TemplateField(field_code=item.field_code.strip(), label=item.label.strip(), field_type=item.field_type.strip(), section=item.section.strip(), is_required=item.is_required, options_json=options_json, placeholder_key=item.placeholder_key.strip() if item.placeholder_key else None, help_text=item.help_text.strip() if item.help_text else None, step_order=item.step_order))
+    logger.info(
+        "templates.save.complete name=%s upload=%s extracted_fields=%s",
+        template.name,
+        bool(payload.upload),
+        len(extracted_fields or []),
+    )
     return template
 
 
@@ -154,6 +182,7 @@ def create_template(payload: TemplateCreate = Body(...), db: Session = Depends(g
     db.add(template)
     db.commit()
     db.refresh(template)
+    logger.info("templates.create.saved template_id=%s name=%s", template.id, template.name)
     return serialize_template(load_template_or_404(db, template.id))
 
 
@@ -169,4 +198,5 @@ def update_template(template_id: int, payload: TemplateUpdate = Body(...), db: S
         payload.notary_id = current_user.default_notary_id
     persist_template_payload(db, template, payload)
     db.commit()
+    logger.info("templates.update.saved template_id=%s name=%s", template.id, template.name)
     return serialize_template(load_template_or_404(db, template.id))
