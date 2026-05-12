@@ -3,10 +3,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db
+from app.core.security import get_password_hash
 from app.models.role import Role
 from app.models.role_assignment import RoleAssignment
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import CurrentUserProfileUpdate, LoginRequest, TokenResponse
 from app.schemas.user import RolePermissionItem, UserRoleAssignmentSummary
 from app.services.auth import AuthenticationError, authenticate_user, build_login_response, serialize_user
 
@@ -34,6 +35,8 @@ class AuthenticatedUserWithPermissions(BaseModel):
     id: int
     email: EmailStr
     full_name: str
+    phone: str | None = None
+    job_title: str | None = None
     is_active: bool
     roles: list[str]
     role_codes: list[str]
@@ -87,3 +90,27 @@ def me(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     payload = serialize_user(user)
     payload["permissions"] = build_permission_union(user)
     return payload
+
+
+@router.put("/me", response_model=AuthenticatedUserWithPermissions)
+def update_me(payload: CurrentUserProfileUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    user = load_user_with_permissions(db, current_user.id)
+    full_name = payload.full_name.strip()
+    if not full_name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El nombre completo es obligatorio.")
+    password = payload.password.strip() if payload.password is not None else None
+    if password is not None and password != "" and len(password) < 8:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La contraseña debe tener al menos 8 caracteres.")
+
+    user.full_name = full_name
+    user.phone = payload.phone.strip() if payload.phone and payload.phone.strip() else None
+    user.job_title = payload.job_title.strip() if payload.job_title and payload.job_title.strip() else None
+    if password:
+        user.password_hash = get_password_hash(password)
+
+    db.commit()
+    db.refresh(user)
+    refreshed_user = load_user_with_permissions(db, user.id)
+    response = serialize_user(refreshed_user)
+    response["permissions"] = build_permission_union(refreshed_user)
+    return response

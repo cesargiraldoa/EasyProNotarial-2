@@ -58,6 +58,8 @@ def serialize_user(user: User) -> dict:
         "id": user.id,
         "email": user.email,
         "full_name": user.full_name,
+        "phone": user.phone,
+        "job_title": user.job_title,
         "is_active": user.is_active,
         "roles": assignment_labels,
         "role_codes": role_codes,

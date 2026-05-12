@@ -8,10 +8,19 @@ export type LoginPayload = {
   password: string;
 };
 
+export type CurrentUserProfilePayload = {
+  full_name: string;
+  phone: string | null;
+  job_title: string | null;
+  password: string | null;
+};
+
 export type CurrentUser = {
   id: number;
   email: string;
   full_name: string;
+  phone?: string | null;
+  job_title?: string | null;
   is_active: boolean;
   roles: string[];
   role_codes: string[];
@@ -471,6 +480,14 @@ function normalizeNotaryPayload(payload: NotaryPayload) {
 function normalizeUserPayload(payload: UserPayload) {
   return { ...payload, email: payload.email.trim().toLowerCase(), full_name: repairText(payload.full_name), password: payload.password?.trim() || null, phone: cleanNullableText(payload.phone), job_title: cleanNullableText(payload.job_title), assignments: payload.assignments.filter((assignment) => assignment.role_code) };
 }
+function normalizeCurrentUserProfilePayload(payload: CurrentUserProfilePayload) {
+  return {
+    full_name: repairText(payload.full_name),
+    phone: cleanNullableText(payload.phone),
+    job_title: cleanNullableText(payload.job_title),
+    password: payload.password?.trim() || null
+  };
+}
 function normalizeCasePayload(payload: CasePayload) {
   return { ...payload, case_type: cleanText(payload.case_type), act_type: cleanText(payload.act_type), metadata_json: payload.metadata_json.trim() || "{}" };
 }
@@ -529,6 +546,13 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     ...currentUser,
     default_notary_id: currentUser.default_notary_id ?? (Number.isFinite(tokenNotaryId as number) ? (tokenNotaryId as number) : null),
   };
+}
+export async function updateCurrentUserProfile(payload: CurrentUserProfilePayload): Promise<CurrentUser> {
+  return apiFetch<CurrentUser>("/api/v1/auth/me", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: normalizeCurrentUserProfilePayload(payload)
+  });
 }
 export async function getNotaries(filters: NotaryFilters = {}): Promise<NotaryRecord[]> { return normalizeNotaryResponse(await apiFetch<NotaryRecord[]>(`/api/v1/notaries${buildQuery(filters)}`)); }
 export async function getNotaryFilterOptions(): Promise<NotaryFilterOptions> { return apiFetch<NotaryFilterOptions>("/api/v1/notaries/filters"); }

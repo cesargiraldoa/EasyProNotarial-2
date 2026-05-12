@@ -9,6 +9,8 @@ class AuthenticatedUser(BaseModel):
     id: int
     email: EmailStr
     full_name: str
+    phone: str | None = None
+    job_title: str | None = None
     is_active: bool
     roles: list[str]
     role_codes: list[str]
@@ -20,6 +22,13 @@ class AuthenticatedUser(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class CurrentUserProfileUpdate(BaseModel):
+    full_name: str
+    phone: str | None = None
+    job_title: str | None = None
+    password: str | None = None
 
 
 class TokenResponse(BaseModel):
