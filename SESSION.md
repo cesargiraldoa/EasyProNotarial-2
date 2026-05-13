@@ -728,3 +728,26 @@ Proveedor principal a evaluar: Plemsi.
 Proveedor alterno: pendiente definir/cotizar.
 
 La arquitectura debe quedar desacoplada por adaptadores para permitir cambiar de proveedor sin rediseñar el dominio de EasyPro.
+
+---
+
+# HITO — Producción usuarios con identificación
+
+Fecha: 2026-05-13
+
+Se validó producción de EasyProNotarial-2 desde `main`.
+
+Resultado:
+- Producción quedó operativa.
+- Se confirmó creación correcta de usuarios.
+- El formulario de usuarios ya incluye:
+  - Tipo de identificación.
+  - Número de identificación.
+- El build local de frontend pasó correctamente.
+- El problema identificado no era de backend ni de validación, sino de despliegue anterior en Vercel.
+
+Decisión:
+- No se requiere tocar más código para este punto.
+- Se cierra el frente de usuarios/identificación.
+- Próxima sesión: continuar únicamente con pendientes específicos de EasyPro, sin mezclar con puertos, login o despliegues salvo que sea necesario.
+
