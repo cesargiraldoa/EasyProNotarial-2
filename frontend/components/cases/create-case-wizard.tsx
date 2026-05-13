@@ -15,7 +15,7 @@ import {
   type TemplateRecord,
 } from "@/lib/document-flow";
 import { getEasyPro1CatalogOptions } from "@/lib/easypro1-notarial-catalogs";
-import { getCurrentUser, getNotaries, getUserOptions, type UserOption } from "@/lib/api";
+import { getCurrentUser, getNotaries, getUserOptions, type CurrentUser, type UserOption } from "@/lib/api";
 import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 const steps = [
@@ -517,6 +517,10 @@ export function CreateCaseWizard() {
   const [templateTypeFilter, setTemplateTypeFilter] = useState("all");
   const [notaries, setNotaries] = useState<SelectOption[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
+  const [approverUsers, setApproverUsers] = useState<SelectOption[]>([]);
+  const [titularNotaryUsers, setTitularNotaryUsers] = useState<SelectOption[]>([]);
+  const [substituteNotaryUsers, setSubstituteNotaryUsers] = useState<SelectOption[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [caseDetail, setCaseDetail] = useState<DocumentFlowCase | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -533,7 +537,7 @@ export function CreateCaseWizard() {
     approver_user_id: "",
     titular_notary_user_id: "",
     substitute_notary_user_id: "",
-    requires_client_review: true,
+    requires_client_review: false,
     metadata_json: JSON.stringify({ clase: "Poder General" }, null, 2),
   });
   const [actData, setActData] = useState<Record<string, string>>({});
@@ -736,8 +740,9 @@ export function CreateCaseWizard() {
         }))
         .filter((item) => item.value);
       const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
-      const defaultNotaryRaw = currentUser?.default_notary_id;
-      const defaultNotaryId = String(defaultNotaryRaw ?? "");
+      const hasProtocolistRole = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("protocolist");
+      const currentUserNotaryId = String(currentUser?.default_notary_id ?? "");
+      setCurrentUser(currentUser);
       setTemplates(safeTemplates);
       setSelectedTemplate(
         safeTemplates[0] ?? null,
@@ -746,20 +751,24 @@ export function CreateCaseWizard() {
       setCanSelectNotary(isSuperAdmin);
       setGeneralForm((current) => ({
         ...current,
-        notary_id: !isSuperAdmin ? defaultNotaryId : current.notary_id,
-        client_user_id: current.client_user_id,
-        current_owner_user_id: "",
-        protocolist_user_id: "",
-        approver_user_id: "",
-        titular_notary_user_id: "",
-        substitute_notary_user_id: "",
+        notary_id: !isSuperAdmin ? currentUserNotaryId : current.notary_id,
+        current_owner_user_id: isSuperAdmin ? current.current_owner_user_id : "",
+        protocolist_user_id: !isSuperAdmin && hasProtocolistRole && currentUser ? String(currentUser.id) : (isSuperAdmin ? current.protocolist_user_id : ""),
+        requires_client_review: isSuperAdmin ? current.requires_client_review : false,
       }));
+      if (!isSuperAdmin && !currentUserNotaryId) {
+        setError("Tu usuario no tiene una notaría asignada. Contacta al administrador.");
+      }
       setUsers(safeUsers);
     } catch (loadError) {
       setTemplates([]);
       setSelectedTemplate(null);
       setNotaries([]);
       setUsers([]);
+      setCurrentUser(null);
+      setApproverUsers([]);
+      setTitularNotaryUsers([]);
+      setSubstituteNotaryUsers([]);
       setError(loadError instanceof Error ? loadError.message : "No fue posible cargar la base del wizard.");
     } finally {
       setIsLoading(false);
@@ -767,8 +776,16 @@ export function CreateCaseWizard() {
   }
 
   const userOptions = useMemo(() => normalizeUserOptions(users), [users]);
-  const normalizedTemplateSearch = templateSearch.trim().toLowerCase();
-  const templateTypeOptions = useMemo(() => {
+  const approverUserOptions = approverUsers;
+  const titularNotaryUserOptions = titularNotaryUsers;
+  const substituteNotaryUserOptions = substituteNotaryUsers;
+    const isSuperAdmin = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("super_admin");
+    const hasProtocolistRole = Array.isArray(currentUser?.role_codes) && currentUser.role_codes.includes("protocolist");
+    const normalizedTemplateSearch = templateSearch.trim().toLowerCase();
+    const resolvedNotaryId = isSuperAdmin
+      ? (generalForm.notary_id ? Number(generalForm.notary_id) : null)
+      : (currentUser?.default_notary_id ?? null);
+    const templateTypeOptions = useMemo(() => {
     const seen = new Set<string>();
     const options: Array<{ value: string; label: string }> = [];
 
@@ -817,19 +834,89 @@ export function CreateCaseWizard() {
   const selectedTemplateMatchesFilter = Boolean(
     selectedTemplate && filteredTemplates.some((template) => template.id === selectedTemplate.id),
   );
-  const selectedNotaryLabel = useMemo(() => {
-    if (!generalForm.notary_id) {
-      return "Notaría asignada";
+    const selectedNotaryLabel = useMemo(() => {
+      if (resolvedNotaryId === null) {
+        return "Sin notaría asignada";
+      }
+
+      return notaries.find((item) => item.value === String(resolvedNotaryId))?.label || "Notaría asignada";
+    }, [notaries, resolvedNotaryId]);
+  const currentOwnerOptions = userOptions;
+  const protocolistOptions = userOptions;
+  const generalManagerFields = useMemo<Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }>>(() => {
+    const fields: Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }> = [];
+    if (isSuperAdmin) {
+      fields.push({ key: "current_owner_user_id", label: "Responsable actual", value: generalForm.current_owner_user_id });
+      fields.push({ key: "protocolist_user_id", label: "Protocolista", value: generalForm.protocolist_user_id });
+    }
+    fields.push({ key: "approver_user_id", label: "Aprobador", value: generalForm.approver_user_id });
+    fields.push({ key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id });
+    return fields;
+  }, [generalForm.approver_user_id, generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.titular_notary_user_id, isSuperAdmin]);
+
+  const protocolistDisplayLabel = useMemo(() => {
+    if (isSuperAdmin) {
+      return "Selección administrativa";
+    }
+    if (hasProtocolistRole && currentUser) {
+      return currentUser.full_name;
+    }
+    return "No asignado automáticamente";
+  }, [currentUser, hasProtocolistRole, isSuperAdmin]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
     }
 
-    return notaries.find((item) => item.value === generalForm.notary_id)?.label || "Notaría asignada";
-  }, [generalForm.notary_id, notaries]);
-  const generalManagerFields = useMemo<Array<{ key: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id"; label: string; value: string }>>(() => [
-    { key: "current_owner_user_id", label: "Responsable actual", value: generalForm.current_owner_user_id },
-    { key: "protocolist_user_id", label: "Protocolista", value: generalForm.protocolist_user_id },
-    { key: "approver_user_id", label: "Aprobador", value: generalForm.approver_user_id },
-    { key: "titular_notary_user_id", label: "Notario titular", value: generalForm.titular_notary_user_id },
-  ], [generalForm.current_owner_user_id, generalForm.protocolist_user_id, generalForm.approver_user_id, generalForm.titular_notary_user_id]);
+      const effectiveNotaryId = resolvedNotaryId;
+      if (!isSuperAdmin && effectiveNotaryId === null) {
+        setApproverUsers([]);
+        setTitularNotaryUsers([]);
+        setSubstituteNotaryUsers([]);
+        return;
+      }
+
+    let cancelled = false;
+
+    async function loadRoleOptions() {
+      try {
+        const [approverData, titularData, substituteData] = await Promise.all([
+          getUserOptions(true, "approver", effectiveNotaryId),
+          getUserOptions(true, "notary_titular", effectiveNotaryId),
+          getUserOptions(true, "notary_suplente", effectiveNotaryId),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        const nextApproverOptions = normalizeUserOptions(approverData);
+        const nextTitularOptions = normalizeUserOptions(titularData);
+        const nextSubstituteOptions = normalizeUserOptions(substituteData);
+        setApproverUsers(nextApproverOptions);
+        setTitularNotaryUsers(nextTitularOptions);
+        setSubstituteNotaryUsers(nextSubstituteOptions);
+        setGeneralForm((current) => ({
+          ...current,
+          approver_user_id: nextApproverOptions.some((item) => item.value === current.approver_user_id) ? current.approver_user_id : "",
+          titular_notary_user_id: nextTitularOptions.some((item) => item.value === current.titular_notary_user_id) ? current.titular_notary_user_id : "",
+          substitute_notary_user_id: nextSubstituteOptions.some((item) => item.value === current.substitute_notary_user_id) ? current.substitute_notary_user_id : "",
+        }));
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setApproverUsers([]);
+        setTitularNotaryUsers([]);
+        setSubstituteNotaryUsers([]);
+      }
+    }
+
+    void loadRoleOptions();
+
+    return () => {
+      cancelled = true;
+    };
+    }, [currentUser, isSuperAdmin, resolvedNotaryId]);
 
   function renderTemplateSummary() {
     if (!selectedTemplate) {
@@ -889,25 +976,45 @@ export function CreateCaseWizard() {
     setExpandedGeneralField(null);
   }
 
+  function getGeneralManagerOptions(field: "current_owner_user_id" | "protocolist_user_id" | "approver_user_id" | "titular_notary_user_id") {
+    if (field === "approver_user_id") {
+      return approverUserOptions;
+    }
+    if (field === "titular_notary_user_id") {
+      return titularNotaryUserOptions;
+    }
+    if (field === "current_owner_user_id") {
+      return currentOwnerOptions;
+    }
+    return protocolistOptions;
+  }
+
   function clearTemplateFilters() {
     setTemplateSearch("");
     setTemplateTypeFilter("all");
   }
 
   async function handleCreateCase() {
-    if (!selectedTemplate || !generalForm.notary_id) {
-      throw new Error("Debes seleccionar la notaría y la plantilla para crear la minuta.");
+    if (!selectedTemplate) {
+      throw new Error("Debes seleccionar la plantilla para crear la minuta.");
     }
+    const notaryId = isSuperAdmin ? (generalForm.notary_id ? Number(generalForm.notary_id) : null) : (currentUser?.default_notary_id ?? null);
+    if (notaryId === null) {
+      throw new Error("Tu usuario no tiene una notaría asignada. Contacta al administrador.");
+    }
+    const protocolistUserId = isSuperAdmin
+      ? (generalForm.protocolist_user_id ? Number(generalForm.protocolist_user_id) : null)
+      : (hasProtocolistRole && currentUser ? currentUser.id : null);
     const created = await createDocumentCase({
       template_id: selectedTemplate.id,
-      notary_id: Number(generalForm.notary_id),
+      notary_id: notaryId,
       client_user_id: generalForm.client_user_id ? Number(generalForm.client_user_id) : null,
-      current_owner_user_id: generalForm.current_owner_user_id ? Number(generalForm.current_owner_user_id) : null,
-      protocolist_user_id: generalForm.protocolist_user_id ? Number(generalForm.protocolist_user_id) : null,
+      current_owner_user_id: isSuperAdmin ? (generalForm.current_owner_user_id ? Number(generalForm.current_owner_user_id) : null) : null,
+      protocolist_user_id: protocolistUserId,
       approver_user_id: generalForm.approver_user_id ? Number(generalForm.approver_user_id) : null,
       titular_notary_user_id: generalForm.titular_notary_user_id ? Number(generalForm.titular_notary_user_id) : null,
       substitute_notary_user_id: generalForm.substitute_notary_user_id ? Number(generalForm.substitute_notary_user_id) : null,
-      requires_client_review: generalForm.requires_client_review,
+      requires_client_review: isSuperAdmin ? generalForm.requires_client_review : false,
       metadata_json: generalForm.metadata_json,
     });
     setCaseDetail(created);
@@ -1130,17 +1237,24 @@ export function CreateCaseWizard() {
                   </p>
                   {renderTemplateSummary()}
                   <div className="grid gap-4">
-                    {canSelectNotary ? (
-                      <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
-                    ) : (
-                      <div className="ep-card-soft rounded-[1.6rem] p-4">
-                        <p className="text-sm font-medium text-primary">Notaría</p>
-                        <p className="mt-2 text-sm text-secondary">{selectedNotaryLabel}</p>
+                      {canSelectNotary ? (
+                        <SearchableSelect label="Notaría" value={generalForm.notary_id} options={notaries} onChange={(value) => setGeneralForm((current) => ({ ...current, notary_id: value }))} />
+                      ) : (
+                        <div className="ep-card-soft rounded-[1.6rem] p-4">
+                          <p className="text-sm font-medium text-primary">Notaría</p>
+                          <p className="mt-2 text-sm text-secondary">{selectedNotaryLabel}</p>
                       </div>
                     )}
+                    {!isSuperAdmin ? (
+                      <div className="ep-card-soft rounded-[1.6rem] p-4">
+                        <p className="text-sm font-medium text-primary">Protocolista</p>
+                        <p className="mt-2 text-sm text-secondary">{protocolistDisplayLabel}</p>
+                      </div>
+                    ) : null}
                     {generalManagerFields.map((field) => {
                       const isExpanded = expandedGeneralField === field.key;
-                      const selectedLabel = userOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
+                      const fieldOptions = getGeneralManagerOptions(field.key);
+                      const selectedLabel = fieldOptions.find((item) => item.value === field.value)?.label || "Sin asignar";
                       return (
                         <div key={field.key} className="ep-card-soft z-0 rounded-[1.6rem] p-4 space-y-3" style={{ position: "relative", zIndex: "auto" }}>
                           <button
@@ -1155,7 +1269,7 @@ export function CreateCaseWizard() {
                             <SearchableSelect
                               label={field.label}
                               value={field.value}
-                              options={userOptions}
+                              options={fieldOptions}
                               onChange={(value) => updateGeneralManager(field.key, value)}
                             />
                           ) : null}
@@ -1164,7 +1278,7 @@ export function CreateCaseWizard() {
                     })}
                     {showSubstituteNotary ? (
                       <div className="space-y-3">
-                        <SearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={userOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
+                        <SearchableSelect label="Notario suplente" value={generalForm.substitute_notary_user_id} options={substituteNotaryUserOptions} onChange={(value) => setGeneralForm((current) => ({ ...current, substitute_notary_user_id: value }))} />
                         <button
                           type="button"
                           onClick={() => setShowSubstituteNotary(false)}
@@ -1183,10 +1297,12 @@ export function CreateCaseWizard() {
                       </button>
                     )}
                   </div>
-                  <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
-                    <input type="checkbox" checked={generalForm.requires_client_review} onChange={(event) => setGeneralForm((current) => ({ ...current, requires_client_review: event.target.checked }))} />
-                    Requiere revisión del cliente
-                  </label>
+                  {isSuperAdmin ? (
+                    <label className="ep-card-muted flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-secondary">
+                      <input type="checkbox" checked={generalForm.requires_client_review} onChange={(event) => setGeneralForm((current) => ({ ...current, requires_client_review: event.target.checked }))} />
+                      Requiere revisión del cliente
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
 

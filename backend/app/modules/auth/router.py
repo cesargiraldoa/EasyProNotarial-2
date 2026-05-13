@@ -35,6 +35,8 @@ class AuthenticatedUserWithPermissions(BaseModel):
     id: int
     email: EmailStr
     full_name: str
+    document_type: str | None = None
+    document_number: str | None = None
     phone: str | None = None
     job_title: str | None = None
     is_active: bool

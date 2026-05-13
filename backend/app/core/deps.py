@@ -19,6 +19,8 @@ ROLE_PERMISSIONS = {
     "super_admin": {"users.read", "users.write", "notaries.read", "notaries.write", "notaries.import", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
     "admin_notary": {"users.read", "users.write", "notaries.read", "notaries.write", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
     "notary": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
+    "notary_titular": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
+    "notary_suplente": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
     "approver": {"notaries.read", "crm.manage", "cases.read", "cases.write"},
     "protocolist": {"notaries.read", "crm.manage", "cases.read", "cases.write"},
     "client": {"notaries.read", "cases.read"},

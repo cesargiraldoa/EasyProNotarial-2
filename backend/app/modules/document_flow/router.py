@@ -517,7 +517,7 @@ def generate_draft_for_case(db: Session, case: Case, current_user: User, comment
 
 
 @router.post("/cases/from-template", response_model=CaseDetail, status_code=status.HTTP_201_CREATED)
-def create_case_from_template(payload: CaseCreateFromTemplate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
+def create_case_from_template(payload: CaseCreateFromTemplate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente"))):
     template = db.query(DocumentTemplate).options(joinedload(DocumentTemplate.required_roles), joinedload(DocumentTemplate.fields), joinedload(DocumentTemplate.notary)).filter(DocumentTemplate.id == payload.template_id, DocumentTemplate.is_active.is_(True)).first()
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La plantilla seleccionada no existe o está inactiva.")
@@ -540,7 +540,7 @@ def get_case_detail(case_id: int, db: Session = Depends(get_db), current_user: U
 
 
 @router.put("/cases/{case_id}/participants", response_model=CaseDetail)
-def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
+def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     if not payload:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes agregar al menos un interviniente.")
@@ -577,7 +577,7 @@ def save_case_participants(case_id: int, payload: list[CaseParticipantPayload], 
 
 
 @router.put("/cases/{case_id}/act-data", response_model=CaseDetail)
-def save_case_act_data(case_id: int, payload: CaseActDataPayload, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
+def save_case_act_data(case_id: int, payload: CaseActDataPayload, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     if case.act_data is None:
         case.act_data = CaseActData(case_id=case.id, data_json="{}")
@@ -609,7 +609,7 @@ def add_internal_note(case_id: int, payload: CaseInternalNoteCreate, db: Session
 
 
 @router.post("/cases/{case_id}/generate-draft", response_model=CaseDetail)
-def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     generate_draft_for_case(db, case, current_user, payload.comment)
     db.commit()
@@ -617,7 +617,7 @@ def generate_case_draft(case_id: int, payload: DraftGenerationRequest, db: Sessi
 
 
 @router.post("/cases/{case_id}/generate-with-gari", response_model=CaseDetail)
-def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     if case.act_data is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Debes registrar los datos del acto antes de generar el borrador con Gari.")
@@ -751,9 +751,9 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
 
 
 @router.post("/cases/{case_id}/approve", response_model=CaseDetail)
-def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
-    if payload.role_code not in {"approver", "titular_notary", "substitute_notary"}:
+    if payload.role_code not in {"approver", "notary_titular", "notary_suplente", "titular_notary", "substitute_notary"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role_code debe ser approver, titular_notary o substitute_notary.")
     actor_roles = get_role_codes(current_user)
     if "super_admin" not in actor_roles and "admin_notary" not in actor_roles:
@@ -790,7 +790,7 @@ def approve_case(case_id: int, payload: ApprovalRequest, db: Session = Depends(g
 
 
 @router.post("/cases/{case_id}/send-to-review", response_model=CaseDetail)
-def send_case_to_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist"))):
+def send_case_to_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     actor_roles = get_role_codes(current_user)
     previous_state = case.current_state
@@ -804,7 +804,7 @@ def send_case_to_review(case_id: int, payload: ReviewTransitionRequest, db: Sess
 
 
 @router.post("/cases/{case_id}/return-review", response_model=CaseDetail)
-def return_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+def return_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     actor_roles = get_role_codes(current_user)
     review_comment = require_transition_comment(payload.comment)
@@ -822,7 +822,7 @@ def return_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: 
 
 
 @router.post("/cases/{case_id}/reject-review", response_model=CaseDetail)
-def reject_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary"))):
+def reject_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     actor_roles = get_role_codes(current_user)
     review_comment = require_transition_comment(payload.comment)
@@ -836,7 +836,7 @@ def reject_case_from_review(case_id: int, payload: ReviewTransitionRequest, db: 
 
 
 @router.post("/cases/{case_id}/export", response_model=CaseDetail)
-def export_case_document(case_id: int, payload: ExportRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary"))):
+def export_case_document(case_id: int, payload: ExportRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     latest_draft = latest_document_version(case, "draft", "docx")
     if latest_draft is None:
@@ -855,7 +855,7 @@ def export_case_document(case_id: int, payload: ExportRequest, db: Session = Dep
 
 
 @router.post("/cases/{case_id}/final-upload", response_model=CaseDetail)
-def upload_final_document(case_id: int, payload: FinalUploadRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary"))):
+def upload_final_document(case_id: int, payload: FinalUploadRequest, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "notary", "notary_titular", "notary_suplente"))):
     case = load_case_or_404(db, case_id)
     extension = Path(payload.filename).suffix.lstrip(".") or "pdf"
     target = next_case_file_path(case.id, "final_signed", 1, extension, payload.filename)
@@ -1225,7 +1225,7 @@ def generate_from_template(
     case_id: int,
     payload: GenerateFromTemplatePayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary")),
+    current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente")),
 ):
     case = load_case_or_404(db, case_id)
     if case.template_id is None:

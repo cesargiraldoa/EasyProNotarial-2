@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -8,12 +8,15 @@ from app.models.base import Base, TimestampMixin
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("document_type", "document_number", name="uq_users_document_type_document_number"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    document_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    document_number: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     job_title: Mapped[str | None] = mapped_column(String(80), nullable=True)
     default_notary_id: Mapped[int | None] = mapped_column(ForeignKey("notaries.id"), nullable=True)

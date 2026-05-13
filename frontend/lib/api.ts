@@ -19,6 +19,8 @@ export type CurrentUser = {
   id: number;
   email: string;
   full_name: string;
+  document_type?: string | null;
+  document_number?: string | null;
   phone?: string | null;
   job_title?: string | null;
   is_active: boolean;
@@ -161,6 +163,8 @@ export type UserPayload = {
   full_name: string;
   password: string | null;
   is_active: boolean;
+  document_type: string;
+  document_number: string;
   phone: string;
   job_title: string;
   default_notary_id: number | null;
@@ -172,6 +176,8 @@ export type UserRecord = {
   email: string;
   full_name: string;
   is_active: boolean;
+  document_type?: string | null;
+  document_number?: string | null;
   phone?: string | null;
   job_title?: string | null;
   default_notary_id?: number | null;
@@ -478,7 +484,17 @@ function normalizeNotaryPayload(payload: NotaryPayload) {
   return { ...payload, department: payload.department.trim() || "Antioquia", municipality: payload.municipality.trim(), notary_label: payload.notary_label.trim(), address: payload.address.trim() || null, phone: payload.phone.trim() || null, email: payload.email.trim() || null, current_notary_name: payload.current_notary_name.trim() || null, business_hours: payload.business_hours.trim() || null, logo_url: payload.logo_url.trim() || null, base_color: payload.base_color.trim() || "#F4F7FB", institutional_data: payload.institutional_data.trim(), commercial_status: payload.commercial_status, commercial_owner: payload.commercial_owner.trim() || null, commercial_owner_user_id: payload.commercial_owner_user_id, main_contact_name: payload.main_contact_name.trim() || null, main_contact_title: payload.main_contact_title.trim() || null, commercial_phone: payload.commercial_phone.trim() || null, commercial_email: payload.commercial_email.trim() || null, last_management_at: normalizeDateTime(payload.last_management_at), next_management_at: normalizeDateTime(payload.next_management_at), commercial_notes: payload.commercial_notes.trim() || null, priority: payload.priority, lead_source: payload.lead_source.trim() || null, potential: payload.potential.trim() || null, internal_observations: payload.internal_observations.trim() || null };
 }
 function normalizeUserPayload(payload: UserPayload) {
-  return { ...payload, email: payload.email.trim().toLowerCase(), full_name: repairText(payload.full_name), password: payload.password?.trim() || null, phone: cleanNullableText(payload.phone), job_title: cleanNullableText(payload.job_title), assignments: payload.assignments.filter((assignment) => assignment.role_code) };
+  return {
+    ...payload,
+    email: payload.email.trim().toLowerCase(),
+    full_name: repairText(payload.full_name),
+    password: payload.password?.trim() || null,
+    document_type: cleanNullableText(payload.document_type)?.toUpperCase() || null,
+    document_number: cleanNullableText(payload.document_number),
+    phone: cleanNullableText(payload.phone),
+    job_title: cleanNullableText(payload.job_title),
+    assignments: payload.assignments.filter((assignment) => assignment.role_code)
+  };
 }
 function normalizeCurrentUserProfilePayload(payload: CurrentUserProfilePayload) {
   return {
@@ -563,7 +579,17 @@ export async function importAntioquiaSource(overwriteExisting = true): Promise<N
 export async function getRoleCatalog(): Promise<RoleCatalogItem[]> { return apiFetch<RoleCatalogItem[]>("/api/v1/users/roles"); }
 export async function getUsers(): Promise<UserRecord[]> { return apiFetch<UserRecord[]>("/api/v1/users"); }
 export async function getUser(id: number): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`); }
-export async function getUserOptions(activeOnly = true): Promise<UserOption[]> { return normalizeUserOptionsResponse(await apiFetch<UserOption[]>(`/api/v1/users/options${activeOnly ? "?active_only=true" : "?active_only=false"}`)); }
+export async function getUserOptions(activeOnly = true, roleCode?: string, notaryId?: number | null): Promise<UserOption[]> {
+  const query = new URLSearchParams();
+  query.set("active_only", activeOnly ? "true" : "false");
+  if (roleCode) {
+    query.set("role_code", roleCode);
+  }
+  if (typeof notaryId === "number" && Number.isFinite(notaryId)) {
+    query.set("notary_id", String(notaryId));
+  }
+  return normalizeUserOptionsResponse(await apiFetch<UserOption[]>(`/api/v1/users/options?${query.toString()}`));
+}
 export async function createUser(payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>("/api/v1/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }
 export async function updateUser(id: number, payload: UserPayload): Promise<UserRecord> { return apiFetch<UserRecord>(`/api/v1/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: normalizeUserPayload(payload) }); }
 export async function getCases(filters: CaseFilters = {}): Promise<CaseRecord[]> { return normalizeCaseResponse(await apiFetch<CaseRecord[]>(`/api/v1/cases${buildQuery(filters)}`)); }

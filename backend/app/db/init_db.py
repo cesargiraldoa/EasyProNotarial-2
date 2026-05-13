@@ -23,6 +23,7 @@ from app.models.notary_commercial_activity import NotaryCommercialActivity
 from app.models.notary_crm_audit_log import NotaryCrmAuditLog
 from app.models.person import Person
 from app.models.role import Role
+from app.models.role_assignment import RoleAssignment
 from app.models.template_field import TemplateField
 from app.models.template_required_role import TemplateRequiredRole
 from app.models.user import User
@@ -84,7 +85,7 @@ def repair_text(value: str | None) -> str | None:
 def repair_model_strings(db) -> None:
     repairs = {
         Role: ["name", "description"],
-        User: ["full_name", "job_title", "phone"],
+        User: ["full_name", "job_title", "phone", "document_type", "document_number"],
         Notary: [
             "commercial_name", "legal_name", "city", "department", "municipality",
             "notary_label", "address", "phone", "email", "current_notary_name",
@@ -226,6 +227,99 @@ def ensure_case_participant_columns() -> None:
             ))
 
 
+def ensure_user_columns() -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("users")}
+    required_columns = {
+        "document_type": "ALTER TABLE users ADD COLUMN document_type VARCHAR(40)",
+        "document_number": "ALTER TABLE users ADD COLUMN document_number VARCHAR(40)",
+    }
+    with engine.begin() as connection:
+        for column_name, ddl in required_columns.items():
+            if column_name not in existing_columns:
+                connection.execute(text(ddl))
+    inspector = inspect(engine)
+    existing_uniques = {index["name"] for index in inspector.get_indexes("users")}
+    existing_uniques.update(constraint["name"] for constraint in inspector.get_unique_constraints("users") if constraint.get("name"))
+    if "uq_users_document_type_document_number" not in existing_uniques:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_document_type_document_number "
+                "ON users (document_type, document_number)"
+            ))
+
+
+def ensure_legacy_notary_titular_assignments() -> None:
+    db = SessionLocal()
+    try:
+        titular_role = db.query(Role).filter(Role.code == "notary_titular").first()
+        legacy_role = db.query(Role).filter(Role.code == "notary").first()
+        if titular_role is None or legacy_role is None:
+            return
+
+        titular_notary_ids = {
+            row[0]
+            for row in (
+                db.query(RoleAssignment.notary_id)
+                .join(User, User.id == RoleAssignment.user_id)
+                .filter(
+                    RoleAssignment.role_id == titular_role.id,
+                    RoleAssignment.notary_id.isnot(None),
+                    User.is_active.is_(True),
+                )
+                .distinct()
+                .all()
+            )
+            if row[0] is not None
+        }
+
+        candidate_rows = (
+            db.query(RoleAssignment.notary_id, User.id)
+            .join(User, User.id == RoleAssignment.user_id)
+            .filter(
+                RoleAssignment.role_id == legacy_role.id,
+                RoleAssignment.notary_id.isnot(None),
+                User.is_active.is_(True),
+            )
+            .order_by(RoleAssignment.notary_id.asc(), User.id.asc())
+            .all()
+        )
+
+        selected_users_by_notary: dict[int, int] = {}
+        for notary_id, user_id in candidate_rows:
+            if notary_id is None or notary_id in titular_notary_ids or notary_id in selected_users_by_notary:
+                continue
+            selected_users_by_notary[notary_id] = user_id
+
+        if not selected_users_by_notary:
+            return
+
+        existing_pairs = {
+            (assignment.user_id, assignment.notary_id)
+            for assignment in (
+                db.query(RoleAssignment)
+                .filter(RoleAssignment.role_id == titular_role.id)
+                .filter(RoleAssignment.notary_id.in_(list(selected_users_by_notary.keys())))
+                .all()
+            )
+        }
+
+        dirty = False
+        for notary_id, user_id in selected_users_by_notary.items():
+            pair = (user_id, notary_id)
+            if pair in existing_pairs:
+                continue
+            db.add(RoleAssignment(user_id=user_id, role_id=titular_role.id, notary_id=notary_id))
+            dirty = True
+
+        if dirty:
+            db.commit()
+    finally:
+        db.close()
+
+
 def init_db() -> None:
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
@@ -234,6 +328,8 @@ def init_db() -> None:
     ensure_case_columns()
     ensure_case_act_data_columns()
     ensure_case_participant_columns()
+    ensure_user_columns()
+    ensure_legacy_notary_titular_assignments()
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))

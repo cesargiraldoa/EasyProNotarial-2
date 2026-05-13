@@ -25,7 +25,8 @@ from app.schemas.user import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-ROLE_ORDER = ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]
+ROLE_ORDER = ["super_admin", "admin_notary", "notary", "notary_titular", "notary_suplente", "approver", "protocolist", "client"]
+DOCUMENT_TYPE_CODES = {"CC", "CE", "PA", "NIT", "OTRO"}
 MODULE_CODES = [
     "resumen",
     "comercial",
@@ -63,6 +64,8 @@ def serialize_user(user: User) -> UserSummary:
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        document_type=user.document_type,
+        document_number=user.document_number,
         phone=user.phone,
         job_title=user.job_title,
         default_notary_id=user.default_notary_id,
@@ -96,6 +99,40 @@ def get_manageable_notary_ids(user: User) -> set[int]:
         if assignment.notary_id is not None:
             ids.add(assignment.notary_id)
     return ids
+
+
+def normalize_document_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().upper()
+    return normalized or None
+
+
+def normalize_document_number(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+def ensure_unique_user_identity(db: Session, document_type: str | None, document_number: str | None, user_id: int | None = None) -> None:
+    if document_type is None or document_number is None:
+        return
+    query = db.query(User.id).filter(
+        User.document_type == document_type,
+        User.document_number == document_number,
+    )
+    if user_id is not None:
+        query = query.filter(User.id != user_id)
+    if query.first() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe otro usuario con ese tipo y número de identificación.",
+        )
 
 
 def get_assignable_roles(db: Session, current_user: User) -> list[Role]:
@@ -282,6 +319,7 @@ def update_role_permissions(
 def list_user_options(
     active_only: bool = Query(default=True),
     role_code: str | None = Query(default=None),
+    notary_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -289,16 +327,35 @@ def list_user_options(
     query = db.query(User).options(joinedload(User.default_notary)).order_by(User.full_name.asc())
     if "super_admin" not in role_codes:
         query = query.filter(User.default_notary_id == current_user.default_notary_id)
-    if role_code:
-        query = (
-            query.join(User.role_assignments)
+    elif notary_id is not None:
+        query = query.filter(User.default_notary_id == notary_id)
+
+    def apply_role_filter(base_query, requested_role_code: str | None):
+        if not requested_role_code:
+            return base_query
+        filtered_query = (
+            base_query.join(User.role_assignments)
             .join(RoleAssignment.role)
-            .filter(Role.code == role_code)
-            .distinct()
+            .filter(Role.code == requested_role_code)
         )
-    if active_only:
-        query = query.filter(User.is_active.is_(True))
-    users = query.all()
+        if notary_id is not None:
+            filtered_query = filtered_query.filter(RoleAssignment.notary_id == notary_id)
+        return filtered_query.distinct()
+
+    def finalize(base_query):
+        final_query = base_query
+        if active_only:
+            final_query = final_query.filter(User.is_active.is_(True))
+        return final_query.all()
+
+    if role_code == "notary_titular":
+        titular_users = finalize(apply_role_filter(query, "notary_titular"))
+        if titular_users:
+            users = titular_users
+        else:
+            users = finalize(apply_role_filter(query, "notary"))
+    else:
+        users = finalize(apply_role_filter(query, role_code))
     return [
         UserOption(
             id=user.id,
@@ -344,7 +401,14 @@ def get_user(user_id: int, db: Session = Depends(get_db), current_user: User = D
 
 @router.post("", response_model=UserDetail, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles("super_admin", "admin_notary"))):
-    if db.query(User).filter(User.email == payload.email).first() is not None:
+    email = normalize_email(payload.email)
+    document_type = normalize_document_type(payload.document_type)
+    document_number = normalize_document_number(payload.document_number)
+
+    if document_type is None or document_number is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El tipo y número de identificación son obligatorios para crear usuarios.")
+    ensure_unique_user_identity(db, document_type, document_number)
+    if db.query(User).filter(User.email == email).first() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe un usuario con ese correo.")
 
     if payload.default_notary_id is not None:
@@ -354,10 +418,12 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes asignar usuarios a esa notaría.")
 
     user = User(
-        email=str(payload.email).lower(),
+        email=email,
         full_name=payload.full_name.strip(),
         password_hash=get_password_hash(payload.password),
         is_active=payload.is_active,
+        document_type=document_type,
+        document_number=document_number,
         phone=payload.phone.strip() if payload.phone else None,
         job_title=payload.job_title.strip() if payload.job_title else None,
         default_notary_id=payload.default_notary_id,
@@ -381,9 +447,14 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         if not visible:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para editar este usuario.")
 
-    duplicate = db.query(User).filter(User.email == payload.email, User.id != user.id).first()
+    email = normalize_email(payload.email)
+    document_type = normalize_document_type(payload.document_type)
+    document_number = normalize_document_number(payload.document_number)
+
+    duplicate = db.query(User).filter(User.email == email, User.id != user.id).first()
     if duplicate is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe otro usuario con ese correo.")
+    ensure_unique_user_identity(db, document_type, document_number, user.id)
 
     if payload.default_notary_id is not None:
         if db.query(Notary.id).filter(Notary.id == payload.default_notary_id).first() is None:
@@ -391,9 +462,11 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         if not has_role(current_user, "super_admin") and payload.default_notary_id not in get_manageable_notary_ids(current_user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes asignar usuarios a esa notaría.")
 
-    user.email = str(payload.email).lower()
+    user.email = email
     user.full_name = payload.full_name.strip()
     user.is_active = payload.is_active
+    user.document_type = document_type
+    user.document_number = document_number
     user.phone = payload.phone.strip() if payload.phone else None
     user.job_title = payload.job_title.strip() if payload.job_title else None
     user.default_notary_id = payload.default_notary_id

@@ -23,6 +23,8 @@ type UserEditorState = {
   full_name: string;
   password: string;
   is_active: boolean;
+  document_type: string;
+  document_number: string;
   phone: string;
   job_title: string;
   default_notary_id: number | null;
@@ -40,12 +42,21 @@ type EditorFeedback = {
 };
 
 const PAGE_SIZE = 20;
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "CC", label: "CC" },
+  { value: "CE", label: "CE" },
+  { value: "PA", label: "PA" },
+  { value: "NIT", label: "NIT" },
+  { value: "OTRO", label: "Otro" }
+];
 
 const EMPTY_EDITOR: UserEditorState = {
   email: "",
   full_name: "",
   password: "",
   is_active: true,
+  document_type: "",
+  document_number: "",
   phone: "",
   job_title: "",
   default_notary_id: null,
@@ -58,6 +69,8 @@ function toEditorState(user: UserRecord): UserEditorState {
     full_name: user.full_name,
     password: "",
     is_active: user.is_active,
+    document_type: user.document_type ?? "",
+    document_number: user.document_number ?? "",
     phone: user.phone ?? "",
     job_title: user.job_title ?? "",
     default_notary_id: user.default_notary_id ?? null,
@@ -74,6 +87,8 @@ function normalizePayload(state: UserEditorState): UserPayload {
     full_name: state.full_name.trim(),
     password: state.password.trim() === "" ? null : state.password,
     is_active: state.is_active,
+    document_type: state.document_type.trim(),
+    document_number: state.document_number.trim(),
     phone: state.phone.trim(),
     job_title: state.job_title.trim(),
     default_notary_id: state.default_notary_id,
@@ -90,6 +105,21 @@ function notaryDisplayLabel(notary: NotaryRecord): string {
   return [notary.notary_label, notary.municipality, notary.department]
     .filter(Boolean)
     .join(" · ");
+}
+
+function documentDisplayLabel(documentType?: string | null, documentNumber?: string | null): string {
+  const type = documentType?.trim() ?? "";
+  const number = documentNumber?.trim() ?? "";
+  if (!type && !number) {
+    return "Sin identificación";
+  }
+  if (!type) {
+    return number;
+  }
+  if (!number) {
+    return type;
+  }
+  return `${type} ${number}`;
 }
 
 export function UsersAdminWorkspace() {
@@ -229,6 +259,16 @@ export function UsersAdminWorkspace() {
     return null;
   }
 
+  function validateIdentity(isNew: boolean, documentType: string, documentNumber: string): string | null {
+    if (!isNew) {
+      return null;
+    }
+    if (!documentType.trim() || !documentNumber.trim()) {
+      return "El tipo y número de identificación son obligatorios para crear usuarios.";
+    }
+    return null;
+  }
+
   function openNewAccordion() {
     setSelectedEditorUserId(null);
     setLoadedEditorUserId(null);
@@ -342,6 +382,10 @@ export function UsersAdminWorkspace() {
       if (passwordError) {
         throw new Error(passwordError);
       }
+      const identityError = validateIdentity(true, payload.document_type, payload.document_number);
+      if (identityError) {
+        throw new Error(identityError);
+      }
       await createUser(payload);
       await loadWorkspace();
       setOpenUserId(null);
@@ -398,6 +442,8 @@ export function UsersAdminWorkspace() {
         full_name: editorState.full_name,
         password: null,
         is_active: editorState.is_active,
+        document_type: editorState.document_type,
+        document_number: editorState.document_number,
         phone: editorState.phone,
         job_title: editorState.job_title,
         default_notary_id: editorState.default_notary_id,
@@ -562,6 +608,30 @@ export function UsersAdminWorkspace() {
                 onChange={(event) => updateField("job_title", event.target.value)}
                 className="ep-input h-12 w-full rounded-2xl px-4"
               />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-primary">Tipo de identificación</label>
+              <select
+                value={editorState.document_type}
+                onChange={(event) => updateField("document_type", event.target.value)}
+                className="ep-select h-12 w-full rounded-2xl px-4"
+              >
+                <option value="">Selecciona un tipo</option>
+                {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-medium text-primary">Número de identificación</label>
+                <input
+                  value={editorState.document_number}
+                  onChange={(event) => updateField("document_number", event.target.value)}
+                  placeholder="Obligatorio para nuevos usuarios"
+                  className="ep-input h-12 w-full rounded-2xl px-4"
+                />
+              </div>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-primary">Estado</label>
@@ -838,6 +908,7 @@ export function UsersAdminWorkspace() {
               <tr>
                 <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Nombre</th>
                 <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Email</th>
+                <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Identificación</th>
                 {isSuperAdmin ? (
                   <th className="border-b border-line px-4 py-3 text-left text-xs uppercase tracking-[0.18em] text-secondary">Notaría</th>
                 ) : null}
@@ -866,7 +937,7 @@ export function UsersAdminWorkspace() {
                     </td>
                   </tr>
                   <tr>
-                    <td colSpan={isSuperAdmin ? 6 : 5} className="border-b border-line p-0">
+                    <td colSpan={isSuperAdmin ? 7 : 6} className="border-b border-line p-0">
                       <div className="overflow-hidden transition-all duration-300 ease-out">
                         {renderAccordion("new")}
                       </div>
@@ -883,6 +954,7 @@ export function UsersAdminWorkspace() {
                     <tr>
                       <td className="border-b border-line px-4 py-4 text-sm font-semibold text-primary">{user.full_name}</td>
                       <td className="border-b border-line px-4 py-4 text-sm text-secondary">{user.email}</td>
+                      <td className="border-b border-line px-4 py-4 text-sm text-secondary">{documentDisplayLabel(user.document_type, user.document_number)}</td>
                       {isSuperAdmin ? (
                         <td className="border-b border-line px-4 py-4 text-sm text-secondary">{user.default_notary_label ?? "Sin notaría"}</td>
                       ) : null}
@@ -905,7 +977,7 @@ export function UsersAdminWorkspace() {
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={isSuperAdmin ? 6 : 5} className="border-b border-line p-0">
+                      <td colSpan={isSuperAdmin ? 7 : 6} className="border-b border-line p-0">
                         <div
                           className={`overflow-hidden transition-all duration-300 ease-out ${
                             isExpanded ? "max-h-[1400px] opacity-100" : "max-h-0 opacity-0"

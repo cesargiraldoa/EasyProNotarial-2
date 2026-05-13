@@ -48,6 +48,8 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=2, max_length=160)
     is_active: bool = True
+    document_type: str | None = Field(default=None, max_length=40)
+    document_number: str | None = Field(default=None, max_length=40)
     phone: str | None = Field(default=None, max_length=40)
     job_title: str | None = Field(default=None, max_length=80)
     default_notary_id: int | None = None
@@ -69,6 +71,8 @@ class UserSummary(BaseModel):
     email: EmailStr
     full_name: str
     is_active: bool
+    document_type: str | None = None
+    document_number: str | None = None
     phone: str | None = None
     job_title: str | None = None
     default_notary_id: int | None = None

@@ -34,6 +34,8 @@ ROLE_DEFINITIONS = [
     ("super_admin", "SuperAdmin", "global", "Gestión global de la plataforma"),
     ("admin_notary", "Admin Notaría", "notary", "Gestión administrativa de la notaría"),
     ("notary", "Notario", "notary", "Firma y validación notarial"),
+    ("notary_titular", "Notario titular", "notary", "Firma y validación notarial como titular"),
+    ("notary_suplente", "Notario suplente", "notary", "Firma y validación notarial como suplente"),
     ("approver", "Aprobador", "notary", "Revisión y aprobación documental"),
     ("protocolist", "Protocolista", "notary", "Gestión protocolaria y radicación"),
     ("client", "Cliente", "notary", "Consulta y seguimiento del caso"),
@@ -55,14 +57,15 @@ CASE_STATE_DEFINITIONS = [
 ]
 
 SEED_USERS = [
-    {"email": "superadmin@easypro.co", "full_name": "Super Administrador", "job_title": "SuperAdmin", "roles": [("super_admin", None)]},
-    {"email": "admin@notaria75.co", "full_name": "Laura Benítez", "job_title": "Admin Notaría", "roles": [("admin_notary", "seed")]},
-    {"email": "notario@notaria75.co", "full_name": "Dr. Roberto Valenzuela", "job_title": "Notario Titular", "roles": [("notary", "seed")]},
-    {"email": "aprobador@notaria75.co", "full_name": "Ana María Torres", "job_title": "Aprobadora", "roles": [("approver", "seed")]},
-    {"email": "protocolista@notaria75.co", "full_name": "Carlos Mejía", "job_title": "Protocolista", "roles": [("protocolist", "seed")]},
-    {"email": "cliente@notaria75.co", "full_name": "Juliana Pardo", "job_title": "Cliente Corporativo", "roles": [("client", "seed")]},
-    {"email": "laura.restrepo@easypro.co", "full_name": "Laura Restrepo", "job_title": "Coordinadora Comercial", "roles": []},
-    {"email": "equipo.easypro@easypro.co", "full_name": "Equipo EasyPro", "job_title": "Mesa Comercial", "roles": []},
+    {"email": "superadmin@easypro.co", "full_name": "Super Administrador", "job_title": "SuperAdmin", "document_type": "CC", "document_number": "1000000001", "roles": [("super_admin", None)]},
+    {"email": "admin@notaria75.co", "full_name": "Laura Benítez", "job_title": "Admin Notaría", "document_type": "CC", "document_number": "1000000002", "roles": [("admin_notary", "seed")]},
+    {"email": "notario@notaria75.co", "full_name": "Dr. Roberto Valenzuela", "job_title": "Notario Titular", "document_type": "CC", "document_number": "1000000003", "roles": [("notary", "seed"), ("notary_titular", "seed")]},
+    {"email": "suplente@notaria75.co", "full_name": "Marta Gómez", "job_title": "Notaria Suplente", "document_type": "CC", "document_number": "1000000009", "roles": [("notary_suplente", "seed")]},
+    {"email": "aprobador@notaria75.co", "full_name": "Ana María Torres", "job_title": "Aprobadora", "document_type": "CC", "document_number": "1000000004", "roles": [("approver", "seed")]},
+    {"email": "protocolista@notaria75.co", "full_name": "Carlos Mejía", "job_title": "Protocolista", "document_type": "CC", "document_number": "1000000005", "roles": [("protocolist", "seed")]},
+    {"email": "cliente@notaria75.co", "full_name": "Juliana Pardo", "job_title": "Cliente Corporativo", "document_type": "CC", "document_number": "1000000006", "roles": [("client", "seed")]},
+    {"email": "laura.restrepo@easypro.co", "full_name": "Laura Restrepo", "job_title": "Coordinadora Comercial", "document_type": "CC", "document_number": "1000000007", "roles": []},
+    {"email": "equipo.easypro@easypro.co", "full_name": "Equipo EasyPro", "job_title": "Mesa Comercial", "document_type": "NIT", "document_number": "900000001", "roles": []},
 ]
 
 POWER_GENERAL_VARIABLE_MAP = {
@@ -392,6 +395,8 @@ def seed_database(db: Session) -> None:
                 full_name=user_data["full_name"],
                 password_hash=get_password_hash("ChangeMe123!"),
                 job_title=user_data["job_title"],
+                document_type=user_data.get("document_type"),
+                document_number=user_data.get("document_number"),
                 default_notary_id=notary.id,
                 is_active=True,
             )
@@ -400,6 +405,8 @@ def seed_database(db: Session) -> None:
         else:
             user.full_name = user_data["full_name"]
             user.job_title = user_data["job_title"]
+            user.document_type = user_data.get("document_type")
+            user.document_number = user_data.get("document_number")
             user.is_active = True
             user.default_notary_id = user.default_notary_id or notary.id
         persisted_users[user.email] = user
@@ -449,7 +456,7 @@ def seed_database(db: Session) -> None:
                 protocolist_user_id=persisted_users["protocolista@notaria75.co"].id,
                 approver_user_id=persisted_users["aprobador@notaria75.co"].id,
                 titular_notary_user_id=persisted_users["notario@notaria75.co"].id,
-                substitute_notary_user_id=persisted_users["admin@notaria75.co"].id,
+                substitute_notary_user_id=persisted_users["suplente@notaria75.co"].id,
                 requires_client_review=True,
                 final_signed_uploaded=False,
                 metadata_json=json.dumps({"radication": "CAL-PG-2026-0001", "pilot": "Caldas Antioquia"}, ensure_ascii=False),
@@ -467,7 +474,7 @@ def seed_database(db: Session) -> None:
             power_case.protocolist_user_id = persisted_users["protocolista@notaria75.co"].id
             power_case.approver_user_id = persisted_users["aprobador@notaria75.co"].id
             power_case.titular_notary_user_id = persisted_users["notario@notaria75.co"].id
-            power_case.substitute_notary_user_id = persisted_users["admin@notaria75.co"].id
+            power_case.substitute_notary_user_id = persisted_users["suplente@notaria75.co"].id
             power_case.requires_client_review = True
             power_case.metadata_json = json.dumps({"radication": "CAL-PG-2026-0001", "pilot": "Caldas Antioquia"}, ensure_ascii=False)
         db.commit()
