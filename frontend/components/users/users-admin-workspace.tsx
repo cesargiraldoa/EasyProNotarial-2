@@ -20,6 +20,8 @@ import {
 type UserEditorState = {
   email: string;
   full_name: string;
+  document_type: string;
+  document_number: string;
   password: string;
   is_active: boolean;
   phone: string;
@@ -43,6 +45,8 @@ const PAGE_SIZE = 20;
 const EMPTY_EDITOR: UserEditorState = {
   email: "",
   full_name: "",
+  document_type: "CC",
+  document_number: "",
   password: "",
   is_active: true,
   phone: "",
@@ -55,6 +59,8 @@ function toEditorState(user: UserRecord): UserEditorState {
   return {
     email: user.email,
     full_name: user.full_name,
+    document_type: user.document_type ?? "CC",
+    document_number: user.document_number ?? "",
     password: "",
     is_active: user.is_active,
     phone: user.phone ?? "",
@@ -71,6 +77,8 @@ function normalizePayload(state: UserEditorState): UserPayload {
   return {
     email: state.email.trim().toLowerCase(),
     full_name: state.full_name.trim(),
+    document_type: state.document_type.trim().toUpperCase(),
+    document_number: state.document_number.trim(),
     password: state.password.trim() === "" ? null : state.password,
     is_active: state.is_active,
     phone: state.phone.trim(),
@@ -273,8 +281,17 @@ export function UsersAdminWorkspace() {
   async function handleCreateUser() {
     setIsSavingUser(true);
     setFeedback(null);
+    const payload = normalizePayload(editorState);
+    if (!payload.document_type || !payload.document_number) {
+      setIsSavingUser(false);
+      setFeedback({
+        kind: "error",
+        message: "El tipo y número de identificación son obligatorios para crear usuarios."
+      });
+      return;
+    }
     try {
-      await createUser(normalizePayload(editorState));
+      await createUser(payload);
       await loadWorkspace();
       setOpenUserId(null);
       setFeedback({ kind: "success", message: "Usuario creado correctamente." });
@@ -320,6 +337,8 @@ export function UsersAdminWorkspace() {
       await updateUser(userId, {
         email: source.email,
         full_name: source.full_name,
+        document_type: source.document_type ?? editorState.document_type,
+        document_number: source.document_number ?? editorState.document_number,
         password: null,
         is_active: source.is_active,
         phone: source.phone ?? "",
@@ -397,6 +416,30 @@ export function UsersAdminWorkspace() {
                 onChange={(event) => updateField("full_name", event.target.value)}
                 className="ep-input h-12 w-full rounded-2xl px-4"
               />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-primary">Tipo de identificación</label>
+                <select
+                  value={editorState.document_type}
+                  onChange={(event) => updateField("document_type", event.target.value)}
+                  className="ep-input h-12 w-full rounded-2xl px-4"
+                >
+                  <option value="CC">CC</option>
+                  <option value="CE">CE</option>
+                  <option value="PA">PA</option>
+                  <option value="NIT">NIT</option>
+                  <option value="OTRO">OTRO</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-primary">Número de identificación</label>
+                <input
+                  value={editorState.document_number}
+                  onChange={(event) => updateField("document_number", event.target.value)}
+                  className="ep-input h-12 w-full rounded-2xl px-4"
+                />
+              </div>
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-primary">Email</label>

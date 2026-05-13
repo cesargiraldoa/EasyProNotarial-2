@@ -1,7 +1,7 @@
 import { cleanNullableText, cleanText, repairText, sanitizeTextDeep } from "@/lib/text";
 import { getToken } from "@/lib/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const SESSION_KEY = "easypro2_session";
 
 export type LoginPayload = {
@@ -13,6 +13,8 @@ export type CurrentUser = {
   id: number;
   email: string;
   full_name: string;
+  document_type: string | null;
+  document_number: string | null;
   is_active: boolean;
   roles: string[];
   role_codes: string[];
@@ -151,6 +153,8 @@ export type UserAssignmentPayload = {
 export type UserPayload = {
   email: string;
   full_name: string;
+  document_type: string;
+  document_number: string;
   password: string | null;
   is_active: boolean;
   phone: string;
@@ -163,6 +167,8 @@ export type UserRecord = {
   id: number;
   email: string;
   full_name: string;
+  document_type: string | null;
+  document_number: string | null;
   is_active: boolean;
   phone?: string | null;
   job_title?: string | null;
@@ -393,10 +399,10 @@ async function parseResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 401) {
-      throw new Error("La sesión expiró o no es válida.");
+      throw new Error("La sesiÃ³n expirÃ³ o no es vÃ¡lida.");
     }
     if (response.status === 403) {
-      throw new Error("No tienes permisos para ejecutar esta acción.");
+      throw new Error("No tienes permisos para ejecutar esta acciÃ³n.");
     }
     throw new Error(repairText(text) || "No fue posible completar la solicitud.");
   }
@@ -412,11 +418,11 @@ function normalizeApiError(error: unknown, fallbackMessage = "No fue posible com
     const normalized = message.toLowerCase();
 
     if (!message || normalized === "failed to fetch" || normalized.includes("networkerror") || normalized.includes("load failed")) {
-      return new Error("No fue posible conectarse con el servidor. Verifica que el backend de Easy Pro esté arriba.");
+      return new Error("No fue posible conectarse con el servidor. Verifica que el backend de Easy Pro estÃ© arriba.");
     }
 
     if (normalized.includes("unexpected end of json input") || normalized.includes("json")) {
-      return new Error("El servidor respondió con un formato inesperado. Intenta recargar la vista.");
+      return new Error("El servidor respondiÃ³ con un formato inesperado. Intenta recargar la vista.");
     }
 
     return new Error(message);
@@ -508,7 +514,7 @@ export async function login(payload: LoginPayload) {
     });
     return await parseResponse<{ access_token: string; token_type: string; user: CurrentUser }>(response);
   } catch (error) {
-    throw normalizeApiError(error, "No fue posible iniciar sesión.");
+    throw normalizeApiError(error, "No fue posible iniciar sesiÃ³n.");
   }
 }
 
@@ -621,5 +627,6 @@ export async function updateRolePermissions(roleId: number, permissions: RolePer
     body: permissions
   });
 }
+
 
 
