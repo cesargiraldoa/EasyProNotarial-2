@@ -114,6 +114,33 @@ function getTemplateUploadDiagnostics(payload: unknown) {
   };
 }
 
+export function extractHttpErrorMessage(text: string, fallback = "No fue posible completar la solicitud.") {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const detail = parsed.detail ?? parsed.message ?? parsed.error;
+      if (typeof detail === "string" && detail.trim()) {
+        return detail.trim();
+      }
+      if (Array.isArray(detail) && detail.length > 0) {
+        const first = detail[0];
+        if (typeof first === "string" && first.trim()) {
+          return first.trim();
+        }
+      }
+    } catch {
+      // Fall through to plain-text handling.
+    }
+  }
+
+  return trimmed.replace(/\s+/g, " ").slice(0, 500);
+}
+
 export type TemplateRequiredRole = { id: number; role_code: string; label: string; is_required: boolean; step_order: number };
 export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; table_master?: string | null; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
 export type TemplateRecord = { id: number; name: string; slug: string; case_type: string; document_type: string; description?: string | null; scope_type: string; notary_id?: number | null; notary_label?: string | null; is_active: boolean; source_filename?: string | null; storage_path?: string | null; internal_variable_map_json: string; required_roles: TemplateRequiredRole[]; fields: TemplateField[] };
@@ -286,7 +313,7 @@ export async function createDocumentCase(payload: {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text);
+    throw new Error(extractHttpErrorMessage(text, "No fue posible crear la minuta."));
   }
   return response.json();
 }
@@ -309,7 +336,7 @@ export async function saveCaseParticipants(
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text);
+    throw new Error(extractHttpErrorMessage(text, "No fue posible guardar los intervinientes."));
   }
   return response.json();
 }
@@ -331,7 +358,7 @@ export async function saveCaseActData(
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text);
+    throw new Error(extractHttpErrorMessage(text, "No fue posible guardar los datos de la minuta."));
   }
   return response.json();
 }

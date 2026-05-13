@@ -8,6 +8,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ValidatedInput } from "@/components/ui/validated-input";
 import {
   createDocumentCase,
+  extractHttpErrorMessage,
   getActiveTemplates,
   saveCaseActData,
   type DocumentFlowCase,
@@ -1057,7 +1058,7 @@ export function CreateCaseWizard() {
         });
         if (!response.ok) {
           const text = await response.text();
-          throw new Error(text);
+          throw new Error(extractHttpErrorMessage(text, "No fue posible generar el Word de la minuta."));
         }
         setFeedback("Minuta guardada y Word generado. Abriendo detalle de la minuta...");
         router.replace(`/dashboard/casos/${caseDetail.id}`);

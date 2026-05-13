@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from jose import jwt
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
@@ -379,6 +380,43 @@ def resolve_next_sequence(db: Session, sequence_type: str, notary_id: int, year:
     return sequence.current_value
 
 
+def resolve_case_internal_number_prefix(notary: Notary) -> str:
+    slug = (notary.slug or "").strip().lower()
+    if slug and len(slug) <= 26 and all(char.isalnum() or char == "-" for char in slug):
+        return slug
+    return str(notary.id)
+
+
+def build_internal_case_number(notary: Notary, year: int, consecutive: int) -> str:
+    return f"CAS-{resolve_case_internal_number_prefix(notary)}-{year}-{consecutive:04d}"
+
+
+def is_case_number_integrity_error(error: IntegrityError) -> bool:
+    message = str(error.orig).lower()
+    return any(
+        marker in message
+        for marker in (
+            "uq_cases_internal_case_number",
+            "uq_cases_notary_year_consecutive",
+            "cases.internal_case_number",
+            "cases.notary_id",
+            "cases.year",
+            "cases.consecutive",
+            "unique constraint failed: cases.internal_case_number",
+            "unique constraint failed: cases.notary_id, cases.year, cases.consecutive",
+            "duplicate key value violates unique constraint",
+        )
+    )
+
+
+def build_case_number_conflict_detail(notary: Notary, year: int, consecutive: int) -> str:
+    return (
+        "No fue posible crear la minuta porque el identificador interno ya existe. "
+        f"Se intentó {build_internal_case_number(notary, year, consecutive)}. "
+        "Intenta de nuevo; el sistema recalculará el consecutivo."
+    )
+
+
 def resolve_or_create_person(db: Session, payload: PersonCreate) -> Person:
     person = db.query(Person).filter(Person.document_type == payload.document_type.strip().upper(), Person.document_number == payload.document_number.strip()).first()
     if person is None:
@@ -521,17 +559,56 @@ def create_case_from_template(payload: CaseCreateFromTemplate, db: Session = Dep
     template = db.query(DocumentTemplate).options(joinedload(DocumentTemplate.required_roles), joinedload(DocumentTemplate.fields), joinedload(DocumentTemplate.notary)).filter(DocumentTemplate.id == payload.template_id, DocumentTemplate.is_active.is_(True)).first()
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La plantilla seleccionada no existe o está inactiva.")
-    if db.query(Notary.id).filter(Notary.id == payload.notary_id).first() is None:
+    notary = db.query(Notary).filter(Notary.id == payload.notary_id).first()
+    if notary is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La notaría seleccionada no existe.")
     year = datetime.utcnow().year
-    consecutive = resolve_next_sequence(db, "internal_case", payload.notary_id, year)
-    case = Case(notary_id=payload.notary_id, template_id=template.id, created_by_user_id=current_user.id, case_type=template.case_type, act_type=template.document_type, consecutive=consecutive, year=year, internal_case_number=f"CAS-{year}-{consecutive:04d}", current_state="borrador", current_owner_user_id=payload.current_owner_user_id or payload.protocolist_user_id or current_user.id, client_user_id=payload.client_user_id, protocolist_user_id=payload.protocolist_user_id, approver_user_id=payload.approver_user_id, titular_notary_user_id=payload.titular_notary_user_id, substitute_notary_user_id=payload.substitute_notary_user_id, requires_client_review=payload.requires_client_review, final_signed_uploaded=False, metadata_json=safe_json(payload.metadata_json))
-    db.add(case)
-    db.flush()
-    append_timeline(db, case.id, current_user.id, "case_created", None, case.current_state, "Caso creado desde plantilla", {"template_id": template.id})
-    append_workflow(db, case, current_user, "case_created", actor_role_code="protocolist", comment="Caso creado desde plantilla", metadata={"template_id": template.id})
-    db.commit()
-    return serialize_case_detail(load_case_or_404(db, case.id))
+    for attempt in range(3):
+        consecutive = resolve_next_sequence(db, "internal_case", payload.notary_id, year)
+        case = Case(
+            notary_id=payload.notary_id,
+            template_id=template.id,
+            created_by_user_id=current_user.id,
+            case_type=template.case_type,
+            act_type=template.document_type,
+            consecutive=consecutive,
+            year=year,
+            internal_case_number=build_internal_case_number(notary, year, consecutive),
+            current_state="borrador",
+            current_owner_user_id=payload.current_owner_user_id or payload.protocolist_user_id or current_user.id,
+            client_user_id=payload.client_user_id,
+            protocolist_user_id=payload.protocolist_user_id,
+            approver_user_id=payload.approver_user_id,
+            titular_notary_user_id=payload.titular_notary_user_id,
+            substitute_notary_user_id=payload.substitute_notary_user_id,
+            requires_client_review=payload.requires_client_review,
+            final_signed_uploaded=False,
+            metadata_json=safe_json(payload.metadata_json),
+        )
+        db.add(case)
+        try:
+            db.flush()
+            append_timeline(db, case.id, current_user.id, "case_created", None, case.current_state, "Caso creado desde plantilla", {"template_id": template.id})
+            append_workflow(db, case, current_user, "case_created", actor_role_code="protocolist", comment="Caso creado desde plantilla", metadata={"template_id": template.id})
+            db.commit()
+            return serialize_case_detail(load_case_or_404(db, case.id))
+        except IntegrityError as exc:
+            db.rollback()
+            if is_case_number_integrity_error(exc) and attempt < 2:
+                logger.warning(
+                    "Reintentando creación de minuta por colisión de consecutivo",
+                    extra={"notary_id": payload.notary_id, "year": year, "attempt": attempt + 1, "consecutive": consecutive},
+                )
+                continue
+            if is_case_number_integrity_error(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=build_case_number_conflict_detail(notary, year, consecutive),
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No fue posible crear la minuta por una restricción de integridad.",
+            ) from exc
 
 
 @router.get("/cases/{case_id}", response_model=CaseDetail)

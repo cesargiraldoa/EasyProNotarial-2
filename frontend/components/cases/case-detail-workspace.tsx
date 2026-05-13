@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
@@ -108,7 +108,7 @@ async function generateFromTemplate(caseId: number, actData: Record<string, stri
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text);
+    throw new Error(extractHttpErrorMessage(text, "No fue posible generar el Word de la minuta."));
   }
   return response.json() as Promise<{ status: string; message: string; case_id: number; docx_path: string }>;
 }
