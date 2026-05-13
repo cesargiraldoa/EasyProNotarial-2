@@ -751,3 +751,137 @@ Decisión:
 - Se cierra el frente de usuarios/identificación.
 - Próxima sesión: continuar únicamente con pendientes específicos de EasyPro, sin mezclar con puertos, login o despliegues salvo que sea necesario.
 
+---
+
+# HITO — Corrección bug creación de casos multinotaría
+
+Fecha: 2026-05-13
+
+## Bug reportado
+
+Will reportó que el usuario de la Notaría de Bello `Cardozajose1bellonotaria@gmaill.com` llegaba al flujo `/dashboard/casos/crear`, visualizaba correctamente:
+
+- Notaría: Bello · Primera.
+- Protocolista: Ermick José Cardoza.
+- Aprobador: sin asignar.
+- Notario titular: sin asignar.
+
+Pero al presionar `Continuar` aparecía en frontend el mensaje genérico `Failed to fetch`.
+
+## Diagnóstico
+
+Se revisaron logs de Railway del backend y se confirmó que el endpoint fallaba con `500 Internal Server Error` en:
+
+```text
+POST /api/v1/document-flow/cases/from-template
+```
+
+La causa real era una violación de unicidad en base de datos:
+
+```text
+sqlalchemy.exc.IntegrityError
+psycopg2.errors.UniqueViolation
+duplicate key value violates unique constraint "uq_cases_internal_case_number"
+DETAIL: Key (internal_case_number)=(CAS-2026-0001) already exists.
+```
+
+La falla ocurría en `backend/app/modules/document_flow/router.py`, función `create_case_from_template`, al ejecutar `db.flush()` sobre el nuevo caso.
+
+## Causa raíz
+
+El modelo `Case` tiene una restricción global sobre `internal_case_number`.
+
+El consecutivo se calculaba por notaría usando:
+
+```text
+resolve_next_sequence(db, "internal_case", payload.notary_id, year)
+```
+
+Pero el número interno se construía de forma global así:
+
+```text
+CAS-{year}-{consecutive:04d}
+```
+
+Esto permitía que dos notarías distintas generaran el mismo identificador, por ejemplo:
+
+```text
+CAS-2026-0001
+```
+
+Como la restricción `uq_cases_internal_case_number` es global, el segundo intento fallaba.
+
+## Corrección aplicada
+
+Commit aplicado y enviado a `main`:
+
+```text
+6000fa9 fix: evitar colision de internal_case_number entre notarias
+```
+
+Cambios principales:
+
+- El número interno ahora se construye como:
+
+```text
+CAS-{notary_slug_or_id}-{year}-{consecutive:04d}
+```
+
+- Se usa `notary.slug` si existe y es seguro.
+- Si no existe `slug`, se usa `notary.id`.
+- `resolve_next_sequence(...)` sigue funcionando por notaría.
+- Se agregó reintento corto de hasta 3 intentos ante colisión.
+- Se captura `IntegrityError`, se hace `rollback()` y se devuelve error controlado `409 Conflict` o `422`, evitando el `500` genérico.
+- Se mejoró el frontend para mostrar el mensaje real del backend en vez de `Failed to fetch` o texto bruto.
+
+## Archivos modificados
+
+- `backend/app/modules/document_flow/router.py`
+- `frontend/lib/document-flow.ts`
+- `frontend/components/cases/create-case-wizard.tsx`
+- `frontend/components/cases/case-detail-workspace.tsx`
+
+## Validaciones realizadas
+
+- Codex reportó validación local de backend con compilación Python.
+- Codex reportó build de frontend exitoso.
+- Se hizo commit directo a `main` por urgencia operativa de producción.
+- Se hizo push exitoso a GitHub.
+- Railway reportó deployment exitoso del commit `6000fa9`.
+
+## Resultado esperado
+
+Al crear casos en notarías distintas, el número interno ya no debe colisionar.
+
+Ejemplos válidos esperados:
+
+```text
+CAS-bello-2026-0001
+CAS-13-2026-0001
+```
+
+La prueba de validación funcional debe hacerse con el usuario de Bello reportado por Will.
+
+## Nota posterior de login
+
+Al intentar probar con:
+
+```text
+Cardozajose1bellonotaria@gmail.com
+```
+
+el backend respondió:
+
+```text
+POST /api/v1/auth/login 401 Unauthorized
+```
+
+Esto es un problema distinto al bug de creación de casos. Se identificó diferencia entre el correo inicialmente reportado y el probado:
+
+```text
+Cardozajose1bellonotaria@gmaill.com
+Cardozajose1bellonotaria@gmail.com
+```
+
+Debe validarse si el usuario quedó creado con `gmaill.com` o con `gmail.com`, y corregir correo o resetear contraseña si aplica.
+
