@@ -1,887 +1,230 @@
 # SESSION.md — EasyProNotarial-2
 
-## Estado de sesión
+---
+## Sesión 2026-05-21
 
-Este archivo consolida contexto operativo, decisiones y próximos hitos de EasyProNotarial-2 para continuar el trabajo con claridad en futuras sesiones con IA, Codex, Claude, Kimi o desarrollo manual.
+**Objetivo de la sesión:** Integrar motor de análisis de minutas IA al backend y crear pantalla frontend de 3 pasos para subir, analizar y generar minutas.
+
+**Realizado:**
+- Documentación inicial: SESSION.md operativo, AGENTS.md, protocolo iniciar-sesion y cerrar-sesion en .claude/commands/
+- Verificación Supabase producción: alembic_version en 20260420, act_catalog ✅ 11 registros, legal_entities ✅ 6 registros, columnas document_type/document_number ✅ aplicadas (fuera de alembic_version)
+- Backend motor minutas: detector.py (GPT-4o-mini, modo B1/B2 automático), reemplazador.py (reemplazos preservando formato .docx), concordancia.py (concordancia de género con IA), utils_letras.py (números a letras notarial)
+- Backend endpoints: POST /api/v1/minuta/analizar + POST /api/v1/minuta/generar registrados en api_router. Instalado num2words y python-multipart
+- Fix SSL local: OPENAI_DISABLE_SSL_VERIFY=true en .env + _make_openai_client() en detector.py y concordancia.py
+- Prueba real con jaggua_limpio.docx: B2 detectado, 4 personas, 2 valores, inmueble Caldas/Antioquia, 8 actos, $0.0052 USD, 30 segundos respuesta
+- Frontend lib/minuta.ts: tipos TypeScript + analyzeMinuta() + generateMinuta() usando getToken()
+- Frontend components/minutas/nueva-minuta-workspace.tsx: wizard 3 pasos (subir+analizar, revisar personas con campos pendientes en amarillo, generar+descargar)
+- Frontend app/(app)/dashboard/minutas/nueva/page.tsx: ruta nueva en Next.js 15
+- tailwind.config.ts: aliases semánticos para CSS vars faltantes (muted, soft, panel-soft, panel-highlight, line-strong, etc.)
+- Alembic desincronizado corregido: columnas 20260512 y 20260513 están en Supabase pero alembic_version no las registra. Pendiente UPDATE alembic_version.
+- Comandos de sesión: iniciar-sesion.md y cerrar-sesion.md en easypro2/.claude/commands/ (para el repo) y C:\EasyProNotarial-2\.claude\commands\ (para Claude Code)
+
+**Archivos creados/modificados:**
+- `backend/app/services/minuta/detector.py` — motor B1/B2 con GPT-4o-mini
+- `backend/app/services/minuta/reemplazador.py` — reemplazos en .docx preservando formato
+- `backend/app/services/minuta/concordancia.py` — concordancia de género con IA
+- `backend/app/services/minuta/utils_letras.py` — números a letras formato notarial
+- `backend/app/modules/minuta/router.py` — 2 endpoints FastAPI
+- `backend/app/api/router.py` — registra minuta_router
+- `backend/requirements.txt` — +num2words +python-multipart
+- `backend/.env` — +OPENAI_DISABLE_SSL_VERIFY=true (solo desarrollo local, no commitear)
+- `frontend/lib/minuta.ts` — tipos + funciones API multipart
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — wizard 3 pasos completo
+- `frontend/app/(app)/dashboard/minutas/nueva/page.tsx` — ruta nueva
+- `frontend/tailwind.config.ts` — aliases semánticos CSS vars
+- `SESSION.md` — reescrito como documento operativo
+- `AGENTS.md` — inventario de agentes del sistema
+- `.claude/commands/iniciar-sesion.md` — protocolo arranque de sesión
+- `.claude/commands/cerrar-sesion.md` — protocolo cierre de sesión
+
+**Pendientes para la próxima sesión:**
+1. **Alembic out-of-sync en producción** — Ejecutar `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase para sincronizar. Las migraciones YA están aplicadas pero alembic_version dice 20260420.
+2. **Frontend minutas — integrar al menú lateral** — La ruta /dashboard/minutas/nueva existe pero no aparece en el sidebar de AppShell. Agregar entrada de navegación.
+3. **Placeholders del dashboard** — /lotes, /ayuda, /configuracion muestran páginas vacías. Limpiar del menú o agregar contenido mínimo antes de demo.
+4. **Personas incompletas en análisis** — jaggua_limpio.docx devolvió 4 personas cuando debería tener más (compradores, banco, etc.). Investigar si es problema de contexto de GPT-4o-mini (110k chars) o del prompt.
+5. **Reset de contraseña** — No existe. Usuarios no pueden cambiar su contraseña.
+
+**Estado al cierre:**
+- Backend: operativo local en puerto 8001, apuntando a Supabase producción
+- Frontend: build ✅, dev server corriendo en 5179
+- BD producción: operativa, legal_entities y act_catalog con datos, alembic_version desincronizada
+- Git: árbol limpio (solo uvicorn_start.log sin trackear, no debe commitearse)
 
 ---
 
-# HITO: Facturación Electrónica y Nómina Electrónica EasyPro
+## Stack confirmado
 
-## 1. Decisión estratégica
-
-EasyPro NO se integrará directamente con la DIAN en la primera versión.
-
-La ruta definida es usar un proveedor/intermediario tecnológico autorizado o proveedor API para:
-
-- Facturación electrónica.
-- Notas crédito.
-- Notas débito.
-- Documento soporte, si aplica.
-- Nómina electrónica, si el proveedor lo soporta.
-- Consulta de estados.
-- Descarga/almacenamiento de XML, PDF, CUFE/CUNE y respuestas.
-
-La razón de esta decisión:
-
-- Reducir complejidad técnica.
-- Evitar construir firma XML UBL 2.1 directa desde cero.
-- Evitar asumir directamente validaciones técnicas DIAN.
-- Acelerar MVP comercial.
-- Permitir cambio de proveedor mediante arquitectura de adaptadores.
-
----
-
-## 2. Proveedores a evaluar
-
-### 2.1 Proveedor principal a evaluar: Plemsi
-
-Plemsi queda como proveedor/intermediario principal a cotizar y evaluar.
-
-Validar con Plemsi:
-
-- API REST disponible.
-- Ambiente sandbox/pruebas.
-- Documentación técnica.
-- Soporte multiempresa/multicliente.
-- Facturación electrónica.
-- Nómina electrónica.
-- Notas crédito y débito.
-- Documento soporte.
-- Consulta de estados DIAN.
-- Retorno de XML.
-- Retorno de PDF.
-- Retorno de CUFE/CUNE.
-- Envío automático al adquirente/empleado.
-- Manejo de resolución y numeración.
-- Manejo de certificados digitales.
-- Costos por documento.
-- Costos mensuales.
-- Costo de implementación.
-- SLA y soporte.
-- Límites de volumen.
-- Tiempo de habilitación.
-
-### 2.2 Proveedor alterno a evaluar
-
-El segundo proveedor queda pendiente de nombre definitivo. Debe cotizarse como alternativa real frente a Plemsi.
-
-Opciones posibles para revisar:
-
-- Siigo API.
-- Alegra API.
-- Facturatech.
-- The Factory HKA.
-- Carvajal Tecnología y Servicios.
-- Loggro.
-- Otro proveedor recomendado por socios o notaría piloto.
-
-Criterio: no elegir proveedor por marca sino por API, soporte técnico, costos, documentación y capacidad multiempresa.
-
----
-
-## 3. Principio de arquitectura
-
-EasyPro debe ser dueño del proceso de negocio.
-
-El proveedor/intermediario solo debe emitir, validar y retornar documentos electrónicos.
-
-Arquitectura objetivo:
-
-```text
-EasyPro
-  ↓
-Billing / Payroll Core interno
-  ↓
-Provider Adapter
-  ↓
-Plemsi u otro proveedor
-  ↓
-DIAN
-  ↓
-Respuesta proveedor
-  ↓
-EasyPro guarda estado, XML, PDF, CUFE/CUNE, logs y eventos
-```
-
-Regla clave:
-
-```text
-Nunca amarrar el dominio de EasyPro directamente a un proveedor.
-Todo debe pasar por una interfaz/adaptador.
-```
-
----
-
-## 4. Módulo de Facturación Electrónica
-
-### 4.1 Objetivo
-
-Crear un módulo que permita generar, controlar y emitir facturas electrónicas asociadas a la operación de EasyPro.
-
-Facturación podrá aplicar para:
-
-- Plan SaaS mensual.
-- Plan SaaS anual.
-- Licencias por usuario.
-- Licencias por notaría.
-- Servicios de implementación.
-- Capacitación.
-- Soporte.
-- Desarrollos adicionales.
-- Casos notariales, si el modelo comercial lo requiere.
-- Documentos generados, si se cobra por volumen.
-- Integraciones o módulos adicionales.
-
-### 4.2 Alcance funcional mínimo
-
-El módulo debe permitir:
-
-1. Configurar empresa emisora.
-2. Configurar resolución, prefijo y numeración.
-3. Crear clientes facturables.
-4. Crear productos/servicios facturables.
-5. Crear factura en borrador.
-6. Calcular subtotal, impuestos, descuentos y total.
-7. Emitir factura vía proveedor.
-8. Consultar estado de emisión.
-9. Guardar XML, PDF y respuesta técnica.
-10. Guardar CUFE.
-11. Crear nota crédito.
-12. Crear nota débito.
-13. Registrar eventos.
-14. Descargar PDF/XML.
-15. Auditar quién creó, emitió, anuló o descargó.
-
-### 4.3 Estados de factura
-
-```text
-draft
-ready_to_emit
-submitted
-accepted
-rejected
-cancelled
-credit_note_created
-debit_note_created
-```
-
-### 4.4 Tablas sugeridas
-
-```text
-billing_settings
-billing_customers
-billing_products
-invoices
-invoice_items
-invoice_taxes
-invoice_events
-invoice_documents
-provider_credentials
-provider_requests
-provider_responses
-```
-
-### 4.5 Campos clave de factura
-
-Cabecera:
-
-- id.
-- tenant_id / organization_id / notary_id.
-- customer_id.
-- prefix.
-- number.
-- issue_date.
-- due_date.
-- currency.
-- subtotal.
-- discount_total.
-- tax_total.
-- total.
-- status.
-- provider_name.
-- provider_document_id.
-- cufe.
-- xml_url.
-- pdf_url.
-- dian_status.
-- created_by.
-- emitted_by.
-- emitted_at.
-
-Detalle:
-
-- invoice_id.
-- product_id.
-- description.
-- quantity.
-- unit_price.
-- discount.
-- tax_rate.
-- tax_amount.
-- line_total.
-
-### 4.6 API sugerida
-
-```text
-GET    /api/billing/settings
-PUT    /api/billing/settings
-GET    /api/billing/customers
-POST   /api/billing/customers
-GET    /api/billing/products
-POST   /api/billing/products
-GET    /api/billing/invoices
-POST   /api/billing/invoices
-GET    /api/billing/invoices/{id}
-POST   /api/billing/invoices/{id}/emit
-POST   /api/billing/invoices/{id}/sync-status
-POST   /api/billing/invoices/{id}/credit-note
-POST   /api/billing/invoices/{id}/debit-note
-GET    /api/billing/invoices/{id}/pdf
-GET    /api/billing/invoices/{id}/xml
-GET    /api/billing/provider/logs
-```
-
-### 4.7 Frontend sugerido
-
-Ruta administrativa:
-
-```text
-/admin/facturacion
-```
-
-Pantallas:
-
-- Configuración de facturación.
-- Clientes.
-- Productos/servicios.
-- Listado de facturas.
-- Crear factura.
-- Detalle de factura.
-- Eventos y respuesta proveedor.
-- Descarga PDF/XML.
-
----
-
-## 5. Módulo de Nómina Electrónica
-
-### 5.1 Objetivo
-
-Crear capacidad para generar y transmitir documentos soporte de nómina electrónica mediante proveedor tecnológico.
-
-No construir cálculo completo de nómina en la primera fase.
-
-La primera versión debe enfocarse en:
-
-- Registrar empleados.
-- Registrar devengados.
-- Registrar deducciones.
-- Generar documento soporte de nómina electrónica.
-- Enviar al proveedor.
-- Guardar CUNE, XML, PDF y estado.
-
-### 5.2 Alcance funcional mínimo
-
-1. Configurar empresa/emisor.
-2. Configurar proveedor de nómina electrónica.
-3. Crear empleados.
-4. Cargar periodo de nómina.
-5. Registrar devengados.
-6. Registrar deducciones.
-7. Calcular total devengado, total deducido y neto.
-8. Generar documento electrónico.
-9. Enviar al proveedor.
-10. Consultar estado.
-11. Guardar CUNE.
-12. Guardar XML/PDF.
-13. Generar ajustes o notas, si aplica.
-14. Auditar eventos.
-
-### 5.3 Estados de nómina electrónica
-
-```text
-draft
-ready_to_submit
-submitted
-accepted
-rejected
-adjustment_required
-cancelled
-```
-
-### 5.4 Tablas sugeridas
-
-```text
-payroll_settings
-payroll_employees
-payroll_periods
-payroll_documents
-payroll_earnings
-payroll_deductions
-payroll_events
-payroll_documents_files
-provider_requests
-provider_responses
-```
-
-### 5.5 Campos clave empleado
-
-- id.
-- tenant_id / organization_id.
-- document_type.
-- document_number.
-- first_name.
-- last_name.
-- email.
-- address.
-- city.
-- department.
-- contract_type.
-- salary_type.
-- base_salary.
-- payment_method.
-- bank_account, si aplica.
-- active.
-
-### 5.6 Campos clave documento nómina
-
-- id.
-- employee_id.
-- payroll_period_id.
-- issue_date.
-- payment_date.
-- accrued_total.
-- deductions_total.
-- net_total.
-- status.
-- provider_name.
-- provider_document_id.
-- cune.
-- xml_url.
-- pdf_url.
-- created_by.
-- submitted_by.
-- submitted_at.
-
-### 5.7 API sugerida
-
-```text
-GET    /api/payroll/settings
-PUT    /api/payroll/settings
-GET    /api/payroll/employees
-POST   /api/payroll/employees
-GET    /api/payroll/periods
-POST   /api/payroll/periods
-GET    /api/payroll/documents
-POST   /api/payroll/documents
-GET    /api/payroll/documents/{id}
-POST   /api/payroll/documents/{id}/submit
-POST   /api/payroll/documents/{id}/sync-status
-GET    /api/payroll/documents/{id}/pdf
-GET    /api/payroll/documents/{id}/xml
-GET    /api/payroll/provider/logs
-```
-
-### 5.8 Frontend sugerido
-
-Ruta administrativa:
-
-```text
-/admin/nomina-electronica
-```
-
-Pantallas:
-
-- Configuración de nómina electrónica.
-- Empleados.
-- Periodos.
-- Documentos de nómina.
-- Crear documento.
-- Detalle de documento.
-- Respuesta proveedor.
-- Descarga PDF/XML.
-
----
-
-## 6. Capa común: Provider Adapter
-
-Crear una interfaz común para que EasyPro pueda cambiar de proveedor sin reescribir todo.
-
-### 6.1 Interfaz sugerida
-
-```python
-class ElectronicDocumentProvider:
-    def emit_invoice(self, payload):
-        pass
-
-    def emit_credit_note(self, payload):
-        pass
-
-    def emit_debit_note(self, payload):
-        pass
-
-    def submit_payroll_document(self, payload):
-        pass
-
-    def get_document_status(self, provider_document_id):
-        pass
-
-    def get_pdf(self, provider_document_id):
-        pass
-
-    def get_xml(self, provider_document_id):
-        pass
-```
-
-### 6.2 Adaptadores
-
-```text
-providers/
-  base.py
-  plemsi.py
-  mock.py
-  alternate.py
-```
-
-Fases:
-
-1. MockProvider para desarrollo.
-2. PlemsiProvider para integración real.
-3. AlternateProvider cuando se elija segundo proveedor.
-
----
-
-## 7. Seguridad
-
-### 7.1 Secretos
-
-No guardar credenciales del proveedor en texto plano.
-
-Usar:
-
-- Variables de entorno.
-- Secret manager si está disponible.
-- Cifrado si deben guardarse por tenant.
-- Rotación de llaves.
-- No exponer tokens en logs.
-
-### 7.2 Auditoría
-
-Auditar:
-
-- Creación de factura.
-- Emisión.
-- Rechazo.
-- Descarga PDF/XML.
-- Cambio de configuración.
-- Cambio de proveedor.
-- Creación de nómina.
-- Envío de nómina.
-- Reintentos.
-
-### 7.3 Multiempresa
-
-Todo debe filtrar por organización/notaría/tenant.
-
-Regla:
-
-```text
-Ninguna factura, nómina, PDF, XML o log puede consultarse sin validar tenant y permisos.
-```
-
----
-
-## 8. Fases de implementación
-
-## Fase 0 — Cotización y decisión proveedor
-
-Objetivo: elegir proveedor principal y alterno.
-
-Tareas:
-
-1. Solicitar documentación técnica a Plemsi.
-2. Solicitar documentación técnica al proveedor alterno.
-3. Confirmar si ambos soportan facturación y nómina electrónica.
-4. Confirmar ambiente sandbox.
-5. Confirmar costos.
-6. Confirmar límites de documentos.
-7. Confirmar tiempos de implementación.
-8. Confirmar soporte multiempresa.
-9. Confirmar método de autenticación API.
-10. Confirmar responsabilidades legales.
-
-Entregable:
-
-```text
-Matriz comparativa proveedor facturación/nómina electrónica.
-```
-
-## Fase 1 — Core interno sin proveedor real
-
-Objetivo: construir base propia en EasyPro.
-
-Incluye:
-
-- Modelos.
-- Migraciones.
-- CRUD clientes.
-- CRUD productos.
-- CRUD facturas.
-- CRUD empleados.
-- CRUD periodos nómina.
-- Cálculos básicos.
-- Estados.
-- Eventos.
-- MockProvider.
-
-Resultado:
-
-```text
-EasyPro genera facturas y documentos de nómina en estado interno, sin transmisión real.
-```
-
-## Fase 2 — PDF, XML placeholder y auditoría
-
-Objetivo: tener demo funcional.
-
-Incluye:
-
-- PDF de factura.
-- PDF de nómina.
-- XML placeholder o estructura interna.
-- Eventos.
-- Descargas controladas.
-- Logs.
-- Validación de permisos.
-
-Resultado:
-
-```text
-MVP demostrable sin conexión real al proveedor.
-```
-
-## Fase 3 — Integración Plemsi sandbox
-
-Objetivo: conectar Plemsi en ambiente de pruebas.
-
-Incluye:
-
-- Credenciales sandbox.
-- Mapear payload factura.
-- Mapear payload nómina.
-- Emitir factura de prueba.
-- Emitir nómina de prueba.
-- Consultar estado.
-- Guardar PDF/XML/CUFE/CUNE.
-- Manejar rechazos.
-- Registrar request/response.
-
-Resultado:
-
-```text
-EasyPro conectado a Plemsi en pruebas.
-```
-
-## Fase 4 — Proveedor alterno
-
-Objetivo: validar portabilidad.
-
-Incluye:
-
-- Implementar AlternateProvider.
-- Probar al menos flujo de factura.
-- Confirmar que el dominio EasyPro no depende de Plemsi.
-
-Resultado:
-
-```text
-Arquitectura desacoplada y no dependiente de un solo proveedor.
-```
-
-## Fase 5 — Producción controlada
-
-Objetivo: habilitar emisión real.
-
-Incluye:
-
-- Certificados/resoluciones reales.
-- Numeración real.
-- Pruebas con cliente piloto.
-- Firma de contrato y autorización.
-- Monitoreo.
-- Soporte.
-- Plan de contingencia.
-
-Resultado:
-
-```text
-Facturación electrónica y nómina electrónica operativas con proveedor.
-```
-
----
-
-## 9. Matriz de decisión proveedor
-
-Evaluar cada proveedor con esta tabla:
-
-| Criterio | Plemsi | Proveedor alterno |
-|---|---|---|
-| Facturación electrónica | Pendiente validar | Pendiente validar |
-| Nómina electrónica | Pendiente validar | Pendiente validar |
-| API REST | Pendiente validar | Pendiente validar |
-| Sandbox | Pendiente validar | Pendiente validar |
-| PDF/XML | Pendiente validar | Pendiente validar |
-| CUFE/CUNE | Pendiente validar | Pendiente validar |
-| Notas crédito/débito | Pendiente validar | Pendiente validar |
-| Documento soporte | Pendiente validar | Pendiente validar |
-| Multiempresa | Pendiente validar | Pendiente validar |
-| Costo mensual | Pendiente cotizar | Pendiente cotizar |
-| Costo por documento | Pendiente cotizar | Pendiente cotizar |
-| Soporte técnico | Pendiente validar | Pendiente validar |
-| Documentación clara | Pendiente validar | Pendiente validar |
-| Facilidad integración | Pendiente validar | Pendiente validar |
-| Riesgo lock-in | Medio | Pendiente |
-
----
-
-## 10. Riesgos
-
-| Riesgo | Mitigación |
+| Capa | Tecnología |
 |---|---|
-| Dependencia total de Plemsi | Usar Provider Adapter |
-| Cambios API proveedor | Encapsular lógica en adaptador |
-| Errores en datos enviados | Validaciones previas |
-| Facturas rechazadas | Guardar detalle de rechazo |
-| Nómina rechazada | Validar campos obligatorios antes de enviar |
-| Secretos expuestos | Variables de entorno/cifrado |
-| Duplicidad de consecutivos | Índices únicos y transacciones |
-| Acceso cruzado entre clientes | Tenant isolation estricto |
-| Pérdida de XML/PDF | Storage y backups |
-| Costos altos por proveedor | Comparar mínimo 2 opciones |
+| Backend | FastAPI 0.115 + SQLAlchemy 2.0 + Alembic + Uvicorn |
+| Base de datos prod | PostgreSQL vía Supabase (egwdrdgtgmogcahhdtdy.supabase.co) |
+| Base de datos local | SQLite (easypro2.db) |
+| Frontend | Next.js 15.3 + React 19 + TypeScript + Tailwind CSS 3 |
+| IA documental | OpenAI GPT-4o (Gari — generación .docx escrituras) |
+| IA minutas | OpenAI GPT-4o-mini (detector B1/B2 + concordancia) |
+| Storage | Supabase Storage (cases/case-{id}/draft/) |
+| Despliegue frontend | Vercel — https://easypro-notarial-2.vercel.app |
+| Despliegue backend | Railway |
+| Editor documentos | OnlyOffice — https://onlyoffice.easypronotarial.com |
 
 ---
 
-## 11. Índices y restricciones recomendadas
+## URLs de producción / servicios
 
-Facturas:
-
-```text
-unique(tenant_id, prefix, number)
-index(tenant_id, status)
-index(customer_id)
-index(provider_document_id)
-```
-
-Nómina:
-
-```text
-unique(tenant_id, employee_id, payroll_period_id)
-index(tenant_id, status)
-index(provider_document_id)
-index(cune)
-```
+| Servicio | URL |
+|---|---|
+| Frontend producción | https://easypro-notarial-2.vercel.app |
+| Supabase BD | https://egwdrdgtgmogcahhdtdy.supabase.co |
+| OnlyOffice | https://onlyoffice.easypronotarial.com |
+| Backend local | http://127.0.0.1:8001 |
+| Frontend local | http://127.0.0.1:5179 |
 
 ---
 
-## 12. Prompt Codex recomendado
+## Estado git
 
-```text
-Trabaja en EasyProNotarial-2.
+Repositorio en `c:\EasyProNotarial-2\easypro2\` — rama `main`.
+Remoto: https://github.com/cesargiraldoa/EasyProNotarial-2.git
 
-Objetivo:
-Crear el módulo base para facturación electrónica y nómina electrónica usando arquitectura desacoplada por proveedor/intermediario, sin integrar todavía proveedor real.
+---
 
-Reglas:
-- Crear o usar rama feature/electronic-documents-core desde main o develop según exista.
-- No romper flujos actuales de casos/documentos.
-- No tocar producción.
-- No guardar secretos.
-- Crear arquitectura de Provider Adapter.
-- Crear MockProvider.
-- Crear modelos, migraciones, servicios y endpoints mínimos.
-- Todo debe ser multiempresa/multinotaría.
-- Toda consulta debe validar tenant/organization/notary.
-- Crear endpoints base para billing y payroll.
-- Crear eventos y logs técnicos.
-- Crear frontend administrativo mínimo si la estructura del frontend lo permite.
-- Si falta contexto de estructura, primero inspeccionar repo y proponer rutas exactas.
+## Migraciones Alembic — estado real en Supabase
 
-Entregables:
-1. Migraciones.
-2. Modelos.
-3. Servicios.
-4. Routers/endpoints.
-5. MockProvider.
-6. Validaciones mínimas.
-7. Resumen de archivos modificados.
-8. Comandos para probar localmente.
+| Migración | Schema real | alembic_version |
+|---|---|---|
+| base | ✅ aplicada | parte del head |
+| 20260418_add_role_permissions_table | ✅ tabla existe | parte del head |
+| 20260419_add_legal_entities | ✅ tabla existe, 6 registros | parte del head |
+| 20260420_add_act_catalog | ✅ 11 registros | ✅ HEAD registrado |
+| 20260512_add_user_identification | ✅ columnas existen en users | ❌ no registrada |
+| 20260513_promote_legacy_notary_to_titular | desconocido (data migration) | ❌ no registrada |
+
+**ACCIÓN PENDIENTE:** Ejecutar en Supabase:
+```sql
+UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';
 ```
 
 ---
 
-## 13. Decisión final registrada
+## Lo que existe y funciona hoy
 
-EasyPro implementará facturación electrónica y nómina electrónica mediante proveedor/intermediario.
+### Backend — endpoints operativos (79 rutas totales)
 
-Proveedor principal a evaluar: Plemsi.
+| Módulo | Rutas | Estado |
+|---|---|---|
+| Auth | POST /login, GET /me | ✅ |
+| Notarías | GET /notaries, GET /notaries/{id} | ✅ |
+| Usuarios | CRUD + roles + permisos | ✅ |
+| Plantillas | GET/PUT templates, 8 plantillas activas | ✅ |
+| Personas naturales | GET/POST /persons + lookup | ✅ |
+| Entidades jurídicas | GET/POST /legal-entities + apoderados | ✅ |
+| Flujo documental | Wizard 5 pasos + Gari .docx | ✅ |
+| Dashboard | GET /dashboard KPIs | ✅ |
+| Catálogo de actos | act_catalog | ✅ |
+| **Motor minutas** | POST /api/v1/minuta/analizar | ✅ nuevo |
+| **Motor minutas** | POST /api/v1/minuta/generar | ✅ nuevo |
 
-Proveedor alterno: pendiente definir/cotizar.
+### Frontend — rutas operativas
 
-La arquitectura debe quedar desacoplada por adaptadores para permitir cambiar de proveedor sin rediseñar el dominio de EasyPro.
+| Ruta | Estado |
+|---|---|
+| /login | ✅ |
+| /dashboard | ✅ KPIs |
+| /dashboard/casos | ✅ |
+| /dashboard/casos/crear | ✅ Wizard 5 pasos |
+| /dashboard/casos/[caseId] | ✅ |
+| /dashboard/notarias | ✅ |
+| /dashboard/comercial | ✅ CRM |
+| /dashboard/usuarios | ✅ |
+| /dashboard/roles | ✅ |
+| /dashboard/perfil | ✅ |
+| /dashboard/actos-plantillas | ✅ |
+| /dashboard/system-status | ✅ |
+| **/dashboard/minutas/nueva** | ✅ nuevo — wizard 3 pasos |
+| /dashboard/lotes | ⚠️ placeholder vacío |
+| /dashboard/ayuda | ⚠️ placeholder vacío |
+| /dashboard/configuracion | ⚠️ placeholder vacío |
+
+### Agente Gari (escrituras)
+- Motor: GPT-4o, max_tokens=16000, temperature=0.2
+- ACTOS_POR_VARIANTE hardcodeado en gari_service.py
+
+### Motor Minutas (nuevo)
+- Detector B1/B2: GPT-4o-mini, temperature=0.1, max_tokens=8000
+- Concordancia: GPT-4o-mini, temperature=0.1, max_tokens=4000
+- SSL local: OPENAI_DISABLE_SSL_VERIFY=true en .env (no commitear)
+
+### Entidades jurídicas en Supabase (6 — seed aplicado)
+Fiduciaria Bancolombia, Constructora Contex S.A.S. BIC, Bancolombia S.A.,
+Banco Davivienda, Fondo Nacional del Ahorro, Banco de Bogotá
 
 ---
 
-# HITO — Producción usuarios con identificación
+## Pendientes críticos
 
-Fecha: 2026-05-13
+### Para próxima sesión
+1. **Alembic out-of-sync** — UPDATE alembic_version en Supabase (ver arriba)
+2. **Menú lateral** — Agregar /dashboard/minutas/nueva al sidebar de AppShell
+3. **Placeholders dashboard** — /lotes, /ayuda, /configuracion vacíos — limpiar antes de demo
+4. **Personas incompletas en análisis** — jaggua devolvió 4/~10 personas. Revisar chunking o prompt
+5. **Reset contraseña** — No implementado
 
-Se validó producción de EasyProNotarial-2 desde `main`.
-
-Resultado:
-- Producción quedó operativa.
-- Se confirmó creación correcta de usuarios.
-- El formulario de usuarios ya incluye:
-  - Tipo de identificación.
-  - Número de identificación.
-- El build local de frontend pasó correctamente.
-- El problema identificado no era de backend ni de validación, sino de despliegue anterior en Vercel.
-
-Decisión:
-- No se requiere tocar más código para este punto.
-- Se cierra el frente de usuarios/identificación.
-- Próxima sesión: continuar únicamente con pendientes específicos de EasyPro, sin mezclar con puertos, login o despliegues salvo que sea necesario.
+### Deuda técnica
+6. ACTOS_POR_VARIANTE hardcodeado → mover a BD
+7. Búsqueda entidades con q corta retorna todo (falta filtro mínimo de chars)
+8. Módulo facturación electrónica → diseñado, cero código
+9. Módulo nómina electrónica → diseñado, cero código
+10. Provider Adapter (Plemsi) → pendiente cotización
 
 ---
 
-# HITO — Corrección bug creación de casos multinotaría
+## Comandos para levantar entorno local
 
-Fecha: 2026-05-13
+```bash
+# Backend
+cd c:\EasyProNotarial-2\easypro2\backend
+.venv\Scripts\activate
+uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
-## Bug reportado
+# Frontend (terminal separada)
+cd c:\EasyProNotarial-2\easypro2\frontend
+npm run dev
+# → http://127.0.0.1:5179
 
-Will reportó que el usuario de la Notaría de Bello `Cardozajose1bellonotaria@gmaill.com` llegaba al flujo `/dashboard/casos/crear`, visualizaba correctamente:
-
-- Notaría: Bello · Primera.
-- Protocolista: Ermick José Cardoza.
-- Aprobador: sin asignar.
-- Notario titular: sin asignar.
-
-Pero al presionar `Continuar` aparecía en frontend el mensaje genérico `Failed to fetch`.
-
-## Diagnóstico
-
-Se revisaron logs de Railway del backend y se confirmó que el endpoint fallaba con `500 Internal Server Error` en:
-
-```text
-POST /api/v1/document-flow/cases/from-template
+# Verificar migraciones Alembic (contra producción)
+cd c:\EasyProNotarial-2\easypro2\backend
+alembic current
+alembic heads
 ```
 
-La causa real era una violación de unicidad en base de datos:
+**NOTA:** .env del backend apunta a Supabase (ENVIRONMENT=production).
+Para desarrollo local con SQLite: cambiar DATABASE_URL a `sqlite:///./easypro2.db`.
 
-```text
-sqlalchemy.exc.IntegrityError
-psycopg2.errors.UniqueViolation
-duplicate key value violates unique constraint "uq_cases_internal_case_number"
-DETAIL: Key (internal_case_number)=(CAS-2026-0001) already exists.
-```
+---
 
-La falla ocurría en `backend/app/modules/document_flow/router.py`, función `create_case_from_template`, al ejecutar `db.flush()` sobre el nuevo caso.
+## Reglas técnicas del proyecto
 
-## Causa raíz
+1. **Multinotaría estricto** — Toda consulta filtra por notary_id. Nunca exponer datos cruzados.
+2. **Roles** — Validar con require_roles() / has_role(). Roles: super_admin, admin_notary, notary, approver, protocolist, client.
+3. **Provider Adapter** — Facturación/nómina NUNCA directo a Plemsi. Siempre vía ElectronicDocumentProvider.
+4. **Sin secretos en código** — Solo en .env (excluido de git).
+5. **Intervinientes dinámicos** — N compradores + N entidades. template_required_roles es obsoleto.
+6. **Snapshot JSON** — CaseParticipant guarda snapshot en momento de guardado.
+7. **Alembic obligatorio** — Todo schema change vía migración YYYYMMDD_descripcion.py.
+8. **CORS** — FlexibleCORSMiddleware. Agregar dominios en _load_allowed_origins().
+9. **Gari** — No cambiar max_tokens ni temperature sin revisar calidad de escrituras.
+10. **Supabase Storage** — Archivos en cases/case-{id}/draft/. No mover sin actualizar gari_service.py.
+11. **SSL local** — OPENAI_DISABLE_SSL_VERIFY=true solo en .env local. NO en Railway.
 
-El modelo `Case` tiene una restricción global sobre `internal_case_number`.
+---
 
-El consecutivo se calculaba por notaría usando:
+## Módulos diseñados — pendientes de implementar
 
-```text
-resolve_next_sequence(db, "internal_case", payload.notary_id, year)
-```
+### Facturación Electrónica
+- Decisión: proveedor intermediario (Plemsi evaluado como principal)
+- Arquitectura: Provider Adapter desacoplado
+- Estado: **Solo diseño. Cero código.**
 
-Pero el número interno se construía de forma global así:
-
-```text
-CAS-{year}-{consecutive:04d}
-```
-
-Esto permitía que dos notarías distintas generaran el mismo identificador, por ejemplo:
-
-```text
-CAS-2026-0001
-```
-
-Como la restricción `uq_cases_internal_case_number` es global, el segundo intento fallaba.
-
-## Corrección aplicada
-
-Commit aplicado y enviado a `main`:
-
-```text
-6000fa9 fix: evitar colision de internal_case_number entre notarias
-```
-
-Cambios principales:
-
-- El número interno ahora se construye como:
-
-```text
-CAS-{notary_slug_or_id}-{year}-{consecutive:04d}
-```
-
-- Se usa `notary.slug` si existe y es seguro.
-- Si no existe `slug`, se usa `notary.id`.
-- `resolve_next_sequence(...)` sigue funcionando por notaría.
-- Se agregó reintento corto de hasta 3 intentos ante colisión.
-- Se captura `IntegrityError`, se hace `rollback()` y se devuelve error controlado `409 Conflict` o `422`, evitando el `500` genérico.
-- Se mejoró el frontend para mostrar el mensaje real del backend en vez de `Failed to fetch` o texto bruto.
-
-## Archivos modificados
-
-- `backend/app/modules/document_flow/router.py`
-- `frontend/lib/document-flow.ts`
-- `frontend/components/cases/create-case-wizard.tsx`
-- `frontend/components/cases/case-detail-workspace.tsx`
-
-## Validaciones realizadas
-
-- Codex reportó validación local de backend con compilación Python.
-- Codex reportó build de frontend exitoso.
-- Se hizo commit directo a `main` por urgencia operativa de producción.
-- Se hizo push exitoso a GitHub.
-- Railway reportó deployment exitoso del commit `6000fa9`.
-
-## Resultado esperado
-
-Al crear casos en notarías distintas, el número interno ya no debe colisionar.
-
-Ejemplos válidos esperados:
-
-```text
-CAS-bello-2026-0001
-CAS-13-2026-0001
-```
-
-La prueba de validación funcional debe hacerse con el usuario de Bello reportado por Will.
-
-## Nota posterior de login
-
-Al intentar probar con:
-
-```text
-Cardozajose1bellonotaria@gmail.com
-```
-
-el backend respondió:
-
-```text
-POST /api/v1/auth/login 401 Unauthorized
-```
-
-Esto es un problema distinto al bug de creación de casos. Se identificó diferencia entre el correo inicialmente reportado y el probado:
-
-```text
-Cardozajose1bellonotaria@gmaill.com
-Cardozajose1bellonotaria@gmail.com
-```
-
-Debe validarse si el usuario quedó creado con `gmaill.com` o con `gmail.com`, y corregir correo o resetear contraseña si aplica.
-
+### Nómina Electrónica
+- Mismo enfoque que facturación
+- Estado: **Solo diseño. Cero código.**
