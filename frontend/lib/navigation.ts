@@ -2,6 +2,7 @@ import {
   Activity,
   Building2,
   FileArchive,
+  FileText,
   FolderKanban,
   HelpCircle,
   LayoutDashboard,
@@ -24,16 +25,16 @@ export type NavigationItem = {
 export const appNavigation: NavigationItem[] = [
   { label: "Resumen", href: "/dashboard", icon: LayoutDashboard },
   { label: "Comercial", href: "/dashboard/comercial", icon: ShieldCheck },
-  { label: "Notarías", href: "/dashboard/notarias", icon: Building2 },
+  { label: "Notarias", href: "/dashboard/notarias", icon: Building2 },
   { label: "Usuarios", href: "/dashboard/usuarios", icon: Users2 },
   { label: "Roles", href: "/dashboard/roles", icon: ShieldCheck },
   { label: "Minutas", href: "/dashboard/casos", icon: FolderKanban },
   { label: "Crear Minuta", href: "/dashboard/casos/crear", icon: PenTool },
+  { label: "Motor de Minutas", href: "/dashboard/minutas/nueva", icon: FileText },
   { label: "Actos / Plantillas", href: "/dashboard/actos-plantillas", icon: Layers3 },
   { label: "Lotes (Next)", href: "/dashboard/lotes", icon: FileArchive, disabled: true },
   { label: "System Status", href: "/dashboard/system-status", icon: Activity },
-  { label: "Configuración", href: "/dashboard/configuracion", icon: Settings },
+  { label: "Configuracion", href: "/dashboard/configuracion", icon: Settings },
   { label: "Mi Perfil", href: "/dashboard/perfil", icon: UserCircle },
   { label: "Ayuda", href: "/dashboard/ayuda", icon: HelpCircle },
 ];
-

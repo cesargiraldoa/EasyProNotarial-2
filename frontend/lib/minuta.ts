@@ -67,6 +67,14 @@ export type MinutaAnalisisResult = {
   chars: number;
 };
 
+export type MinutaGenerarResult = {
+  case_id: number | null;
+  document_id: number | null;
+  version_id: number | null;
+  filename: string;
+  onlyoffice_path: string;
+};
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function authHeaders(): Headers {
@@ -78,14 +86,47 @@ function authHeaders(): Headers {
 
 async function handleError(response: Response): Promise<never> {
   const text = await response.text().catch(() => "");
-  if (response.status === 401) throw new Error("La sesión expiró. Ingresa nuevamente.");
-  if (response.status === 403) throw new Error("No tienes permisos para ejecutar esta acción.");
+  if (response.status === 401) throw new Error("La sesion expiro. Ingresa nuevamente.");
+  if (response.status === 403) throw new Error("No tienes permisos para ejecutar esta accion.");
   let detail = text;
   try {
     const parsed = JSON.parse(text) as { detail?: unknown };
     if (parsed.detail) detail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
   } catch { /* plain text error */ }
   throw new Error(detail || "No fue posible completar la solicitud.");
+}
+
+/**
+ * Limpia cada campo string de cada persona antes de JSON.stringify.
+ * Elimina caracteres de control (saltos de linea, tabs, NULL, etc.) que
+ * producen JSON malformado al llegar como campo multipart al backend.
+ */
+function sanitizeDatos(datos: MinutaDatos): MinutaDatos {
+  const cleanStr = (v: string): string =>
+    v
+      .replace(/\r\n/g, " ")
+      .replace(/[\r\n\t\x00]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  return {
+    ...datos,
+    personas: datos.personas.map((p) => ({
+      rol: cleanStr(p.rol) || p.rol,
+      nombre_completo: p.nombre_completo != null ? cleanStr(p.nombre_completo) || null : null,
+      tipo_documento: p.tipo_documento != null ? cleanStr(p.tipo_documento) || null : null,
+      numero_documento: p.numero_documento != null ? cleanStr(p.numero_documento) || null : null,
+      genero: p.genero != null ? cleanStr(p.genero) || null : null,
+      estado_civil: p.estado_civil != null ? cleanStr(p.estado_civil) || null : null,
+      nacionalidad: p.nacionalidad != null ? cleanStr(p.nacionalidad) || null : null,
+      domicilio: p.domicilio != null ? cleanStr(p.domicilio) || null : null,
+      direccion: p.direccion != null ? cleanStr(p.direccion) || null : null,
+      telefono: p.telefono != null ? cleanStr(p.telefono) || null : null,
+      email: p.email != null ? cleanStr(p.email) || null : null,
+      profesion: p.profesion != null ? cleanStr(p.profesion) || null : null,
+      actividad_economica: p.actividad_economica != null ? cleanStr(p.actividad_economica) || null : null,
+    })),
+  };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -108,11 +149,11 @@ export async function generateMinuta(
   file: File,
   datosAnteriores: MinutaDatos,
   datosNuevos: MinutaDatos,
-): Promise<{ blob: Blob; filename: string }> {
+): Promise<MinutaGenerarResult> {
   const form = new FormData();
   form.append("archivo", file);
-  form.append("datos_anteriores", JSON.stringify(datosAnteriores));
-  form.append("datos_nuevos", JSON.stringify(datosNuevos));
+  form.append("datos_anteriores", JSON.stringify(sanitizeDatos(datosAnteriores)));
+  form.append("datos_nuevos", JSON.stringify(sanitizeDatos(datosNuevos)));
   const response = await fetch(`${API_URL}/api/v1/minuta/generar`, {
     method: "POST",
     headers: authHeaders(),
@@ -121,11 +162,21 @@ export async function generateMinuta(
     credentials: "include",
   });
   if (!response.ok) await handleError(response);
-  const blob = await response.blob();
-  const cd = response.headers.get("content-disposition") ?? "";
-  const match = cd.match(/filename="?([^";\n]+)"?/);
-  const filename = match?.[1] ?? `minuta_generada_${file.name}`;
-  return { blob, filename };
+  return response.json() as Promise<MinutaGenerarResult>;
+}
+
+export async function getMinutaOnlyOfficeConfig(token: string): Promise<Record<string, unknown>> {
+  const response = await fetch(
+    `${API_URL}/api/v1/minuta/onlyoffice-config?token=${encodeURIComponent(token)}`,
+    {
+      method: "GET",
+      headers: authHeaders(),
+      cache: "no-store",
+      credentials: "include",
+    },
+  );
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<Record<string, unknown>>;
 }
 
 // ─── Util ─────────────────────────────────────────────────────────────────────

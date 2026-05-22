@@ -260,5 +260,6 @@ def aplicar_cambios_concordancia_a_reemplazos(cambios_seleccionados: list[dict])
             "viejo": palabra_antes,
             "nuevo": palabra_despues,
             "etiqueta": f"concordancia.{palabra_antes}",
+            "palabra_completa": True,
         })
     return reemplazos

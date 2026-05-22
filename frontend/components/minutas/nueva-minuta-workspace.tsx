@@ -1,13 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  AlertCircle, CheckCircle2, ChevronRight, Download,
+  AlertCircle, CheckCircle2, ChevronRight, ExternalLink,
   FileText, Loader2, Plus, Upload, X,
 } from "lucide-react";
 import {
   analyzeMinuta, generateMinuta, emptyPersona,
-  type MinutaAnalisisResult, type MinutaDatos, type MinutaPersona,
+  type MinutaAnalisisResult, type MinutaPersona,
 } from "@/lib/minuta";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -18,10 +19,10 @@ const TIPO_DOC_OPTIONS = ["CC", "CE", "TI", "PP", "NIT"];
 const GENERO_OPTIONS = [
   { value: "M", label: "Masculino (M)" },
   { value: "F", label: "Femenino (F)" },
-  { value: "J", label: "Jurídica (J)" },
+  { value: "J", label: "Juridica (J)" },
 ];
 const ESTADO_CIVIL_OPTIONS = [
-  "Soltero(a)", "Casado(a)", "Unión marital", "Divorciado(a)", "Viudo(a)",
+  "Soltero(a)", "Casado(a)", "Union marital", "Divorciado(a)", "Viudo(a)",
 ];
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ function UploadZone({
       </div>
       <div className="text-center">
         <p className="font-semibold text-ink">
-          Arrastra un archivo .docx aquí
+          Arrastra un archivo .docx aqui
         </p>
         <p className="text-sm text-muted mt-1">
           o{" "}
@@ -147,7 +148,7 @@ function UploadZone({
           </span>
         </p>
       </div>
-      <p className="text-xs text-soft">Solo archivos .docx · máx 20 MB</p>
+      <p className="text-xs text-soft">Solo archivos .docx - max 20 MB</p>
     </label>
   );
 }
@@ -169,7 +170,7 @@ function AnalysisSummary({ result }: { result: MinutaAnalisisResult }) {
             ].join(" ")}
           >
             <span className={["w-2 h-2 rounded-full", isB2 ? "bg-emerald-500" : "bg-blue-500"].join(" ")} />
-            {isB2 ? "B2 — Minuta diligenciada" : "B1 — Plantilla en blanco"}
+            {isB2 ? "B2 - Minuta diligenciada" : "B1 - Plantilla en blanco"}
           </span>
           <span className="text-xs text-soft">
             Confianza {Math.round(confianza_modo * 100)}%
@@ -217,7 +218,7 @@ function AnalysisSummary({ result }: { result: MinutaAnalisisResult }) {
               datos.inmueble.tipo,
               datos.inmueble.numero && `Nro. ${datos.inmueble.numero}`,
               datos.inmueble.municipio,
-              datos.inmueble.matricula_inmobiliaria && `Matrícula ${datos.inmueble.matricula_inmobiliaria}`,
+              datos.inmueble.matricula_inmobiliaria && `Matricula ${datos.inmueble.matricula_inmobiliaria}`,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -225,6 +226,59 @@ function AnalysisSummary({ result }: { result: MinutaAnalisisResult }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── PersonaField — módulo-level para evitar desmonte/remonte en cada render ──
+
+type PersonaFieldProps = {
+  label: string;
+  field: keyof MinutaPersona;
+  value: string | null;
+  as?: "input" | "select";
+  options?: { value: string; label: string }[];
+  onChange: (field: keyof MinutaPersona, value: string) => void;
+};
+
+function PersonaField({ label, field, value, as = "input", options, onChange }: PersonaFieldProps) {
+  const pending = value === null || value.trim() === "";
+  const baseClass =
+    "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all " +
+    (pending ? "border-amber-300 bg-amber-50 text-amber-900 placeholder:text-amber-400" : "");
+
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs font-medium text-muted flex items-center gap-1.5">
+        {label}
+        {pending && (
+          <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
+            pendiente
+          </span>
+        )}
+      </span>
+      {as === "select" && options ? (
+        <select
+          value={value ?? ""}
+          onChange={(e) => onChange(field, e.target.value)}
+          className={baseClass + " ep-select"}
+        >
+          <option value="">seleccionar</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={value ?? ""}
+          placeholder={pending ? "Sin datos - completar" : ""}
+          onChange={(e) => onChange(field, e.target.value)}
+          className={baseClass}
+        />
+      )}
+    </label>
   );
 }
 
@@ -241,64 +295,12 @@ function PersonaCard({
   onChange: (field: keyof MinutaPersona, value: string) => void;
   onRemove: () => void;
 }) {
-  const isPending = (v: string | null) => v === null || v.trim() === "";
-
-  function Field({
-    label,
-    field,
-    as = "input",
-    options,
-  }: {
-    label: string;
-    field: keyof MinutaPersona;
-    as?: "input" | "select";
-    options?: { value: string; label: string }[];
-  }) {
-    const value = persona[field] as string | null;
-    const pending = isPending(value);
-    const baseClass =
-      "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all " +
-      (pending ? "border-amber-300 bg-amber-50 text-amber-900 placeholder:text-amber-400" : "");
-
-    return (
-      <label className="grid gap-1">
-        <span className="text-xs font-medium text-muted flex items-center gap-1.5">
-          {label}
-          {pending && (
-            <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
-              pendiente
-            </span>
-          )}
-        </span>
-        {as === "select" && options ? (
-          <select
-            value={value ?? ""}
-            onChange={(e) => onChange(field, e.target.value)}
-            className={baseClass + " ep-select"}
-          >
-            <option value="">— seleccionar —</option>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="text"
-            value={value ?? ""}
-            placeholder={pending ? "Sin datos — completar" : ""}
-            onChange={(e) => onChange(field, e.target.value)}
-            className={baseClass}
-          />
-        )}
-      </label>
-    );
-  }
-
   const pendingCount = (
     ["nombre_completo", "tipo_documento", "numero_documento", "genero"] as (keyof MinutaPersona)[]
-  ).filter((f) => isPending(persona[f] as string | null)).length;
+  ).filter((f) => {
+    const v = persona[f] as string | null;
+    return v === null || v.trim() === "";
+  }).length;
 
   return (
     <div className="ep-card rounded-2xl overflow-hidden">
@@ -327,30 +329,81 @@ function PersonaCard({
 
       <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="sm:col-span-2 lg:col-span-3">
-          <Field label="Nombre completo" field="nombre_completo" />
+          <PersonaField
+            label="Nombre completo"
+            field="nombre_completo"
+            value={persona.nombre_completo}
+            onChange={onChange}
+          />
         </div>
-        <Field
+        <PersonaField
           label="Tipo documento"
           field="tipo_documento"
+          value={persona.tipo_documento}
           as="select"
           options={TIPO_DOC_OPTIONS.map((v) => ({ value: v, label: v }))}
+          onChange={onChange}
         />
-        <Field label="Número documento" field="numero_documento" />
-        <Field label="Género" field="genero" as="select" options={GENERO_OPTIONS} />
-        <Field label="Nacionalidad" field="nacionalidad" />
-        <Field
+        <PersonaField
+          label="Numero documento"
+          field="numero_documento"
+          value={persona.numero_documento}
+          onChange={onChange}
+        />
+        <PersonaField
+          label="Genero"
+          field="genero"
+          value={persona.genero}
+          as="select"
+          options={GENERO_OPTIONS}
+          onChange={onChange}
+        />
+        <PersonaField
+          label="Nacionalidad"
+          field="nacionalidad"
+          value={persona.nacionalidad}
+          onChange={onChange}
+        />
+        <PersonaField
           label="Estado civil"
           field="estado_civil"
+          value={persona.estado_civil}
           as="select"
           options={ESTADO_CIVIL_OPTIONS.map((v) => ({ value: v, label: v }))}
+          onChange={onChange}
         />
-        <Field label="Profesión" field="profesion" />
-        <Field label="Domicilio (ciudad)" field="domicilio" />
+        <PersonaField
+          label="Profesion"
+          field="profesion"
+          value={persona.profesion}
+          onChange={onChange}
+        />
+        <PersonaField
+          label="Domicilio (ciudad)"
+          field="domicilio"
+          value={persona.domicilio}
+          onChange={onChange}
+        />
         <div className="sm:col-span-2">
-          <Field label="Dirección completa" field="direccion" />
+          <PersonaField
+            label="Direccion completa"
+            field="direccion"
+            value={persona.direccion}
+            onChange={onChange}
+          />
         </div>
-        <Field label="Teléfono / Celular" field="telefono" />
-        <Field label="Correo electrónico" field="email" />
+        <PersonaField
+          label="Telefono / Celular"
+          field="telefono"
+          value={persona.telefono}
+          onChange={onChange}
+        />
+        <PersonaField
+          label="Correo electronico"
+          field="email"
+          value={persona.email}
+          onChange={onChange}
+        />
       </div>
     </div>
   );
@@ -359,6 +412,7 @@ function PersonaCard({
 // ─── Main workspace ───────────────────────────────────────────────────────────
 
 export function NuevaMinutaWorkspace() {
+  const router = useRouter();
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -405,19 +459,16 @@ export function NuevaMinutaWorkspace() {
     if (!file || !analisisResult) return;
     setError(null); setIsGenerating(true);
     try {
-      const { blob, filename } = await generateMinuta(
+      const result = await generateMinuta(
         file,
         { ...analisisResult.datos, personas: analisisResult.datos.personas },
         { ...analisisResult.datos, personas },
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      router.push(result.onlyoffice_path);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al generar la minuta.");
-    } finally { setIsGenerating(false); }
+      setIsGenerating(false);
+    }
   }
 
   const canAnalyze = !!file && !isAnalyzing;
@@ -464,7 +515,7 @@ export function NuevaMinutaWorkspace() {
               ].join(" ")}
             >
               {isAnalyzing ? (
-                <><Loader2 size={16} className="animate-spin" /> Analizando · ~20 s…</>
+                <><Loader2 size={16} className="animate-spin" /> Analizando · ~20 s</>
               ) : (
                 <><FileText size={16} /> Analizar con IA</>
               )}
@@ -493,7 +544,7 @@ export function NuevaMinutaWorkspace() {
               Campos en amarillo requieren completarse.
             </p>
             <button onClick={() => setStep(0)} className="text-xs text-soft hover:text-primary underline underline-offset-2">
-              ← Volver
+              Volver
             </button>
           </div>
 
@@ -530,17 +581,17 @@ export function NuevaMinutaWorkspace() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted">Listo para generar con los datos revisados.</p>
             <button onClick={() => setStep(1)} className="text-xs text-soft hover:text-primary underline underline-offset-2">
-              ← Volver
+              Volver
             </button>
           </div>
 
           <div className="ep-card rounded-2xl p-5 space-y-4">
-            <h3 className="font-semibold text-sm text-ink">Resumen de la operación</h3>
+            <h3 className="font-semibold text-sm text-ink">Resumen de la operacion</h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Archivo base", file?.name ?? "—"],
+                ["Archivo base", file?.name ?? "-"],
                 ["Personas", String(personas.length)],
-                ["Modo origen", analisisResult?.modo_detectado === "B2" ? "B2 — Diligenciada" : "B1 — Plantilla"],
+                ["Modo origen", analisisResult?.modo_detectado === "B2" ? "B2 - Diligenciada" : "B1 - Plantilla"],
                 ["Valores en doc", String(analisisResult?.datos.valores.length ?? 0)],
               ].map(([k, v]) => (
                 <div key={k}>
@@ -581,9 +632,9 @@ export function NuevaMinutaWorkspace() {
             ].join(" ")}
           >
             {isGenerating ? (
-              <><Loader2 size={18} className="animate-spin" /> Generando minuta…</>
+              <><Loader2 size={18} className="animate-spin" /> Generando minuta</>
             ) : (
-              <><Download size={18} /> Generar y descargar .docx</>
+              <><ExternalLink size={18} /> Generar y abrir en editor</>
             )}
           </button>
         </div>
