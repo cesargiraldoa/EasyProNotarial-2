@@ -27,18 +27,27 @@
 - `frontend/next.config.mjs` — generateBuildId para cache bust
 
 **Pendientes para la próxima sesión:**
-1. **[CRÍTICO] Vercel Root Directory** — Entrar a https://vercel.com/cesar-giraldo-aristizabals-projects/easypro-notarial-2/settings y corregir Root Directory (debe ser `easypro2/frontend`, no estar duplicado). El CLI mostró path `frontend/easypro2/frontend` que no existe.
-2. **[CRÍTICO] ONLYOFFICE_JWT_SECRET en Railway** — Agregar `ONLYOFFICE_JWT_SECRET` al .env de Railway para que el endpoint `/api/v1/minuta/onlyoffice-config` firme tokens correctamente en producción. Sin esta variable el sistema cae al `SECRET_KEY` del app.
-3. **[CRÍTICO] Alembic out-of-sync** — Ejecutar en Supabase: `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` (pendiente desde sesión anterior)
-4. **[MEDIA] Test end-to-end flujo minuta → OnlyOffice** — Probar en producción: subir .docx → analizar → revisar personas → generar → verificar que abre en el editor de OnlyOffice
-5. **[MEDIA] Personas incompletas en análisis** — jaggua_limpio.docx devolvió 4/~10 personas. Revisar chunking o prompt del detector
-6. **[BAJA] Reset contraseña** — No implementado
+1. **[CRÍTICO] Concordancia de artículos** — El motor cambia sustantivos (COMPRADOR→COMPRADORA) pero NO cambia artículos ni pronombres (EL→LA, LOS→LAS). Ajustar PROMPT_CONCORDANCIA en `concordancia.py`.
+2. **[CRÍTICO] Fórmulas compuestas** — Expresiones como "EL(LOS) DEUDORA(ES)" quedan mal al cambiar género. El prompt debe manejar estas fórmulas mixtas.
+3. **[CRÍTICO] Alembic out-of-sync** — Ejecutar en Supabase: `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+4. **[MEDIA] Verificar menú lateral por rol** — "Motor de Minutas" está en navigation.ts, confirmar que aparece correctamente según permisos del usuario
+5. **[MEDIA] Personas incompletas en análisis B2** — Algunos docs devuelven menos personas de las esperadas. Revisar chunking o prompt del detector
+6. **[MEDIA] Caso B1 (plantilla en blanco)** — El detector clasifica B1 pero el formulario dinámico es el mismo que B2. Pendiente diferenciar UX y prompt
+7. **[BAJA] Reset contraseña** — No implementado
+8. **[BAJA] Historial de minutas** — Guardar minutas generadas por notaría (estructura BD + UI)
 
 **Estado al cierre:**
-- Backend: operativo local en puerto 8001, apuntando a Supabase producción
-- Frontend: build local ✅ (19/19 páginas), Vercel con problema de Root Directory a corregir
+- Backend: Railway operativo — https://easypronotarial-2-production.up.railway.app
+- Frontend: Vercel operativo — https://easypronotarial.com (deploy vía CLI `vercel --cwd frontend --prod`)
 - BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
 - Git: árbol limpio (solo uvicorn_start.log sin trackear)
+
+**Deploy frontend (procedimiento correcto):**
+```bash
+cd c:\EasyProNotarial-2\easypro2
+$env:NODE_OPTIONS="--use-system-ca"
+vercel --cwd frontend --prod
+```
 
 ---
 ## Sesión 2026-05-21
@@ -103,8 +112,8 @@
 | IA documental | OpenAI GPT-4o (Gari — generación .docx escrituras) |
 | IA minutas | OpenAI GPT-4o-mini (detector B1/B2 + concordancia) |
 | Storage | Supabase Storage (cases/case-{id}/draft/) |
-| Despliegue frontend | Vercel — https://easypro-notarial-2.vercel.app |
-| Despliegue backend | Railway |
+| Despliegue frontend | Vercel — https://easypronotarial.com |
+| Despliegue backend | Railway — https://easypronotarial-2-production.up.railway.app |
 | Editor documentos | OnlyOffice — https://onlyoffice.easypronotarial.com |
 
 ---
@@ -113,7 +122,8 @@
 
 | Servicio | URL |
 |---|---|
-| Frontend producción | https://easypro-notarial-2.vercel.app |
+| Frontend producción | https://easypronotarial.com |
+| Backend producción | https://easypronotarial-2-production.up.railway.app |
 | Supabase BD | https://egwdrdgtgmogcahhdtdy.supabase.co |
 | OnlyOffice | https://onlyoffice.easypronotarial.com |
 | Backend local | http://127.0.0.1:8001 |

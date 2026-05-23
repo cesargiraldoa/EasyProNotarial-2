@@ -294,8 +294,8 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     reemplazos = []
 
     # PERSONAS
-    personas_old = {p["rol"]: p for p in datos_anteriores.get("personas", [])}
-    personas_new = {p["rol"]: p for p in datos_nuevos.get("personas", [])}
+    personas_old = {(p.get("rol") or p.get("ROL") or ""): p for p in datos_anteriores.get("personas", [])}
+    personas_new = {(p.get("rol") or p.get("ROL") or ""): p for p in datos_nuevos.get("personas", [])}
 
     # Para evitar duplicar reemplazos cuando misma persona aparece en varios roles,
     # usar un set de (viejo, nuevo) ya agregados
@@ -341,23 +341,26 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
              if v.get("tipo") == tipo and v.get("acto_relacionado") == acto),
             None
         )
-        if v_old and v_old.get("texto_en_documento") and v_new.get("texto_en_documento"):
-            if v_old["texto_en_documento"] != v_new["texto_en_documento"]:
-                reemplazos.append({
-                    "viejo": v_old["texto_en_documento"],
-                    "nuevo": v_new["texto_en_documento"],
-                    "etiqueta": f"valor.{tipo}.acto_{acto}",
-                })
+        texto_viejo = v_old.get("texto_en_documento") if v_old else None
+        texto_nuevo = v_new.get("texto_en_documento")
+        if texto_viejo and texto_nuevo and texto_viejo != texto_nuevo:
+            reemplazos.append({
+                "viejo": texto_viejo,
+                "nuevo": texto_nuevo,
+                "etiqueta": f"valor.{tipo}.acto_{acto}",
+            })
 
     # INMUEBLE
     inm_old = datos_anteriores.get("inmueble", {}) or {}
     inm_new = datos_nuevos.get("inmueble", {}) or {}
 
     for campo in ["numero", "matricula_inmobiliaria", "conjunto_o_edificio"]:
-        if inm_old.get(campo) and inm_new.get(campo) and inm_old[campo] != inm_new[campo]:
+        val_old = inm_old.get(campo)
+        val_new = inm_new.get(campo)
+        if val_old and val_new and val_old != val_new:
             reemplazos.append({
-                "viejo": inm_old[campo],
-                "nuevo": inm_new[campo],
+                "viejo": val_old,
+                "nuevo": val_new,
                 "etiqueta": f"inmueble.{campo}",
             })
 

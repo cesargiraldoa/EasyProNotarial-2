@@ -33,8 +33,8 @@ PROMPT_CONCORDANCIA = """Eres experto en gramatica espanola y redaccion notarial
 
 CONTEXTO:
 En un documento notarial, una persona cambio de genero gramatical. Necesitas identificar
-TODAS las palabras del documento que deben cambiar para mantener concordancia respecto
-a ESA persona especifica (no respecto a otras personas del documento).
+TODAS las palabras y frases del documento que deben cambiar para mantener concordancia
+respecto a ESA persona especifica (no respecto a otras personas del documento).
 
 IMPORTANTE: La persona puede cumplir MULTIPLES roles en el documento (por ejemplo,
 ser comprador, deudor hipotecante, otorgante, poderdante, todo a la vez). Debes detectar
@@ -49,52 +49,99 @@ INSTRUCCIONES CRITICAS:
 
 1. SOLO devuelves JSON valido. Sin explicaciones.
 
-2. Identifica palabras que se refieren a ESTA persona (en CUALQUIERA de sus roles) y deben cambiar de genero:
-   - Articulos: "el comprador" -> "la compradora", "el deudor" -> "la deudora"
-   - Sustantivos con genero por rol:
-     * "comprador" -> "compradora"
-     * "vendedor" -> "vendedora"
-     * "deudor" -> "deudora"
-     * "deudor hipotecante" -> "deudora hipotecante"
-     * "apoderado" -> "apoderada"
-     * "poderdante" se mantiene (es neutro)
-     * "otorgante" se mantiene (es neutro)
-     * "constituyente" se mantiene (es neutro)
-   - Adjetivos: "identificado" -> "identificada", "domiciliado" -> "domiciliada",
-     "casado" -> "casada", "soltero" -> "soltera", "mayor de edad" se mantiene
-   - Sustantivos descriptivos: "varon" -> "mujer", "el senor" -> "la senora"
-   - Gentilicios: "colombiano" -> "colombiana", "venezolano" -> "venezolana"
+2. ARTICULOS — SIEMPRE como FRASE COMPLETA (articulo + sustantivo del rol). NUNCA articulo solo.
+   CORRECTO:   "EL COMPRADOR"  -> "LA COMPRADORA"
+   INCORRECTO: "EL"            -> "LA"   <-- esto daniaria TODO el documento, no lo hagas
 
-3. INCLUYE TODAS las palabras con genero que aparezcan en el documento referidas a esta persona.
-   Si "deudor" aparece 63 veces refiriendose a esta persona, devuelve UN solo objeto
-   con "deudor" -> "deudora" (con esas 63 ocurrencias acumuladas).
+   Para cada rol de la persona, detecta en el texto y devuelve estas frases si aparecen:
+   - "EL {{ROL}}"  -> "LA {{ROL-F}}"       ej: "EL COMPRADOR"  -> "LA COMPRADORA"
+   - "el {{rol}}"  -> "la {{rol-f}}"        ej: "el comprador"  -> "la compradora"
+   - "DEL {{ROL}}" -> "DE LA {{ROL-F}}"    ej: "DEL COMPRADOR" -> "DE LA COMPRADORA"
+   - "del {{rol}}" -> "de la {{rol-f}}"     ej: "del comprador" -> "de la compradora"
+   - "AL {{ROL}}"  -> "A LA {{ROL-F}}"     ej: "AL COMPRADOR"  -> "A LA COMPRADORA"
+   - "al {{rol}}"  -> "a la {{rol-f}}"      ej: "al comprador"  -> "a la compradora"
+   - "UN {{ROL}}"  -> "UNA {{ROL-F}}"      ej: "UN COMPRADOR"  -> "UNA COMPRADORA"
+   - "un {{rol}}"  -> "una {{rol-f}}"
+   Incluye solo las variantes que REALMENTE APARECEN en el texto del documento.
 
-4. NO devuelvas cambios para:
-   - Frases hechas notariales: "el de la voz", "el suscrito notario", etc.
-   - Referencias a OTRAS personas del documento que tienen distinto genero
-   - Palabras que no tienen genero gramatical o ya son neutras (otorgante, poderdante)
-   - Palabras que aplican a una entidad juridica diferente
+3. SUSTANTIVOS solos (sin articulo inmediato, ej: "en calidad de COMPRADOR"):
+   - "COMPRADOR" -> "COMPRADORA",  "comprador" -> "compradora"
+   - "VENDEDOR"  -> "VENDEDORA",   "vendedor"  -> "vendedora"
+   - "DEUDOR"    -> "DEUDORA",     "deudor"    -> "deudora"
+   - "DEUDOR HIPOTECANTE" -> "DEUDORA HIPOTECANTE"
+   - "APODERADO" -> "APODERADA",   "apoderado" -> "apoderada"
+   - "VARON"     -> "MUJER",       "varon"     -> "mujer"
+   - "SENOR"     -> "SENORA"       (solo instancias sin articulo ya cubiertas en seccion 2)
+   - "representante legal", "poderdante", "otorgante", "constituyente" — NO CAMBIAR (neutros)
 
-5. AGRUPA por palabra: una sola entrada por palabra a cambiar, no una por ocurrencia.
+4. ADJETIVOS Y PARTICIPIOS referidos a esta persona:
+   - "identificado"  -> "identificada",  "IDENTIFICADO"  -> "IDENTIFICADA"
+   - "domiciliado"   -> "domiciliada",   "DOMICILIADO"   -> "DOMICILIADA"
+   - "casado"        -> "casada",        "CASADO"        -> "CASADA"
+   - "soltero"       -> "soltera",       "SOLTERO"       -> "SOLTERA"
+   - "colombiano"    -> "colombiana",    "COLOMBIANO"    -> "COLOMBIANA"
+   - "venezolano"    -> "venezolana"     (y demas gentilicios con genero)
+   - "autorizado"    -> "autorizada",    "AUTORIZADO"    -> "AUTORIZADA"
+   - "obligado"      -> "obligada",      "OBLIGADO"      -> "OBLIGADA"
 
-6. Considera variantes en MAYUSCULAS y minusculas del documento.
+5. PRONOMBRES referidos a esta persona:
+   - "el mismo"  -> "ella misma",  "EL MISMO"  -> "ELLA MISMA"
+   - "aquel"     -> "aquella",     "AQUEL"     -> "AQUELLA"
+   - "dicho"     -> "dicha",       "DICHO"     -> "DICHA"
+   - "el citado" -> "la citada",   "EL CITADO" -> "LA CITADA"
 
-7. Para CADA cambio propuesto, devuelve:
-   - palabra_antes: la palabra exacta a buscar (case-sensitive)
-   - palabra_despues: la palabra que la reemplaza
-   - contexto_ejemplo: fragmento de ~15 palabras alrededor del cambio
-   - confianza: float 0-1 (1.0 = certeza absoluta, 0.5 = duda)
-   - razon: breve explicacion de por que cambia
+6. FORMULAS MIXTAS notariales — devolver el cambio exacto incluyendo los parentesis:
+   - "EL(LOS) COMPRADOR(ES)"  -> "LA(LAS) COMPRADORA(S)"
+   - "EL(LOS) DEUDOR(ES)"     -> "LA(LAS) DEUDORA(S)"
+   - "COMPRADOR(ES)"          -> "COMPRADORA(S)"
+   - "DEUDOR(ES)"             -> "DEUDORA(S)"
+
+7. NO devuelvas cambios para:
+   - Frases hechas: "el de la voz", "el suscrito notario", "el presente instrumento"
+   - Referencias a OTRAS personas del documento con genero distinto
+   - Palabras neutras: otorgante, poderdante, constituyente, representante legal
+   - Entidades juridicas
+
+8. Una entrada por frase/palabra exacta. Mayusculas y minusculas como entradas SEPARADAS
+   si AMBAS variantes aparecen en el texto.
+
+9. Para CADA cambio devuelve:
+   - palabra_antes: frase o palabra exacta a buscar (respetando mayusculas del documento)
+   - palabra_despues: frase o palabra exacta de reemplazo
+   - contexto_ejemplo: fragmento de ~15 palabras alrededor del cambio en el documento
+   - confianza: float 0-1
+   - razon: breve explicacion
 
 ESQUEMA JSON:
 {{
   "cambios": [
     {{
-      "palabra_antes": "deudor",
-      "palabra_despues": "deudora",
-      "contexto_ejemplo": "DEUDOR HIPOTECANTE: ... en calidad de deudor",
-      "confianza": 0.95,
-      "razon": "Sustantivo masculino referente a la persona como deudora hipotecante"
+      "palabra_antes": "EL COMPRADOR",
+      "palabra_despues": "LA COMPRADORA",
+      "contexto_ejemplo": "PRIMERA: EL COMPRADOR declara que ha recibido",
+      "confianza": 0.98,
+      "razon": "Articulo + sustantivo referido a esta persona como compradora"
+    }},
+    {{
+      "palabra_antes": "DEL COMPRADOR",
+      "palabra_despues": "DE LA COMPRADORA",
+      "contexto_ejemplo": "los derechos DEL COMPRADOR sobre el inmueble",
+      "confianza": 0.98,
+      "razon": "Contraccion DEL + sustantivo referido a esta persona"
+    }},
+    {{
+      "palabra_antes": "COMPRADOR",
+      "palabra_despues": "COMPRADORA",
+      "contexto_ejemplo": "actuando como COMPRADOR del inmueble ubicado",
+      "confianza": 1.0,
+      "razon": "Sustantivo sin articulo referido a esta persona"
+    }},
+    {{
+      "palabra_antes": "IDENTIFICADO",
+      "palabra_despues": "IDENTIFICADA",
+      "contexto_ejemplo": "IDENTIFICADO con cedula de ciudadania numero",
+      "confianza": 1.0,
+      "razon": "Participio referido a esta persona"
     }}
   ]
 }}
@@ -104,8 +151,7 @@ TEXTO DEL DOCUMENTO:
 {texto_documento}
 \"\"\"
 
-Devuelve SOLO el JSON con la lista COMPLETA de cambios propuestos para mantener concordancia
-con la nueva persona en TODOS sus roles. Si no hay cambios necesarios, devuelve {{"cambios": []}}.
+Devuelve SOLO el JSON con la lista COMPLETA de cambios. Si no hay cambios, devuelve {{"cambios": []}}.
 """
 
 
@@ -174,11 +220,11 @@ def detectar_concordancia(
             "razon": "No hay cambio de genero relevante",
         }
 
-    nombre_viejo = persona_vieja["nombre_completo"]
-    nombre_nuevo = persona_nueva["nombre_completo"]
-    genero_viejo = persona_vieja["genero"]
-    genero_nuevo = persona_nueva["genero"]
-    rol = persona_vieja.get("rol", "persona")
+    nombre_viejo = persona_vieja.get("nombre_completo") or persona_vieja.get("NOMBRE_COMPLETO") or ""
+    nombre_nuevo = persona_nueva.get("nombre_completo") or persona_nueva.get("NOMBRE_COMPLETO") or ""
+    genero_viejo = persona_vieja.get("genero") or persona_vieja.get("GENERO") or ""
+    genero_nuevo = persona_nueva.get("genero") or persona_nueva.get("GENERO") or ""
+    rol = persona_vieja.get("rol") or persona_vieja.get("ROL") or "persona"
 
     genero_legible = {"M": "Masculino", "F": "Femenino"}
 
@@ -244,14 +290,23 @@ def aplicar_cambios_concordancia_a_reemplazos(cambios_seleccionados: list[dict])
     Convierte los cambios de concordancia confirmados en el formato de reemplazos
     que entiende el motor (reemplazador.aplicar_reemplazos_docx).
 
+    Ordena por longitud descendente para que las frases compuestas (ej: "EL COMPRADOR")
+    se procesen antes que sus partes ("COMPRADOR"). Esto evita que el sustantivo se
+    cambie primero dejando la frase "EL COMPRADORA" sin match posterior.
+
     Args:
         cambios_seleccionados: lista de cambios marcados por el usuario para aplicar
 
     Returns:
         lista de dicts {viejo, nuevo, etiqueta} compatible con aplicar_reemplazos_docx
     """
+    cambios_ordenados = sorted(
+        cambios_seleccionados,
+        key=lambda c: len(c.get("palabra_antes", "")),
+        reverse=True,
+    )
     reemplazos = []
-    for c in cambios_seleccionados:
+    for c in cambios_ordenados:
         palabra_antes = c.get("palabra_antes", "").strip()
         palabra_despues = c.get("palabra_despues", "").strip()
         if not palabra_antes or not palabra_despues:

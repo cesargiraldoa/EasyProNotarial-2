@@ -1,8 +1,12 @@
 import json
+import logging
 import tempfile
+import traceback
 import uuid as _uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
@@ -139,78 +143,78 @@ async def generar_minuta(
         )
 
     try:
-        datos_ant = json.loads(datos_anteriores)
-        datos_nv = json.loads(datos_nuevos)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"JSON inválido en datos_anteriores o datos_nuevos: {exc}",
-        )
+        # ── Parse JSON ──────────────────────────────────────────────────────────
+        try:
+            datos_ant = json.loads(datos_anteriores)
+            datos_nv = json.loads(datos_nuevos)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"JSON inválido en datos_anteriores o datos_nuevos: {exc}",
+            )
 
-    api_key = _get_api_key()
+        api_key = _get_api_key()
 
-    # Archivos temporales de entrada y salida
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_in:
-        tmp_in.write(await archivo.read())
-        path_entrada = tmp_in.name
+        # ── Archivos temporales ──────────────────────────────────────────────────
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp_in:
+            tmp_in.write(await archivo.read())
+            path_entrada = tmp_in.name
 
-    tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-    path_salida = tmp_out.name
-    tmp_out.close()
+        tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+        path_salida = tmp_out.name
+        tmp_out.close()
 
-    try:
-        # 1. Reemplazos de datos (nombres, documentos, valores, inmueble)
+        # ── 1. Reemplazos de datos (nombres, documentos, valores, inmueble) ─────
         reemplazos = construir_lista_reemplazos(datos_ant, datos_nv)
 
-        # 2. Concordancia de género: por cada persona cuyo género cambia M↔F
+        # ── 2. Concordancia de género ────────────────────────────────────────────
         texto_doc = extraer_texto_estructurado(path_entrada)
-        personas_viejas = {p["rol"]: p for p in datos_ant.get("personas", [])}
-        personas_nuevas = {p["rol"]: p for p in datos_nv.get("personas", [])}
+        personas_viejas = {(p.get("rol") or p.get("ROL") or ""): p for p in datos_ant.get("personas", [])}
+        personas_nuevas = {(p.get("rol") or p.get("ROL") or ""): p for p in datos_nv.get("personas", [])}
 
+        cambios_conc_todos: list[dict] = []
         for rol, persona_nueva in personas_nuevas.items():
             persona_vieja = personas_viejas.get(rol, {})
             if necesita_concordancia(persona_vieja, persona_nueva):
                 resultado_conc = detectar_concordancia(
                     texto_doc, persona_vieja, persona_nueva, api_key
                 )
-                reemplazos_conc = aplicar_cambios_concordancia_a_reemplazos(
-                    resultado_conc.get("cambios", [])
-                )
-                reemplazos.extend(reemplazos_conc)
+                cambios_conc_todos.extend(resultado_conc.get("cambios", []))
 
-        # 3. Aplicar todos los reemplazos al .docx
-        aplicar_reemplazos_docx(path_entrada, reemplazos, path_salida)
+        if cambios_conc_todos:
+            reemplazos.extend(aplicar_cambios_concordancia_a_reemplazos(cambios_conc_todos))
 
-    except Exception as exc:
+        # ── 3. Aplicar reemplazos al .docx ───────────────────────────────────────
+        logger.info(
+            "[generar] reemplazos a aplicar (%d total):\n%s",
+            len(reemplazos),
+            "\n".join(
+                f"  [{i+1:02d}] {'[frase]' if ' ' in r.get('viejo','') else '[palabra]'}"
+                f" {r.get('etiqueta','?')} | «{r.get('viejo','')}» → «{r.get('nuevo','')}»"
+                f"{' [completa]' if r.get('palabra_completa') else ''}"
+                for i, r in enumerate(reemplazos)
+            ),
+        )
+        estadisticas = aplicar_reemplazos_docx(path_entrada, reemplazos, path_salida)
+        logger.info(
+            "[generar] resultado: %d reemplazos efectivos | no_encontrados=%s",
+            estadisticas["total_reemplazos"],
+            [x["etiqueta"] for x in estadisticas.get("no_encontrados", [])],
+        )
+
         Path(path_entrada).unlink(missing_ok=True)
-        Path(path_salida).unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al generar la minuta: {exc}",
-        )
 
-    Path(path_entrada).unlink(missing_ok=True)
-
-    # 4. Leer bytes y subir a Supabase Storage
-    try:
+        # ── 4. Leer bytes y subir a Supabase Storage ─────────────────────────────
         content = Path(path_salida).read_bytes()
-    except Exception as exc:
-        Path(path_salida).unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al leer el archivo generado: {exc}",
-        )
+        background_tasks.add_task(Path(path_salida).unlink, True)
 
-    background_tasks.add_task(Path(path_salida).unlink, True)
+        notary_id = current_user.default_notary_id or 0
+        file_uuid = str(_uuid.uuid4())
+        storage_filename = f"{file_uuid}_minuta.docx"
+        display_name = f"minuta_generada_{sanitize_filename(Path(archivo.filename).stem)}.docx"
+        storage_key = f"minutas/notary_{notary_id}/{storage_filename}"
+        docx_media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-    notary_id = current_user.default_notary_id or 0
-    file_uuid = str(_uuid.uuid4())
-    storage_filename = f"{file_uuid}_minuta.docx"
-    display_name = f"minuta_generada_{sanitize_filename(Path(archivo.filename).stem)}.docx"
-    storage_key = f"minutas/notary_{notary_id}/{storage_filename}"
-    docx_media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-    try:
         if _has_supabase_credentials():
             _upload_to_supabase(SUPABASE_CASE_BUCKET, storage_key, content, docx_media)
             storage_path = f"supabase://{SUPABASE_CASE_BUCKET}/{storage_key}"
@@ -221,23 +225,30 @@ async def generar_minuta(
             local_file = local_dir / storage_filename
             local_file.write_bytes(content)
             storage_path = str(local_file)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al guardar la minuta en storage: {exc}",
-        )
 
-    # 5. Generar token firmado y ruta al editor
-    file_token = _make_file_token(storage_path, storage_filename, display_name, notary_id)
-    onlyoffice_path = f"/dashboard/minutas/editor/{file_token}"
+        # ── 5. Generar token firmado y rutas ─────────────────────────────────────
+        file_token = _make_file_token(storage_path, storage_filename, display_name, notary_id)
+        onlyoffice_path = f"/dashboard/minutas/editor/{file_token}"
+        base_url = _resolve_public_api_base(request)
+        download_url = f"{base_url}/api/v1/minuta/onlyoffice/file?token={file_token}"
 
-    return {
-        "case_id": None,
-        "document_id": None,
-        "version_id": None,
-        "filename": display_name,
-        "onlyoffice_path": onlyoffice_path,
-    }
+        return {
+            "case_id": None,
+            "document_id": None,
+            "version_id": None,
+            "filename": display_name,
+            "onlyoffice_path": onlyoffice_path,
+            "download_url": download_url,
+            "estadisticas": estadisticas,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("=== ERROR DETALLADO ===")
+        print(traceback.format_exc())
+        print("======================")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── GET /onlyoffice-config ───────────────────────────────────────────────────

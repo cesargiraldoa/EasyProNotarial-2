@@ -73,6 +73,12 @@ export type MinutaGenerarResult = {
   version_id: number | null;
   filename: string;
   onlyoffice_path: string;
+  download_url?: string;
+  estadisticas?: {
+    total_reemplazos: number;
+    por_etiqueta: Record<string, number>;
+    no_encontrados: { etiqueta: string; viejo: string; nuevo: string }[];
+  };
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
