@@ -217,14 +217,14 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
 
 
 def _normalizar_guiones(doc):
-    """
-    Corrige guiones dobles decorativos (' -- ') dentro de cada run
-    sin redistribuir texto entre runs, preservando el formato original.
-    """
     for paragraph in doc.paragraphs:
         for run in paragraph.runs:
-            if '--' in run.text:
-                run.text = re.sub(r'(?<= )--(?= )', '-', run.text)
+            if not run.text:
+                continue
+            texto_original = run.text
+            texto_limpio = re.sub(r'(?<= )--(?= )', '-', texto_original)
+            if texto_limpio != texto_original:
+                run.text = texto_limpio
     return doc
 
 
