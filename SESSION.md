@@ -1,6 +1,42 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-23 (tarde)
+
+**Objetivo de la sesión:** Completar el motor de minutas — fixes de género/guiones, secciones editables de inmueble/notaría/valores en el frontend, y cobertura completa de reemplazos en el backend.
+
+**Realizado:**
+- **reemplazador.py — _normalizar_guiones (9fdb543, 1b57295, f878b7b, c7c9eec):** Múltiples iteraciones: primero consolidar texto en runs[0] vaciar el resto; luego refactors con guard `not run.text`, colapso de `--` solo cuando rodeado de espacios, y finalmente reemplazar dentro de cada run para preservar formato
+- **router.py — todos_nombres_doc (9fdb543, fc5e004, e2883dc):** Enriquecer con scanner de secuencias MAYÚSCULAS del documento; luego cambiar a escanear todo el doc sin filtro de línea conocida; finalmente procesar personas F antes que M y filtrar falsos positivos
+- **router.py — aplicar genero contextual (433b345):** Aplicar reemplazos de género a TODAS las personas nuevas con género definido, no solo las que cambian M↔F
+- **concordancia.py — refactor y fixes (a2099bb, e6ab5c8, ff9f84c, 715d304, afab702):** Concordancia vía Claude solo maneja artículos de rol; recibe `personas_resto` para preservar género de otras personas; max_tokens 8000 → 32000 → 16384 (límite real del modelo); strip markdown; try/except con diagnóstico
+- **reemplazador.py — construir_lista_reemplazos (12bba1d, 2eddc5b):** Agrega secciones `notaria` (nombre_notaria, municipio_notaria, numero_escritura), `fechas` (fecha_otorgamiento) e `inmueble` completo (municipio, departamento); guard contra valores non-string
+- **nueva-minuta-workspace.tsx — secciones editables:** Tres nuevas cards en Paso 1: `InmuebleCard`, `NotariaCard`, `ValoresCard`; estado `inmuebleEdit`/`notariaEdit`/`valoresEdit`; `handleGenerar` pasa los tres al backend; fix `n.trim is not a function` con `?? ""`; null-checks en inicialización desde `analisisResult.datos`
+- **nueva-minuta-workspace.tsx — numeroALetras:** Función de conversión número a letras (pesos moneda corriente) integrada en el workspace
+- **navigation.ts:** "Crear Minuta" redirige a `/dashboard/minutas/nueva` en lugar de `/dashboard/casos/crear`
+
+**Archivos creados/modificados:**
+- `backend/app/modules/minuta/router.py` — scanner nombres, genero contextual todas las personas, todos_nombres_doc
+- `backend/app/services/minuta/reemplazador.py` — _normalizar_guiones (múltiples fixes), construir_lista_reemplazos completo, guard non-string
+- `backend/app/services/minuta/concordancia.py` — max_tokens 16384, strip markdown, try/except, refactor a solo artículos, personas_resto
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — 3 secciones editables, numeroALetras, null-checks, fix trim
+- `frontend/lib/navigation.ts` — "Crear Minuta" apunta a /minutas/nueva
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Verificar bug SEBASTIÁN en producción** — Múltiples fixes aplicados (scanner, orden F→M, genero contextual ampliado). Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway para confirmar que SEBASTIÁN no recibe reemplazos incorrectos
+2. **[CRÍTICO] Verificar concordancia con Claude** — Concordancia ahora usa Claude en lugar de GPT-4o-mini para artículos; confirmar que el modelo está configurado correctamente en Railway (ANTHROPIC_API_KEY) y que los reemplazos de artículos funcionan
+3. **[MEDIA] Guiones dobles `-- -` sin resolver del todo** — _normalizar_guiones tuvo múltiples iteraciones; confirmar con documento real que los guiones dobles quedan bien
+4. **[MEDIA] Concordancia de artículos EL→LA, DEL→DE LA** — Verificar que el refactor a Claude (solo artículos de rol) produce resultados correctos
+5. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase producción (pendiente desde sesiones anteriores)
+6. **[BAJA] debug prints en router.py y reemplazador.py** — Hay prints de debug (`GENERO DEBUG`) que deben removerse antes de demo
+
+**Estado al cierre:**
+- Backend: Railway operativo — commit `afab702` activo
+- Frontend: Vercel operativo — easypronotarial.com, último deploy con null-checks
+- BD producción: operativa, alembic_version desincronizada (pendiente)
+- Git: `nueva-minuta-workspace.tsx` y `navigation.ts` modificados localmente — se commitean en este cierre
+
+---
 ## Sesión 2026-05-23
 
 **Objetivo de la sesión:** Corregir bugs de género (SEBASTIÁN y concordancia global) y agregar lógica de auto-cascada de nacionalidad/estado civil en el formulario frontend.

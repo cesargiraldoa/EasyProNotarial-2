@@ -9,6 +9,7 @@ import {
 import {
   analyzeMinuta, generateMinuta, emptyPersona,
   type MinutaAnalisisResult, type MinutaPersona,
+  type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
 } from "@/lib/minuta";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -55,6 +56,70 @@ const GENTILICIOS_M_A_F: Record<string, string> = {
 const GENTILICIOS_F_A_M = Object.fromEntries(
   Object.entries(GENTILICIOS_M_A_F).map(([m, f]) => [f, m])
 );
+
+// NotariaEdit extiende MinutaNotaria con fecha_otorgamiento (viene de datos.fechas)
+type NotariaEdit = MinutaNotaria & { fecha_otorgamiento: string | null };
+
+const EMPTY_INMUEBLE: MinutaInmueble = {
+  tipo: null, numero: null, matricula_inmobiliaria: null,
+  conjunto_o_edificio: null, municipio: null, departamento: null,
+  coeficiente_copropiedad: null, linderos: null,
+};
+const EMPTY_NOTARIA: NotariaEdit = {
+  nombre_notaria: null, municipio_notaria: null,
+  numero_escritura: null, fecha_otorgamiento: null,
+};
+
+// ─── Número a letras (español, pesos moneda corriente) ───────────────────────
+
+const UNIDADES = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE",
+  "DIEZ", "ONCE", "DOCE", "TRECE", "CATORCE", "QUINCE", "DIECISÉIS", "DIECISIETE", "DIECIOCHO", "DIECINUEVE"];
+const DECENAS = ["", "", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
+const CENTENAS = ["", "CIENTO", "DOSCIENTOS", "TRESCIENTOS", "CUATROCIENTOS", "QUINIENTOS",
+  "SEISCIENTOS", "SETECIENTOS", "OCHOCIENTOS", "NOVECIENTOS"];
+
+function centenas(n: number): string {
+  if (n === 100) return "CIEN";
+  const c = Math.floor(n / 100);
+  const resto = n % 100;
+  const partes: string[] = [];
+  if (c > 0) partes.push(CENTENAS[c]);
+  if (resto > 0 && resto < 20) {
+    partes.push(UNIDADES[resto]);
+  } else if (resto >= 20) {
+    const d = Math.floor(resto / 10);
+    const u = resto % 10;
+    if (u === 0) partes.push(DECENAS[d]);
+    else partes.push(`${DECENAS[d]} Y ${UNIDADES[u]}`);
+  }
+  return partes.join(" ");
+}
+
+function numeroALetras(n: number): string {
+  if (n === 0) return "CERO PESOS MONEDA CORRIENTE";
+  const partes: string[] = [];
+  const miles_millones = Math.floor(n / 1_000_000_000);
+  const millones = Math.floor((n % 1_000_000_000) / 1_000_000);
+  const miles = Math.floor((n % 1_000_000) / 1_000);
+  const resto = n % 1_000;
+
+  if (miles_millones > 0) {
+    const t = centenas(miles_millones);
+    partes.push(miles_millones === 1 ? "MIL MILLONES" : `${t} MIL MILLONES`);
+  }
+  if (millones > 0) {
+    const t = centenas(millones);
+    partes.push(millones === 1 ? "UN MILLÓN" : `${t} MILLONES`);
+  }
+  if (miles > 0) {
+    const t = centenas(miles);
+    partes.push(miles === 1 ? "MIL" : `${t} MIL`);
+  }
+  if (resto > 0) {
+    partes.push(centenas(resto));
+  }
+  return partes.join(" ") + " PESOS MONEDA CORRIENTE";
+}
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -272,7 +337,7 @@ type PersonaFieldProps = {
 };
 
 function PersonaField({ label, field, value, as = "input", options, onChange }: PersonaFieldProps) {
-  const pending = value === null || value.trim() === "";
+  const pending = value == null || String(value).trim() === "";
   const baseClass =
     "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all " +
     (pending ? "border-amber-300 bg-amber-50 text-amber-900 placeholder:text-amber-400" : "");
@@ -329,8 +394,8 @@ function PersonaCard({
   const pendingCount = (
     ["nombre_completo", "tipo_documento", "numero_documento", "genero"] as (keyof MinutaPersona)[]
   ).filter((f) => {
-    const v = persona[f] as string | null;
-    return v === null || v.trim() === "";
+    const v = persona[f];
+    return v == null || String(v).trim() === "";
   }).length;
 
   function handleChange(field: keyof MinutaPersona, value: string) {
@@ -385,14 +450,14 @@ function PersonaCard({
           <PersonaField
             label="Nombre completo"
             field="nombre_completo"
-            value={persona.nombre_completo}
+            value={String(persona.nombre_completo ?? "")}
             onChange={handleChange}
           />
         </div>
         <PersonaField
           label="Tipo documento"
           field="tipo_documento"
-          value={persona.tipo_documento}
+          value={String(persona.tipo_documento ?? "")}
           as="select"
           options={TIPO_DOC_OPTIONS.map((v) => ({ value: v, label: v }))}
           onChange={handleChange}
@@ -400,13 +465,13 @@ function PersonaCard({
         <PersonaField
           label="Numero documento"
           field="numero_documento"
-          value={persona.numero_documento}
+          value={String(persona.numero_documento ?? "")}
           onChange={handleChange}
         />
         <PersonaField
           label="Genero"
           field="genero"
-          value={persona.genero}
+          value={String(persona.genero ?? "")}
           as="select"
           options={GENERO_OPTIONS}
           onChange={handleChange}
@@ -414,13 +479,13 @@ function PersonaCard({
         <PersonaField
           label="Nacionalidad"
           field="nacionalidad"
-          value={persona.nacionalidad}
+          value={String(persona.nacionalidad ?? "")}
           onChange={handleChange}
         />
         <PersonaField
           label="Estado civil"
           field="estado_civil"
-          value={persona.estado_civil}
+          value={String(persona.estado_civil ?? "")}
           as="select"
           options={ESTADO_CIVIL_OPTIONS.map((v) => ({ value: v, label: v }))}
           onChange={handleChange}
@@ -428,35 +493,255 @@ function PersonaCard({
         <PersonaField
           label="Profesion"
           field="profesion"
-          value={persona.profesion}
+          value={String(persona.profesion ?? "")}
           onChange={handleChange}
         />
         <PersonaField
           label="Domicilio (ciudad)"
           field="domicilio"
-          value={persona.domicilio}
+          value={String(persona.domicilio ?? "")}
           onChange={handleChange}
         />
         <div className="sm:col-span-2">
           <PersonaField
             label="Direccion completa"
             field="direccion"
-            value={persona.direccion}
+            value={String(persona.direccion ?? "")}
             onChange={handleChange}
           />
         </div>
         <PersonaField
           label="Telefono / Celular"
           field="telefono"
-          value={persona.telefono}
+          value={String(persona.telefono ?? "")}
           onChange={handleChange}
         />
         <PersonaField
           label="Correo electronico"
           field="email"
-          value={persona.email}
+          value={String(persona.email ?? "")}
           onChange={handleChange}
         />
+      </div>
+    </div>
+  );
+}
+
+// ─── SectionField — campo genérico para secciones de inmueble/notaría/valores ─
+
+function SectionField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const pending = value == null || String(value).trim() === "";
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs font-medium text-muted flex items-center gap-1.5">
+        {label}
+        {pending && (
+          <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
+            pendiente
+          </span>
+        )}
+      </span>
+      <input
+        type="text"
+        value={value != null ? String(value) : ""}
+        placeholder={placeholder ?? (pending ? "Sin datos - completar" : "")}
+        onChange={(e) => onChange(e.target.value)}
+        className={
+          "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all " +
+          (pending ? "border-amber-300 bg-amber-50 text-amber-900 placeholder:text-amber-400" : "")
+        }
+      />
+    </label>
+  );
+}
+
+// ─── Inmueble card ────────────────────────────────────────────────────────────
+
+function InmuebleCard({
+  inmueble,
+  onChange,
+}: {
+  inmueble: MinutaInmueble;
+  onChange: (field: keyof MinutaInmueble, value: string) => void;
+}) {
+  return (
+    <div className="ep-card rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-line/70">
+        <span className="text-sm font-semibold text-ink">Inmueble</span>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <SectionField
+          label="Número / Apto"
+          value={String(inmueble.numero ?? "")}
+          onChange={(v) => onChange("numero", v)}
+        />
+        <SectionField
+          label="Matrícula inmobiliaria"
+          value={String(inmueble.matricula_inmobiliaria ?? "")}
+          onChange={(v) => onChange("matricula_inmobiliaria", v)}
+        />
+        <div className="sm:col-span-2 lg:col-span-3">
+          <SectionField
+            label="Conjunto / Edificio"
+            value={String(inmueble.conjunto_o_edificio ?? "")}
+            onChange={(v) => onChange("conjunto_o_edificio", v)}
+          />
+        </div>
+        <SectionField
+          label="Municipio"
+          value={String(inmueble.municipio ?? "")}
+          onChange={(v) => onChange("municipio", v)}
+        />
+        <SectionField
+          label="Departamento"
+          value={String(inmueble.departamento ?? "")}
+          onChange={(v) => onChange("departamento", v)}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Notaría card ─────────────────────────────────────────────────────────────
+
+function NotariaCard({
+  notaria,
+  onChange,
+}: {
+  notaria: NotariaEdit;
+  onChange: (field: keyof NotariaEdit, value: string) => void;
+}) {
+  return (
+    <div className="ep-card rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-line/70">
+        <span className="text-sm font-semibold text-ink">Notaría y fecha</span>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <SectionField
+            label="Nombre notaría"
+            value={String(notaria.nombre_notaria ?? "")}
+            onChange={(v) => onChange("nombre_notaria", v)}
+          />
+        </div>
+        <SectionField
+          label="Municipio notaría"
+          value={String(notaria.municipio_notaria ?? "")}
+          onChange={(v) => onChange("municipio_notaria", v)}
+        />
+        <SectionField
+          label="Número escritura"
+          value={String(notaria.numero_escritura ?? "")}
+          onChange={(v) => onChange("numero_escritura", v)}
+        />
+        <label className="grid gap-1">
+          <span className="text-xs font-medium text-muted flex items-center gap-1.5">
+            Fecha otorgamiento
+            {!notaria.fecha_otorgamiento && (
+              <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
+                pendiente
+              </span>
+            )}
+          </span>
+          <input
+            type="date"
+            value={notaria.fecha_otorgamiento ?? ""}
+            onChange={(e) => onChange("fecha_otorgamiento", e.target.value)}
+            className={
+              "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all " +
+              (!notaria.fecha_otorgamiento ? "border-amber-300 bg-amber-50 text-amber-900" : "")
+            }
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// ─── Valores card ─────────────────────────────────────────────────────────────
+
+function ValorRow({
+  val, idx, onChangeMonto, onChangeTexto,
+}: {
+  val: MinutaValor;
+  idx: number;
+  onChangeMonto: (idx: number, value: string) => void;
+  onChangeTexto: (idx: number, value: string) => void;
+}) {
+  const [textoExpanded, setTextoExpanded] = useState(false);
+  const monto = val.monto_numerico ?? 0;
+  const letras = monto > 0 ? numeroALetras(monto) : "";
+
+  return (
+    <div className="ep-card-muted rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="ep-pill text-xs px-2.5 py-1 rounded-full font-semibold">
+          {val.tipo.replace(/_/g, " ")}
+        </span>
+        {val.acto_relacionado != null && (
+          <span className="text-xs text-soft">Acto {val.acto_relacionado}</span>
+        )}
+      </div>
+      <SectionField
+        label="Monto ($)"
+        value={String(val.monto_numerico ?? "")}
+        onChange={(v) => onChangeMonto(idx, v)}
+      />
+      {letras && (
+        <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "10px 12px" }}>
+          <p style={{ fontSize: "12px", color: "#0369a1", fontWeight: 600, lineHeight: 1.6, margin: 0 }}>
+            {letras}
+          </p>
+        </div>
+      )}
+      {textoExpanded ? (
+        <SectionField
+          label="Texto en documento (edición manual)"
+          value={String(val.texto_en_documento ?? "")}
+          onChange={(v) => onChangeTexto(idx, v)}
+        />
+      ) : (
+        <button
+          onClick={() => setTextoExpanded(true)}
+          className="text-xs text-soft hover:text-primary underline underline-offset-2"
+        >
+          ✏ Editar texto manualmente
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ValoresCard({
+  valores,
+  onChangeMonto,
+  onChangeTexto,
+}: {
+  valores: MinutaValor[];
+  onChangeMonto: (idx: number, value: string) => void;
+  onChangeTexto: (idx: number, value: string) => void;
+}) {
+  if (valores.length === 0) return null;
+
+  return (
+    <div className="ep-card rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-line/70">
+        <span className="text-sm font-semibold text-ink">Valores monetarios</span>
+      </div>
+      <div className="p-5 space-y-4">
+        {valores.map((val, i) => (
+          <ValorRow key={i} val={val} idx={i} onChangeMonto={onChangeMonto} onChangeTexto={onChangeTexto} />
+        ))}
       </div>
     </div>
   );
@@ -473,6 +758,9 @@ export function NuevaMinutaWorkspace() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [analisisResult, setAnalisisResult] = useState<MinutaAnalisisResult | null>(null);
   const [personas, setPersonas] = useState<MinutaPersona[]>([]);
+  const [inmuebleEdit, setInmuebleEdit] = useState<MinutaInmueble>(EMPTY_INMUEBLE);
+  const [notariaEdit, setNotariaEdit] = useState<NotariaEdit>(EMPTY_NOTARIA);
+  const [valoresEdit, setValoresEdit] = useState<MinutaValor[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   function handleDragOver(e: React.DragEvent) { e.preventDefault(); setIsDragging(true); }
@@ -488,7 +776,15 @@ export function NuevaMinutaWorkspace() {
     if (!f.name.endsWith(".docx")) { setError("Solo se aceptan archivos .docx"); return; }
     setFile(f); setError(null);
   }
-  function clearFile() { setFile(null); setAnalisisResult(null); setPersonas([]); setError(null); }
+  function clearFile() {
+    setFile(null);
+    setAnalisisResult(null);
+    setPersonas([]);
+    setInmuebleEdit(EMPTY_INMUEBLE);
+    setNotariaEdit(EMPTY_NOTARIA);
+    setValoresEdit([]);
+    setError(null);
+  }
 
   async function handleAnalizar() {
     if (!file) return;
@@ -496,7 +792,19 @@ export function NuevaMinutaWorkspace() {
     try {
       const result = await analyzeMinuta(file);
       setAnalisisResult(result);
-      setPersonas(result.datos.personas.map((p) => ({ ...p })));
+      setPersonas((result.datos.personas ?? []).map((p) => ({ ...p })));
+      setInmuebleEdit({ ...EMPTY_INMUEBLE, ...(result.datos.inmueble ?? {}) });
+      const fechasRaw = (result.datos as Record<string, unknown>).fechas as Record<string, unknown> | null | undefined;
+      const fechaRaw = fechasRaw?.fecha_otorgamiento;
+      const fechaOtorgamiento = typeof fechaRaw === "string" ? fechaRaw : "";
+      setNotariaEdit({ ...EMPTY_NOTARIA, ...(result.datos.notaria ?? {}), fecha_otorgamiento: fechaOtorgamiento });
+      setValoresEdit((result.datos.valores ?? []).map((v) => ({
+        ...v,
+        texto_en_documento:
+          v.monto_numerico != null && v.monto_numerico > 0
+            ? numeroALetras(v.monto_numerico)
+            : v.texto_en_documento,
+      })));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al analizar el documento.");
     } finally { setIsAnalyzing(false); }
@@ -508,14 +816,51 @@ export function NuevaMinutaWorkspace() {
   function removePersona(idx: number) { setPersonas((prev) => prev.filter((_, i) => i !== idx)); }
   function addPersona() { setPersonas((prev) => [...prev, emptyPersona(`persona_${prev.length + 1}`)]); }
 
+  function updateInmueble(field: keyof MinutaInmueble, value: string) {
+    setInmuebleEdit((prev) => ({ ...prev, [field]: value || null }));
+  }
+  function updateNotaria(field: keyof NotariaEdit, value: string) {
+    setNotariaEdit((prev) => ({ ...prev, [field]: value || null }));
+  }
+  function updateValor(idx: number, value: string) {
+    const parsed = parseInt(value.replace(/\D/g, ""), 10);
+    setValoresEdit((prev) =>
+      prev.map((v, i) => {
+        if (i !== idx) return v;
+        return {
+          ...v,
+          monto_numerico: isNaN(parsed) ? 0 : parsed,
+          texto_en_documento: parsed > 0 ? numeroALetras(parsed) : v.texto_en_documento,
+        };
+      })
+    );
+  }
+  function updateValorTexto(idx: number, value: string) {
+    setValoresEdit((prev) =>
+      prev.map((v, i) => i === idx ? { ...v, texto_en_documento: value || null } : v)
+    );
+  }
+
   async function handleGenerar() {
     if (!file || !analisisResult) return;
     setError(null); setIsGenerating(true);
     try {
+      const datosNuevos = {
+        ...analisisResult.datos,
+        personas,
+        inmueble: inmuebleEdit,
+        valores: valoresEdit,
+        notaria: {
+          nombre_notaria: notariaEdit.nombre_notaria,
+          municipio_notaria: notariaEdit.municipio_notaria,
+          numero_escritura: notariaEdit.numero_escritura,
+        },
+        fechas: { fecha_otorgamiento: notariaEdit.fecha_otorgamiento },
+      };
       const result = await generateMinuta(
         file,
         { ...analisisResult.datos, personas: analisisResult.datos.personas },
-        { ...analisisResult.datos, personas },
+        datosNuevos as unknown as MinutaDatos,
       );
       router.push(result.onlyoffice_path);
     } catch (err) {
@@ -616,6 +961,12 @@ export function NuevaMinutaWorkspace() {
             <Plus size={15} /> Agregar persona manualmente
           </button>
 
+          <InmuebleCard inmueble={inmuebleEdit} onChange={updateInmueble} />
+
+          <NotariaCard notaria={notariaEdit} onChange={updateNotaria} />
+
+          <ValoresCard valores={valoresEdit} onChangeMonto={updateValor} onChangeTexto={updateValorTexto} />
+
           <button
             onClick={() => setStep(2)} disabled={!canGenerate}
             className={[
@@ -645,7 +996,7 @@ export function NuevaMinutaWorkspace() {
                 ["Archivo base", file?.name ?? "-"],
                 ["Personas", String(personas.length)],
                 ["Modo origen", analisisResult?.modo_detectado === "B2" ? "B2 - Diligenciada" : "B1 - Plantilla"],
-                ["Valores en doc", String(analisisResult?.datos.valores.length ?? 0)],
+                ["Valores en doc", String(valoresEdit.length)],
               ].map(([k, v]) => (
                 <div key={k}>
                   <span className="text-soft">{k}: </span>
@@ -673,6 +1024,22 @@ export function NuevaMinutaWorkspace() {
                 ))}
               </div>
             </div>
+
+            {inmuebleEdit.matricula_inmobiliaria && (
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">
+                  Inmueble
+                </p>
+                <p className="text-sm text-ink">
+                  {[
+                    inmuebleEdit.conjunto_o_edificio,
+                    inmuebleEdit.numero && `Nro. ${inmuebleEdit.numero}`,
+                    inmuebleEdit.matricula_inmobiliaria && `Mat. ${inmuebleEdit.matricula_inmobiliaria}`,
+                    inmuebleEdit.municipio,
+                  ].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+            )}
           </div>
 
           <button

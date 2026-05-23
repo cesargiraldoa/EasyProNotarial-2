@@ -29,7 +29,7 @@ export const appNavigation: NavigationItem[] = [
   { label: "Usuarios", href: "/dashboard/usuarios", icon: Users2 },
   { label: "Roles", href: "/dashboard/roles", icon: ShieldCheck },
   { label: "Minutas", href: "/dashboard/casos", icon: FolderKanban },
-  { label: "Crear Minuta", href: "/dashboard/casos/crear", icon: PenTool },
+  { label: "Crear Minuta", href: "/dashboard/minutas/nueva", icon: PenTool },
   { label: "Motor de Minutas", href: "/dashboard/minutas/nueva", icon: FileText },
   { label: "Actos / Plantillas", href: "/dashboard/actos-plantillas", icon: Layers3 },
   { label: "Lotes (Next)", href: "/dashboard/lotes", icon: FileArchive, disabled: true },
