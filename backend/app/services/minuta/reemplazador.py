@@ -461,7 +461,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     inm_old = datos_anteriores.get("inmueble", {}) or {}
     inm_new = datos_nuevos.get("inmueble", {}) or {}
 
-    for campo in ["numero", "matricula_inmobiliaria", "conjunto_o_edificio"]:
+    for campo in ["numero", "matricula_inmobiliaria", "conjunto_o_edificio", "municipio", "departamento"]:
         val_old = inm_old.get(campo)
         val_new = inm_new.get(campo)
         if val_old and val_new and val_old != val_new:
@@ -470,6 +470,33 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
                 "nuevo": val_new,
                 "etiqueta": f"inmueble.{campo}",
             })
+
+    # NOTARIA
+    not_old = datos_anteriores.get("notaria", {}) or {}
+    not_new = datos_nuevos.get("notaria", {}) or {}
+
+    for campo in ["nombre_notaria", "municipio_notaria", "numero_escritura"]:
+        val_old = not_old.get(campo)
+        val_new = not_new.get(campo)
+        if val_old and val_new and val_old != val_new:
+            reemplazos.append({
+                "viejo": val_old,
+                "nuevo": val_new,
+                "etiqueta": f"notaria.{campo}",
+            })
+
+    # FECHAS
+    fec_old = datos_anteriores.get("fechas", {}) or {}
+    fec_new = datos_nuevos.get("fechas", {}) or {}
+
+    val_old = fec_old.get("fecha_otorgamiento")
+    val_new = fec_new.get("fecha_otorgamiento")
+    if val_old and val_new and val_old != val_new:
+        reemplazos.append({
+            "viejo": val_old,
+            "nuevo": val_new,
+            "etiqueta": "fechas.fecha_otorgamiento",
+        })
 
     return reemplazos
 
