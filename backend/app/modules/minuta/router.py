@@ -243,16 +243,12 @@ async def generar_minuta(
 
         pares_genero: list[dict] = []
         for rol, persona_nueva in personas_nuevas.items():
-            persona_vieja = personas_viejas.get(rol, {})
-            genero_viejo = persona_vieja.get("genero") or persona_vieja.get("GENERO") or ""
             genero_nuevo = persona_nueva.get("genero") or persona_nueva.get("GENERO") or ""
             nombre_nuevo = (persona_nueva.get("nombre_completo") or persona_nueva.get("NOMBRE_COMPLETO") or "").strip()
-            if not nombre_nuevo:
+            if not nombre_nuevo or genero_nuevo not in ("M", "F"):
                 continue
-            if genero_viejo == "M" and genero_nuevo == "F":
-                pares_genero.append({"nombre": nombre_nuevo, "reemplazos": _GENERO_M_A_F})
-            elif genero_viejo == "F" and genero_nuevo == "M":
-                pares_genero.append({"nombre": nombre_nuevo, "reemplazos": _GENERO_F_A_M})
+            reemplazos_genero = _GENERO_M_A_F if genero_nuevo == "F" else _GENERO_F_A_M
+            pares_genero.append({"nombre": nombre_nuevo, "reemplazos": reemplazos_genero})
 
         # ── 4. Aplicar reemplazos de datos al .docx ──────────────────────────────
         logger.info(
