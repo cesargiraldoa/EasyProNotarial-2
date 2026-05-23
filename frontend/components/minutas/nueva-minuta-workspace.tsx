@@ -25,6 +25,37 @@ const ESTADO_CIVIL_OPTIONS = [
   "Soltero(a)", "Casado(a)", "Union marital", "Divorciado(a)", "Viudo(a)",
 ];
 
+const GENTILICIOS_M_A_F: Record<string, string> = {
+  "colombiano": "colombiana",
+  "venezolano": "venezolana",
+  "ecuatoriano": "ecuatoriana",
+  "peruano": "peruana",
+  "boliviano": "boliviana",
+  "chileno": "chilena",
+  "argentino": "argentina",
+  "uruguayo": "uruguaya",
+  "paraguayo": "paraguaya",
+  "brasileño": "brasileña",
+  "mexicano": "mexicana",
+  "español": "española",
+  "estadounidense": "estadounidense",
+  "italiano": "italiana",
+  "francés": "francesa",
+  "alemán": "alemana",
+  "chino": "china",
+  "cubano": "cubana",
+  "dominicano": "dominicana",
+  "panameño": "panameña",
+  "costarricense": "costarricense",
+  "hondureño": "hondureña",
+  "salvadoreño": "salvadoreña",
+  "guatemalteco": "guatemalteca",
+  "nicaragüense": "nicaragüense",
+};
+const GENTILICIOS_F_A_M = Object.fromEntries(
+  Object.entries(GENTILICIOS_M_A_F).map(([m, f]) => [f, m])
+);
+
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
 function StepBar({ current }: { current: number }) {
@@ -302,6 +333,28 @@ function PersonaCard({
     return v === null || v.trim() === "";
   }).length;
 
+  function handleChange(field: keyof MinutaPersona, value: string) {
+    onChange(field, value);
+    if (field !== "genero") return;
+    const nac = (persona.nacionalidad || "").toLowerCase().trim();
+    const ec = (persona.estado_civil || "").toLowerCase();
+    if (value === "F") {
+      const nacF = GENTILICIOS_M_A_F[nac];
+      if (nacF) onChange("nacionalidad", nacF);
+      if (ec === "soltero") onChange("estado_civil", "soltera");
+      else if (ec === "casado") onChange("estado_civil", "casada");
+      else if (ec === "divorciado") onChange("estado_civil", "divorciada");
+      else if (ec === "viudo") onChange("estado_civil", "viuda");
+    } else if (value === "M") {
+      const nacM = GENTILICIOS_F_A_M[nac];
+      if (nacM) onChange("nacionalidad", nacM);
+      if (ec === "soltera") onChange("estado_civil", "soltero");
+      else if (ec === "casada") onChange("estado_civil", "casado");
+      else if (ec === "divorciada") onChange("estado_civil", "divorciado");
+      else if (ec === "viuda") onChange("estado_civil", "viudo");
+    }
+  }
+
   return (
     <div className="ep-card rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-line/70">
@@ -333,7 +386,7 @@ function PersonaCard({
             label="Nombre completo"
             field="nombre_completo"
             value={persona.nombre_completo}
-            onChange={onChange}
+            onChange={handleChange}
           />
         </div>
         <PersonaField
@@ -342,13 +395,13 @@ function PersonaCard({
           value={persona.tipo_documento}
           as="select"
           options={TIPO_DOC_OPTIONS.map((v) => ({ value: v, label: v }))}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Numero documento"
           field="numero_documento"
           value={persona.numero_documento}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Genero"
@@ -356,13 +409,13 @@ function PersonaCard({
           value={persona.genero}
           as="select"
           options={GENERO_OPTIONS}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Nacionalidad"
           field="nacionalidad"
           value={persona.nacionalidad}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Estado civil"
@@ -370,39 +423,39 @@ function PersonaCard({
           value={persona.estado_civil}
           as="select"
           options={ESTADO_CIVIL_OPTIONS.map((v) => ({ value: v, label: v }))}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Profesion"
           field="profesion"
           value={persona.profesion}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Domicilio (ciudad)"
           field="domicilio"
           value={persona.domicilio}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <div className="sm:col-span-2">
           <PersonaField
             label="Direccion completa"
             field="direccion"
             value={persona.direccion}
-            onChange={onChange}
+            onChange={handleChange}
           />
         </div>
         <PersonaField
           label="Telefono / Celular"
           field="telefono"
           value={persona.telefono}
-          onChange={onChange}
+          onChange={handleChange}
         />
         <PersonaField
           label="Correo electronico"
           field="email"
           value={persona.email}
-          onChange={onChange}
+          onChange={handleChange}
         />
       </div>
     </div>

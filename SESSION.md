@@ -1,6 +1,39 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-23
+
+**Objetivo de la sesión:** Corregir bugs de género (SEBASTIÁN y concordancia global) y agregar lógica de auto-cascada de nacionalidad/estado civil en el formulario frontend.
+
+**Realizado:**
+- **router.py — reemplazos de género deterministas (ee93a7e):** Agregar `_GENERO_M_A_F` y `_GENERO_F_A_M` con `varón/mujer`, `soltero/a`, `colombiano/a`, `domiciliado/a`, `identificado/a` — todos con `palabra_completa: True`
+- **reemplazador.py — aplicar_reemplazos_por_contexto (d266d6f):** Nueva función que aplica reemplazos de género solo en párrafos que contienen el nombre de la persona específica
+- **reemplazador.py — aplicar_genero_contextual_docx (d266d6f):** Nueva función que orquesta los pares persona→reemplazos con exclusión mutua entre personas del documento
+- **router.py — integrar género contextual (d266d6f):** Paso 5 del endpoint `/generar` llama `aplicar_genero_contextual_docx` pasando `pares_genero` y `todos_nombres_doc`
+- **reemplazador.py + router.py — colombiano/a (a101c26):** Agregar entradas `colombiano→colombiana` y `colombiana→colombiano` a los bloques M→F y F→M
+- **router.py — fix exclusión SEBASTIÁN (610a817):** `todos_nombres_doc` ahora combina `datos_ant.personas + datos_nv.personas` con set para deduplicar — así personas que no cambiaron (como SEBASTIÁN) están en `nombres_excluir`
+- **reemplazador.py — _normalizar_guiones:** Nueva función que colapsa guiones dobles (`--` → `-`, `- --` → `- -`) y espacios dobles; se llama en `aplicar_reemplazos_docx` antes de `doc.save`
+- **nueva-minuta-workspace.tsx — handleChange con cascada de género:** `PersonaCard` ahora tiene `handleChange` que al cambiar género auto-actualiza `nacionalidad` (via diccionario `GENTILICIOS_M_A_F`/`GENTILICIOS_F_A_M` de 25 gentilicios) y `estado_civil` (soltero/casado/divorciado/viudo ↔ femeninos)
+
+**Archivos creados/modificados:**
+- `backend/app/modules/minuta/router.py` — género determinista, pares_genero, todos_nombres_doc combinado
+- `backend/app/services/minuta/reemplazador.py` — `aplicar_reemplazos_por_contexto`, `aplicar_genero_contextual_docx`, `_normalizar_guiones`
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — `GENTILICIOS_M_A_F`, `GENTILICIOS_F_A_M`, `handleChange` con cascada
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Debug SEBASTIÁN persiste:** El fix `610a817` está en producción pero el bug puede seguir. Agregar prints de debug en `aplicar_genero_contextual_docx` (imprimir `todos_nombres`, `otros`, y qué párrafos se procesan), hacer deploy, generar minuta real, revisar logs Railway
+2. **[MEDIA] Guiones dobles `-- -` sin resolver:** `_normalizar_guiones` existe pero no resuelve porque los guiones están partidos entre múltiples runs. Corregir para que una el texto de todos los runs del párrafo antes de aplicar regex, o implementar solución EasyPro1 (tab stops + `[[--]]` → `\t` en plantillas)
+3. **[MEDIA] Concordancia de artículos** — EL→LA, DEL→DE LA (pendiente de sesión anterior)
+4. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase producción
+5. **[BAJA] Grabar videos demo** — si SEBASTIÁN y guiones quedan resueltos, preparar caso demo para notarías
+
+**Estado al cierre:**
+- Backend: Railway operativo — commit `610a817` activo (3a59eb6 es force redeploy vacío)
+- Frontend: Vercel operativo — easypronotarial.com, deploy esta noche
+- BD producción: operativa, alembic_version desincronizada (pendiente)
+- Git: `reemplazador.py` y `nueva-minuta-workspace.tsx` modificados localmente sin commitear — se commitean en este cierre
+
+---
 ## Sesión 2026-05-22
 
 **Objetivo de la sesión:** Conectar el motor de minutas con OnlyOffice (abrir el .docx generado directamente en el editor) e integrar concordancia de género al flujo de generación.

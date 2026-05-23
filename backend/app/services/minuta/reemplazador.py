@@ -216,6 +216,37 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
     return reemplazos
 
 
+def _normalizar_guiones(doc):
+    """
+    Une el texto de todos los runs de cada párrafo,
+    limpia guiones dobles, y redistribuye el texto
+    preservando el formato del primer run.
+    """
+    for paragraph in doc.paragraphs:
+        if not paragraph.runs:
+            continue
+
+        texto_completo = ''.join(run.text for run in paragraph.runs)
+
+        texto_limpio = re.sub(r'-{2,}', '-', texto_completo)
+        texto_limpio = re.sub(r'- {2,}-', '- -', texto_limpio)
+        texto_limpio = re.sub(r' {2,}', ' ', texto_limpio)
+
+        if texto_limpio == texto_completo:
+            continue
+
+        pos = 0
+        for run in paragraph.runs:
+            largo = len(run.text)
+            run.text = texto_limpio[pos:pos + largo] if pos < len(texto_limpio) else ''
+            pos += largo
+
+        if pos < len(texto_limpio):
+            paragraph.runs[-1].text += texto_limpio[pos:]
+
+    return doc
+
+
 def aplicar_reemplazos_docx(
     docx_path_origen: str,
     reemplazos: list[dict],
@@ -273,6 +304,9 @@ def aplicar_reemplazos_docx(
         else:
             estadisticas["por_etiqueta"][etiqueta] = count_para_este
             estadisticas["total_reemplazos"] += count_para_este
+
+    # Limpiar guiones dobles que puedan quedar tras los reemplazos
+    _normalizar_guiones(doc)
 
     # Guardar
     doc.save(docx_path_destino)
