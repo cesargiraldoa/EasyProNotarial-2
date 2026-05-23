@@ -97,50 +97,6 @@ def construir_patron_flexible(texto: str) -> str:
     return separador.join(re.escape(p) for p in palabras)
 
 
-# Detecta guiones de relleno trailing: "CONTENIDO - - - - - " o "CONTENIDO - - - - -"
-# Requiere al menos 3 unidades "- " para no confundir con guiones normales de texto
-_RE_TRAILING_DASHES = re.compile(
-    r'^(.*\S)'       # contenido (termina en no-espacio)
-    r'(\s+'          # separador (1+ espacios)
-    r'(?:- )+'       # al menos 1 unidad "- "
-    r'-?'            # guion final opcional (cuando termina en "-" sin espacio)
-    r'\s*)$',        # espacios finales opcionales
-    re.DOTALL,
-)
-
-
-def _ajustar_guiones_run(texto: str, longitud_objetivo: int) -> str:
-    """
-    Si el texto de un run termina con guiones de relleno (- - - - -),
-    ajusta la cantidad de guiones para que len(resultado) == longitud_objetivo.
-    Preserva el separador entre contenido y guiones, y el caracter final.
-    """
-    m = _RE_TRAILING_DASHES.match(texto)
-    if not m:
-        return texto
-
-    contenido = m.group(1)
-    bloque_guiones = m.group(2)
-
-    sep_match = re.match(r'^\s+', bloque_guiones)
-    separador = sep_match.group(0) if sep_match else " "
-    termina_con_espacio = bloque_guiones.endswith(" ")
-
-    chars_para_guiones = longitud_objetivo - len(contenido) - len(separador)
-    if chars_para_guiones < 2:
-        chars_para_guiones = 2
-
-    if termina_con_espacio:
-        n = max(1, chars_para_guiones // 2)
-        guiones_nuevos = "- " * n
-    else:
-        # Termina en "-": construir "- " * (n-1) + "-"
-        n = max(1, (chars_para_guiones + 1) // 2)
-        guiones_nuevos = ("- " * n).rstrip()
-
-    return contenido + separador + guiones_nuevos
-
-
 def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_completa: bool = False) -> int:
     """
     Reemplaza dentro de los runs de un parrafo preservando formato.
@@ -229,9 +185,7 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
             run = info["run"]
             inicio_local = match_inicio - info["inicio"]
             fin_local = match_fin - info["inicio"]
-            longitud_original = len(run.text)
             run.text = run.text[:inicio_local] + valor_final + run.text[fin_local:]
-            run.text = _ajustar_guiones_run(run.text, longitud_original)
             reemplazos += 1
         else:
             # Caso complejo: match cruza varios runs
@@ -247,9 +201,7 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
             sufijo = ultimo["run"].text[match_fin - ultimo["inicio"]:]
 
             # Poner el valor nuevo en el primer run (hereda su formato)
-            longitud_primer = len(primer["run"].text)
             primer["run"].text = prefijo + valor_final
-            primer["run"].text = _ajustar_guiones_run(primer["run"].text, longitud_primer)
 
             # Vaciar runs intermedios
             for info in runs_afectados[1:-1]:
@@ -257,9 +209,7 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
 
             # El ultimo run mantiene solo el sufijo
             if primer is not ultimo:
-                longitud_ultimo = len(ultimo["run"].text)
                 ultimo["run"].text = sufijo
-                ultimo["run"].text = _ajustar_guiones_run(ultimo["run"].text, longitud_ultimo)
 
             reemplazos += 1
 
