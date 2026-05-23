@@ -184,7 +184,34 @@ async def generar_minuta(
         if cambios_conc_todos:
             reemplazos.extend(aplicar_cambios_concordancia_a_reemplazos(cambios_conc_todos))
 
-        # ── 3. Aplicar reemplazos al .docx ───────────────────────────────────────
+        # ── 3. Reemplazos de género deterministas — no dependen de la IA ─────────
+        for rol, persona_nueva in personas_nuevas.items():
+            persona_vieja = personas_viejas.get(rol, {})
+            genero_viejo = persona_vieja.get("genero") or persona_vieja.get("GENERO") or ""
+            genero_nuevo = persona_nueva.get("genero") or persona_nueva.get("GENERO") or ""
+
+            if genero_viejo == "M" and genero_nuevo == "F":
+                reemplazos.extend([
+                    {"viejo": "varón", "nuevo": "mujer", "etiqueta": "genero.varon", "palabra_completa": True},
+                    {"viejo": "VARÓN", "nuevo": "MUJER", "etiqueta": "genero.VARON", "palabra_completa": True},
+                    {"viejo": "varon", "nuevo": "mujer", "etiqueta": "genero.varon_sin_tilde", "palabra_completa": True},
+                    {"viejo": "soltero", "nuevo": "soltera", "etiqueta": "genero.soltero", "palabra_completa": True},
+                    {"viejo": "SOLTERO", "nuevo": "SOLTERA", "etiqueta": "genero.SOLTERO", "palabra_completa": True},
+                    {"viejo": "domiciliado", "nuevo": "domiciliada", "etiqueta": "genero.domiciliado", "palabra_completa": True},
+                    {"viejo": "DOMICILIADO", "nuevo": "DOMICILIADA", "etiqueta": "genero.DOMICILIADO", "palabra_completa": True},
+                    {"viejo": "identificado", "nuevo": "identificada", "etiqueta": "genero.identificado", "palabra_completa": True},
+                    {"viejo": "IDENTIFICADO", "nuevo": "IDENTIFICADA", "etiqueta": "genero.IDENTIFICADO", "palabra_completa": True},
+                ])
+            elif genero_viejo == "F" and genero_nuevo == "M":
+                reemplazos.extend([
+                    {"viejo": "mujer", "nuevo": "varón", "etiqueta": "genero.mujer", "palabra_completa": True},
+                    {"viejo": "MUJER", "nuevo": "VARÓN", "etiqueta": "genero.MUJER", "palabra_completa": True},
+                    {"viejo": "soltera", "nuevo": "soltero", "etiqueta": "genero.soltera", "palabra_completa": True},
+                    {"viejo": "domiciliada", "nuevo": "domiciliado", "etiqueta": "genero.domiciliada", "palabra_completa": True},
+                    {"viejo": "identificada", "nuevo": "identificado", "etiqueta": "genero.identificada", "palabra_completa": True},
+                ])
+
+        # ── 4. Aplicar reemplazos al .docx ───────────────────────────────────────
         logger.info(
             "[generar] reemplazos a aplicar (%d total):\n%s",
             len(reemplazos),
@@ -204,7 +231,7 @@ async def generar_minuta(
 
         Path(path_entrada).unlink(missing_ok=True)
 
-        # ── 4. Leer bytes y subir a Supabase Storage ─────────────────────────────
+        # ── 5. Leer bytes y subir a Supabase Storage ─────────────────────────────
         content = Path(path_salida).read_bytes()
         background_tasks.add_task(Path(path_salida).unlink, True)
 
@@ -226,7 +253,7 @@ async def generar_minuta(
             local_file.write_bytes(content)
             storage_path = str(local_file)
 
-        # ── 5. Generar token firmado y rutas ─────────────────────────────────────
+        # ── 6. Generar token firmado y rutas ─────────────────────────────────────
         file_token = _make_file_token(storage_path, storage_filename, display_name, notary_id)
         onlyoffice_path = f"/dashboard/minutas/editor/{file_token}"
         base_url = _resolve_public_api_base(request)
