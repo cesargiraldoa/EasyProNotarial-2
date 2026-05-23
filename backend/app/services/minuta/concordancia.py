@@ -45,6 +45,12 @@ DATOS:
 - Persona nueva: {nombre_nuevo} ({genero_nuevo})
 - Roles que cumple esta persona: {rol}
 
+PERSONAS QUE DEBEN QUEDAR INTACTAS:
+Las siguientes personas aparecen en el documento con su propio genero. NO cambies
+nada en parrafos donde aparezcan exclusivamente estas personas (a menos que el parrafo
+tambien mencione a {nombre_nuevo}):
+{personas_resto_lista}
+
 INSTRUCCIONES CRITICAS:
 
 1. SOLO devuelves JSON valido. Sin explicaciones.
@@ -194,6 +200,7 @@ def detectar_concordancia(
     persona_vieja: dict,
     persona_nueva: dict,
     api_key: str,
+    personas_resto: list[dict] | None = None,
 ) -> dict:
     """
     Llama a IA para detectar cambios de concordancia necesarios.
@@ -230,7 +237,19 @@ def detectar_concordancia(
     genero_nuevo = persona_nueva.get("genero") or persona_nueva.get("GENERO") or ""
     rol = persona_vieja.get("rol") or persona_vieja.get("ROL") or "persona"
 
-    genero_legible = {"M": "Masculino", "F": "Femenino"}
+    genero_legible = {"M": "Masculino", "F": "Femenino", "J": "Juridica"}
+
+    personas_resto_lineas = []
+    for p in (personas_resto or []):
+        nombre_p = (p.get("nombre") or "").strip()
+        genero_p = genero_legible.get(p.get("genero", ""), p.get("genero", ""))
+        if nombre_p:
+            personas_resto_lineas.append(f"  - {nombre_p} ({genero_p})")
+    personas_resto_lista = (
+        "\n".join(personas_resto_lineas)
+        if personas_resto_lineas
+        else "  (ninguna otra persona identificada)"
+    )
 
     prompt_final = PROMPT_CONCORDANCIA.format(
         nombre_viejo=nombre_viejo,
@@ -238,7 +257,8 @@ def detectar_concordancia(
         genero_viejo=genero_legible.get(genero_viejo, genero_viejo),
         genero_nuevo=genero_legible.get(genero_nuevo, genero_nuevo),
         rol=rol.replace("_", " "),
-        texto_documento=texto_documento[:80000],  # Limite seguro tokens
+        personas_resto_lista=personas_resto_lista,
+        texto_documento=texto_documento[:80000],
     )
 
     client = _make_openai_client(api_key)

@@ -177,8 +177,19 @@ async def generar_minuta(
         for rol, persona_nueva in personas_nuevas.items():
             persona_vieja = personas_viejas.get(rol, {})
             if necesita_concordancia(persona_vieja, persona_nueva):
+                nombre_cambiando = (persona_nueva.get("nombre_completo") or "").strip().upper()
+                personas_resto = [
+                    {
+                        "nombre": p.get("nombre_completo") or "",
+                        "genero": p.get("genero") or "",
+                    }
+                    for p in datos_nv.get("personas", [])
+                    if (p.get("nombre_completo") or "").strip().upper() != nombre_cambiando
+                    and p.get("nombre_completo")
+                ]
                 resultado_conc = detectar_concordancia(
-                    texto_doc, persona_vieja, persona_nueva, api_key
+                    texto_doc, persona_vieja, persona_nueva, api_key,
+                    personas_resto=personas_resto,
                 )
                 cambios_conc_todos.extend(resultado_conc.get("cambios", []))
 
