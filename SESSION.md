@@ -1,6 +1,46 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-22
+
+**Objetivo de la sesión:** Conectar el motor de minutas con OnlyOffice (abrir el .docx generado directamente en el editor) e integrar concordancia de género al flujo de generación.
+
+**Realizado:**
+- Análisis completo del flujo existente de minutas (detector, reemplazador, concordancia, router, frontend) y del flujo de OnlyOffice en document_flow
+- Backend router.py minuta: POST /generar ahora integra concordancia de género por persona (detecta cambio M↔F, aplica reemplazos con palabra_completa=True), sube el .docx resultante a Supabase Storage en `minutas/notary_{id}/{uuid}_minuta.docx`, genera JWT firmado con storage_path y retorna JSON con `onlyoffice_path`
+- Backend router.py minuta: 3 nuevos endpoints para servir el archivo al Document Server — GET /onlyoffice-config, GET /onlyoffice/file, POST /onlyoffice/callback (guarda versión editada de vuelta en Supabase)
+- concordancia.py: fix menor — `aplicar_cambios_concordancia_a_reemplazos` ahora incluye `"palabra_completa": True` para respetar límites de palabra
+- frontend/lib/minuta.ts: `generateMinuta` retorna `{ onlyoffice_path, filename }` en lugar de Blob; nueva función `getMinutaOnlyOfficeConfig(token)`; `sanitizeDatos()` limpia `\r\n\t\0` de strings antes de JSON.stringify (fix JSON malformado)
+- frontend/components/minutas/nueva-minuta-workspace.tsx: `PersonaField` extraído a nivel de módulo (fix bug foco perdido por componente anidado que se desmontaba en cada render); paso 3 navega con `router.push(onlyoffice_path)` en lugar de descargar blob
+- frontend/app/(app)/dashboard/minutas/editor/[token]/page.tsx: nueva página editor OnlyOffice para minutas — recibe JWT en URL, carga config desde `/api/v1/minuta/onlyoffice-config`, inicializa `DocEditor`
+- frontend/lib/navigation.ts: entrada "Motor de Minutas" agregada al sidebar después de "Crear Minuta"
+- frontend/next.config.mjs: `generateBuildId` con timestamp para forzar cache bust en Vercel
+- Diagnóstico de problema en Vercel deploy: Root Directory mal configurado — path duplicado `frontend/easypro2/frontend`. URL settings: https://vercel.com/cesar-giraldo-aristizabals-projects/easypro-notarial-2/settings
+
+**Archivos creados/modificados:**
+- `backend/app/modules/minuta/router.py` — generar con concordancia + Supabase + JWT + 3 endpoints OnlyOffice
+- `backend/app/services/minuta/concordancia.py` — `palabra_completa: True` en reemplazos de concordancia
+- `frontend/app/(app)/dashboard/minutas/editor/[token]/page.tsx` — nueva página editor OnlyOffice para minutas
+- `frontend/lib/minuta.ts` — generateMinuta retorna JSON, sanitizeDatos, getMinutaOnlyOfficeConfig
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — PersonaField a nivel módulo, paso 3 navega al editor
+- `frontend/lib/navigation.ts` — entrada Motor de Minutas en sidebar
+- `frontend/next.config.mjs` — generateBuildId para cache bust
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Vercel Root Directory** — Entrar a https://vercel.com/cesar-giraldo-aristizabals-projects/easypro-notarial-2/settings y corregir Root Directory (debe ser `easypro2/frontend`, no estar duplicado). El CLI mostró path `frontend/easypro2/frontend` que no existe.
+2. **[CRÍTICO] ONLYOFFICE_JWT_SECRET en Railway** — Agregar `ONLYOFFICE_JWT_SECRET` al .env de Railway para que el endpoint `/api/v1/minuta/onlyoffice-config` firme tokens correctamente en producción. Sin esta variable el sistema cae al `SECRET_KEY` del app.
+3. **[CRÍTICO] Alembic out-of-sync** — Ejecutar en Supabase: `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` (pendiente desde sesión anterior)
+4. **[MEDIA] Test end-to-end flujo minuta → OnlyOffice** — Probar en producción: subir .docx → analizar → revisar personas → generar → verificar que abre en el editor de OnlyOffice
+5. **[MEDIA] Personas incompletas en análisis** — jaggua_limpio.docx devolvió 4/~10 personas. Revisar chunking o prompt del detector
+6. **[BAJA] Reset contraseña** — No implementado
+
+**Estado al cierre:**
+- Backend: operativo local en puerto 8001, apuntando a Supabase producción
+- Frontend: build local ✅ (19/19 páginas), Vercel con problema de Root Directory a corregir
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio (solo uvicorn_start.log sin trackear)
+
+---
 ## Sesión 2026-05-21
 
 **Objetivo de la sesión:** Integrar motor de análisis de minutas IA al backend y crear pantalla frontend de 3 pasos para subir, analizar y generar minutas.
