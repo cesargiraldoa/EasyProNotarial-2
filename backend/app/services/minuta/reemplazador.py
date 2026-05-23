@@ -218,29 +218,13 @@ def reemplazar_en_runs(paragraph, valor_viejo: str, valor_nuevo: str, palabra_co
 
 def _normalizar_guiones(doc):
     """
-    Une el texto de todos los runs de cada párrafo,
-    limpia guiones dobles, y redistribuye el texto
-    preservando el formato del primer run.
+    Corrige guiones dobles decorativos (' -- ') dentro de cada run
+    sin redistribuir texto entre runs, preservando el formato original.
     """
     for paragraph in doc.paragraphs:
-        if not paragraph.runs:
-            continue
-
-        texto_completo = ''.join(run.text for run in paragraph.runs)
-
-        texto_limpio = re.sub(r'(?<= )--(?= )', '-', texto_completo)
-        texto_limpio = re.sub(r' {2,}', ' ', texto_limpio)
-
-        if texto_limpio == texto_completo:
-            continue
-
-        # Todo el texto limpio va al primer run; el resto se vacía.
-        # Evita el problema de redistribuir con longitudes originales cuando
-        # texto_limpio es más corto que texto_completo.
-        paragraph.runs[0].text = texto_limpio
-        for run in paragraph.runs[1:]:
-            run.text = ""
-
+        for run in paragraph.runs:
+            if '--' in run.text:
+                run.text = re.sub(r'(?<= )--(?= )', '-', run.text)
     return doc
 
 
