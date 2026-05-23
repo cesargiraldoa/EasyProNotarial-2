@@ -330,6 +330,64 @@ def aplicar_reemplazos_docx(
     return estadisticas
 
 
+def aplicar_reemplazos_por_contexto(
+    doc: DocumentType,
+    nombre_persona: str,
+    reemplazos: list[dict],
+) -> int:
+    """
+    Aplica reemplazos solo en párrafos que contienen nombre_persona.
+    Usado para reemplazos de género que no deben contaminar a otras personas.
+    Retorna el número de reemplazos efectuados.
+    """
+    nombre_upper = nombre_persona.upper()
+
+    def _procesar(paragraph) -> int:
+        if nombre_upper not in paragraph.text.upper():
+            return 0
+        total = 0
+        for rep in reemplazos:
+            viejo = rep.get("viejo", "").strip()
+            nuevo = rep.get("nuevo", "").strip()
+            if not viejo or not nuevo or viejo == nuevo:
+                continue
+            total += reemplazar_en_runs(paragraph, viejo, nuevo, rep.get("palabra_completa", False))
+        return total
+
+    total = 0
+    for paragraph in doc.paragraphs:
+        total += _procesar(paragraph)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    total += _procesar(paragraph)
+    return total
+
+
+def aplicar_genero_contextual_docx(docx_path: str, pares: list[dict]) -> dict:
+    """
+    Aplica reemplazos de género solo en párrafos que mencionan a cada persona.
+    Modifica el archivo in-place.
+
+    Args:
+        docx_path: ruta del .docx de salida (ya procesado por aplicar_reemplazos_docx)
+        pares: lista de {"nombre": str, "reemplazos": list[dict]}
+
+    Returns:
+        dict nombre → cantidad de reemplazos efectuados
+    """
+    doc = Document(docx_path)
+    stats: dict = {}
+    for par in pares:
+        nombre = (par.get("nombre") or "").strip()
+        reps = par.get("reemplazos") or []
+        if nombre and reps:
+            stats[nombre] = aplicar_reemplazos_por_contexto(doc, nombre, reps)
+    doc.save(docx_path)
+    return stats
+
+
 def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> list[dict]:
     """
     Construye la lista de reemplazos a partir de los datos viejos y nuevos.
