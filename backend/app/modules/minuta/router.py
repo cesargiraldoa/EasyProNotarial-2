@@ -431,3 +431,5 @@ async def minuta_onlyoffice_callback(
         pass
 
     return {"error": 0}
+
+# deploy 2026-05-23
