@@ -409,7 +409,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     pares_ya_agregados = set()
 
     def agregar_reemplazo(viejo, nuevo, etiqueta):
-        if not viejo or not nuevo:
+        if not isinstance(viejo, str) or not isinstance(nuevo, str):
             return
         viejo = viejo.strip()
         nuevo = nuevo.strip()
@@ -450,53 +450,31 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
         )
         texto_viejo = v_old.get("texto_en_documento") if v_old else None
         texto_nuevo = v_new.get("texto_en_documento")
-        if texto_viejo and texto_nuevo and texto_viejo != texto_nuevo:
-            reemplazos.append({
-                "viejo": texto_viejo,
-                "nuevo": texto_nuevo,
-                "etiqueta": f"valor.{tipo}.acto_{acto}",
-            })
+        agregar_reemplazo(texto_viejo, texto_nuevo, f"valor.{tipo}.acto_{acto}")
 
     # INMUEBLE
     inm_old = datos_anteriores.get("inmueble", {}) or {}
     inm_new = datos_nuevos.get("inmueble", {}) or {}
 
     for campo in ["numero", "matricula_inmobiliaria", "conjunto_o_edificio", "municipio", "departamento"]:
-        val_old = inm_old.get(campo)
-        val_new = inm_new.get(campo)
-        if val_old and val_new and val_old != val_new:
-            reemplazos.append({
-                "viejo": val_old,
-                "nuevo": val_new,
-                "etiqueta": f"inmueble.{campo}",
-            })
+        agregar_reemplazo(inm_old.get(campo), inm_new.get(campo), f"inmueble.{campo}")
 
     # NOTARIA
     not_old = datos_anteriores.get("notaria", {}) or {}
     not_new = datos_nuevos.get("notaria", {}) or {}
 
     for campo in ["nombre_notaria", "municipio_notaria", "numero_escritura"]:
-        val_old = not_old.get(campo)
-        val_new = not_new.get(campo)
-        if val_old and val_new and val_old != val_new:
-            reemplazos.append({
-                "viejo": val_old,
-                "nuevo": val_new,
-                "etiqueta": f"notaria.{campo}",
-            })
+        agregar_reemplazo(not_old.get(campo), not_new.get(campo), f"notaria.{campo}")
 
     # FECHAS
     fec_old = datos_anteriores.get("fechas", {}) or {}
     fec_new = datos_nuevos.get("fechas", {}) or {}
 
-    val_old = fec_old.get("fecha_otorgamiento")
-    val_new = fec_new.get("fecha_otorgamiento")
-    if val_old and val_new and val_old != val_new:
-        reemplazos.append({
-            "viejo": val_old,
-            "nuevo": val_new,
-            "etiqueta": "fechas.fecha_otorgamiento",
-        })
+    agregar_reemplazo(
+        fec_old.get("fecha_otorgamiento"),
+        fec_new.get("fecha_otorgamiento"),
+        "fechas.fecha_otorgamiento",
+    )
 
     return reemplazos
 
