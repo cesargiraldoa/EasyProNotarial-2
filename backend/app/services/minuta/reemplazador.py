@@ -228,8 +228,7 @@ def _normalizar_guiones(doc):
 
         texto_completo = ''.join(run.text for run in paragraph.runs)
 
-        texto_limpio = re.sub(r'-{2,}', '-', texto_completo)
-        texto_limpio = re.sub(r'- {2,}-', '- -', texto_limpio)
+        texto_limpio = re.sub(r'(?<= )--(?= )', '-', texto_completo)
         texto_limpio = re.sub(r' {2,}', ' ', texto_limpio)
 
         if texto_limpio == texto_completo:
