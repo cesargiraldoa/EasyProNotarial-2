@@ -284,16 +284,24 @@ def aplicar_reemplazos_por_contexto(
     doc: DocumentType,
     nombre_persona: str,
     reemplazos: list[dict],
+    nombres_excluir: Optional[list[str]] = None,
 ) -> int:
     """
-    Aplica reemplazos solo en párrafos que contienen nombre_persona.
-    Usado para reemplazos de género que no deben contaminar a otras personas.
+    Aplica reemplazos solo en párrafos que contienen nombre_persona
+    Y NO contienen ningún nombre de nombres_excluir.
+
+    El filtro de exclusión evita contaminar párrafos que listan varias
+    personas juntas (ej. "DANIELA CAMPO... y SEBASTIÁN NIETO GIRALDO...").
     Retorna el número de reemplazos efectuados.
     """
     nombre_upper = nombre_persona.upper()
+    excluir_upper = [n.upper() for n in (nombres_excluir or []) if n.strip()]
 
     def _procesar(paragraph) -> int:
-        if nombre_upper not in paragraph.text.upper():
+        texto_upper = paragraph.text.upper()
+        if nombre_upper not in texto_upper:
+            return 0
+        if any(excl in texto_upper for excl in excluir_upper):
             return 0
         total = 0
         for rep in reemplazos:
@@ -315,25 +323,34 @@ def aplicar_reemplazos_por_contexto(
     return total
 
 
-def aplicar_genero_contextual_docx(docx_path: str, pares: list[dict]) -> dict:
+def aplicar_genero_contextual_docx(
+    docx_path: str,
+    pares: list[dict],
+    todos_nombres: Optional[list[str]] = None,
+) -> dict:
     """
-    Aplica reemplazos de género solo en párrafos que mencionan a cada persona.
+    Aplica reemplazos de género solo en párrafos que mencionan a cada persona
+    y no mencionan a ninguna otra persona del documento.
     Modifica el archivo in-place.
 
     Args:
         docx_path: ruta del .docx de salida (ya procesado por aplicar_reemplazos_docx)
         pares: lista de {"nombre": str, "reemplazos": list[dict]}
+        todos_nombres: lista completa de nombres de personas en el documento;
+                       un párrafo se salta si menciona a cualquier otro nombre
 
     Returns:
         dict nombre → cantidad de reemplazos efectuados
     """
     doc = Document(docx_path)
+    nombres_ref = [n.strip() for n in (todos_nombres or []) if n.strip()]
     stats: dict = {}
     for par in pares:
         nombre = (par.get("nombre") or "").strip()
         reps = par.get("reemplazos") or []
         if nombre and reps:
-            stats[nombre] = aplicar_reemplazos_por_contexto(doc, nombre, reps)
+            otros = [n for n in nombres_ref if n.upper() != nombre.upper()]
+            stats[nombre] = aplicar_reemplazos_por_contexto(doc, nombre, reps, nombres_excluir=otros)
     doc.save(docx_path)
     return stats
 

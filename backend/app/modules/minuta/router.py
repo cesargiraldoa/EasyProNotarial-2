@@ -191,6 +191,8 @@ async def generar_minuta(
             {"viejo": "varon",        "nuevo": "mujer",       "etiqueta": "genero.varon_sin_tilde","palabra_completa": True},
             {"viejo": "soltero",      "nuevo": "soltera",     "etiqueta": "genero.soltero",        "palabra_completa": True},
             {"viejo": "SOLTERO",      "nuevo": "SOLTERA",     "etiqueta": "genero.SOLTERO",        "palabra_completa": True},
+            {"viejo": "colombiano",   "nuevo": "colombiana",  "etiqueta": "genero.colombiano",     "palabra_completa": True},
+            {"viejo": "COLOMBIANO",   "nuevo": "COLOMBIANA",  "etiqueta": "genero.COLOMBIANO",     "palabra_completa": True},
             {"viejo": "domiciliado",  "nuevo": "domiciliada", "etiqueta": "genero.domiciliado",    "palabra_completa": True},
             {"viejo": "DOMICILIADO",  "nuevo": "DOMICILIADA", "etiqueta": "genero.DOMICILIADO",   "palabra_completa": True},
             {"viejo": "identificado", "nuevo": "identificada","etiqueta": "genero.identificado",   "palabra_completa": True},
@@ -200,8 +202,14 @@ async def generar_minuta(
             {"viejo": "mujer",        "nuevo": "varón",       "etiqueta": "genero.mujer",          "palabra_completa": True},
             {"viejo": "MUJER",        "nuevo": "VARÓN",       "etiqueta": "genero.MUJER",          "palabra_completa": True},
             {"viejo": "soltera",      "nuevo": "soltero",     "etiqueta": "genero.soltera",        "palabra_completa": True},
+            {"viejo": "colombiana",   "nuevo": "colombiano",  "etiqueta": "genero.colombiana",     "palabra_completa": True},
             {"viejo": "domiciliada",  "nuevo": "domiciliado", "etiqueta": "genero.domiciliada",    "palabra_completa": True},
             {"viejo": "identificada", "nuevo": "identificado","etiqueta": "genero.identificada",   "palabra_completa": True},
+        ]
+        todos_nombres_doc = [
+            (p.get("nombre_completo") or p.get("NOMBRE_COMPLETO") or "").strip()
+            for p in datos_nv.get("personas", [])
+            if (p.get("nombre_completo") or p.get("NOMBRE_COMPLETO") or "").strip()
         ]
         pares_genero: list[dict] = []
         for rol, persona_nueva in personas_nuevas.items():
@@ -238,7 +246,7 @@ async def generar_minuta(
 
         # ── 5. Reemplazos de género contextual (solo en párrafos de cada persona) ─
         if pares_genero:
-            stats_genero = aplicar_genero_contextual_docx(path_salida, pares_genero)
+            stats_genero = aplicar_genero_contextual_docx(path_salida, pares_genero, todos_nombres=todos_nombres_doc)
             logger.info("[generar] género contextual: %s", stats_genero)
 
         # ── 6. Leer bytes y subir a Supabase Storage ─────────────────────────────
