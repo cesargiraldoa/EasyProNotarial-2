@@ -249,13 +249,25 @@ def detectar_concordancia(
             {"role": "user", "content": prompt_final},
         ],
         temperature=0.1,
-        max_tokens=4000,
+        max_tokens=8000,
         response_format={"type": "json_object"},
     )
 
     raw = response.choices[0].message.content or "{}"
     usage = response.usage
-    data = json.loads(raw)
+
+    # Quitar bloques ```json ... ``` por si el modelo los agrega igual
+    raw_limpio = re.sub(r"^```(?:json)?\s*", "", raw.strip())
+    raw_limpio = re.sub(r"\s*```$", "", raw_limpio.strip())
+
+    try:
+        data = json.loads(raw_limpio)
+    except json.JSONDecodeError as exc:
+        print(f"[concordancia] JSONDecodeError: {exc}")
+        print(f"[concordancia] finish_reason: {response.choices[0].finish_reason}")
+        print(f"[concordancia] completion_tokens: {usage.completion_tokens}")
+        print(f"[concordancia] raw (primeros 2000 chars):\n{raw[:2000]}")
+        raise
     cambios = data.get("cambios", [])
 
     # Enriquecer cada cambio con conteo de ocurrencias en el texto
