@@ -1,5 +1,6 @@
 ﻿import json
 import logging
+import re
 import tempfile
 import traceback
 import uuid as _uuid
@@ -212,6 +213,23 @@ async def generar_minuta(
             for p in lista
             if (p.get("nombre_completo") or p.get("NOMBRE_COMPLETO") or "").strip()
         })
+
+        # Enriquecer con secuencias MAYÚSCULAS encontradas en párrafos del documento
+        # que contengan algún nombre ya conocido. Rescata personas que el detector
+        # no detectó (ej. SEBASTIÁN cuando el análisis solo devolvió a DANIELA).
+        # Solo se scanean párrafos relevantes para evitar falsos positivos globales.
+        _RE_MAYUS = re.compile(r'[A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,})+')
+        _ya_conocidos = {n.upper() for n in todos_nombres_doc}
+        for _linea in texto_doc.split("\n"):
+            _linea_up = _linea.upper()
+            if not any(n in _linea_up for n in _ya_conocidos):
+                continue
+            for _m in _RE_MAYUS.finditer(_linea):
+                _candidato = _m.group(0)
+                if _candidato.upper() not in _ya_conocidos:
+                    todos_nombres_doc.append(_candidato)
+                    _ya_conocidos.add(_candidato.upper())
+
         pares_genero: list[dict] = []
         for rol, persona_nueva in personas_nuevas.items():
             persona_vieja = personas_viejas.get(rol, {})

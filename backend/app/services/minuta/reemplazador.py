@@ -235,14 +235,12 @@ def _normalizar_guiones(doc):
         if texto_limpio == texto_completo:
             continue
 
-        pos = 0
-        for run in paragraph.runs:
-            largo = len(run.text)
-            run.text = texto_limpio[pos:pos + largo] if pos < len(texto_limpio) else ''
-            pos += largo
-
-        if pos < len(texto_limpio):
-            paragraph.runs[-1].text += texto_limpio[pos:]
+        # Todo el texto limpio va al primer run; el resto se vacía.
+        # Evita el problema de redistribuir con longitudes originales cuando
+        # texto_limpio es más corto que texto_completo.
+        paragraph.runs[0].text = texto_limpio
+        for run in paragraph.runs[1:]:
+            run.text = ""
 
     return doc
 
