@@ -248,7 +248,7 @@ def detectar_concordancia(
             {"role": "user", "content": prompt_final},
         ],
         temperature=0.1,
-        max_tokens=32000,
+        max_tokens=16384,
         response_format={"type": "json_object"},
     )
 
