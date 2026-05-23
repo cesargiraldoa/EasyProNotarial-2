@@ -74,15 +74,19 @@ INSTRUCCIONES CRITICAS:
    - "SENOR"     -> "SENORA"       (solo instancias sin articulo ya cubiertas en seccion 2)
    - "representante legal", "poderdante", "otorgante", "constituyente" — NO CAMBIAR (neutros)
 
-4. ADJETIVOS Y PARTICIPIOS referidos a esta persona:
+4. ADJETIVOS, PARTICIPIOS Y SUSTANTIVOS DESCRIPTIVOS referidos a esta persona:
+   - "varon"         -> "mujer",         "VARON"         -> "MUJER"
    - "identificado"  -> "identificada",  "IDENTIFICADO"  -> "IDENTIFICADA"
    - "domiciliado"   -> "domiciliada",   "DOMICILIADO"   -> "DOMICILIADA"
-   - "casado"        -> "casada",        "CASADO"        -> "CASADA"
    - "soltero"       -> "soltera",       "SOLTERO"       -> "SOLTERA"
+   - "casado"        -> "casada",        "CASADO"        -> "CASADA"
    - "colombiano"    -> "colombiana",    "COLOMBIANO"    -> "COLOMBIANA"
    - "venezolano"    -> "venezolana"     (y demas gentilicios con genero)
    - "autorizado"    -> "autorizada",    "AUTORIZADO"    -> "AUTORIZADA"
    - "obligado"      -> "obligada",      "OBLIGADO"      -> "OBLIGADA"
+   - "mayor de edad" -> NO CAMBIAR (neutro)
+   IMPORTANTE: Devuelve SOLO las variantes que realmente aparecen en el texto.
+   Mayusculas y minusculas como entradas SEPARADAS si ambas aparecen.
 
 5. PRONOMBRES referidos a esta persona:
    - "el mismo"  -> "ella misma",  "EL MISMO"  -> "ELLA MISMA"
