@@ -206,11 +206,12 @@ async def generar_minuta(
             {"viejo": "domiciliada",  "nuevo": "domiciliado", "etiqueta": "genero.domiciliada",    "palabra_completa": True},
             {"viejo": "identificada", "nuevo": "identificado","etiqueta": "genero.identificada",   "palabra_completa": True},
         ]
-        todos_nombres_doc = [
+        todos_nombres_doc = list({
             (p.get("nombre_completo") or p.get("NOMBRE_COMPLETO") or "").strip()
-            for p in datos_nv.get("personas", [])
+            for lista in [datos_ant.get("personas", []), datos_nv.get("personas", [])]
+            for p in lista
             if (p.get("nombre_completo") or p.get("NOMBRE_COMPLETO") or "").strip()
-        ]
+        })
         pares_genero: list[dict] = []
         for rol, persona_nueva in personas_nuevas.items():
             persona_vieja = personas_viejas.get(rol, {})
