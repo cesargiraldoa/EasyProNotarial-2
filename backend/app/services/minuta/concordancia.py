@@ -53,6 +53,10 @@ tambien mencione a {nombre_nuevo}):
 
 INSTRUCCIONES CRITICAS:
 
+Tu tarea es EXCLUSIVAMENTE cambiar los articulos y sustantivos de ROL.
+NO cambies palabras de genero descriptivo (varon/mujer, identificado/a,
+domiciliado/a, soltero/a, colombiano/a, etc.) — esas las maneja otro sistema.
+
 1. SOLO devuelves JSON valido. Sin explicaciones.
 
 2. ARTICULOS — SIEMPRE como FRASE COMPLETA (articulo + sustantivo del rol). NUNCA articulo solo.
@@ -70,52 +74,34 @@ INSTRUCCIONES CRITICAS:
    - "un {{rol}}"  -> "una {{rol-f}}"
    Incluye solo las variantes que REALMENTE APARECEN en el texto del documento.
 
-3. SUSTANTIVOS solos (sin articulo inmediato, ej: "en calidad de COMPRADOR"):
+3. SUSTANTIVOS de rol solos (sin articulo inmediato, ej: "en calidad de COMPRADOR"):
    - "COMPRADOR" -> "COMPRADORA",  "comprador" -> "compradora"
    - "VENDEDOR"  -> "VENDEDORA",   "vendedor"  -> "vendedora"
    - "DEUDOR"    -> "DEUDORA",     "deudor"    -> "deudora"
    - "DEUDOR HIPOTECANTE" -> "DEUDORA HIPOTECANTE"
    - "APODERADO" -> "APODERADA",   "apoderado" -> "apoderada"
-   - "VARON"     -> "MUJER",       "varon"     -> "mujer"
    - "SENOR"     -> "SENORA"       (solo instancias sin articulo ya cubiertas en seccion 2)
    - "representante legal", "poderdante", "otorgante", "constituyente" — NO CAMBIAR (neutros)
 
-4. ADJETIVOS, PARTICIPIOS Y SUSTANTIVOS DESCRIPTIVOS referidos a esta persona:
-   - "varon"         -> "mujer",         "VARON"         -> "MUJER"
-   - "identificado"  -> "identificada",  "IDENTIFICADO"  -> "IDENTIFICADA"
-   - "domiciliado"   -> "domiciliada",   "DOMICILIADO"   -> "DOMICILIADA"
-   - "soltero"       -> "soltera",       "SOLTERO"       -> "SOLTERA"
-   - "casado"        -> "casada",        "CASADO"        -> "CASADA"
-   - "colombiano"    -> "colombiana",    "COLOMBIANO"    -> "COLOMBIANA"
-   - "venezolano"    -> "venezolana"     (y demas gentilicios con genero)
-   - "autorizado"    -> "autorizada",    "AUTORIZADO"    -> "AUTORIZADA"
-   - "obligado"      -> "obligada",      "OBLIGADO"      -> "OBLIGADA"
-   - "mayor de edad" -> NO CAMBIAR (neutro)
-   IMPORTANTE: Devuelve SOLO las variantes que realmente aparecen en el texto.
-   Mayusculas y minusculas como entradas SEPARADAS si ambas aparecen.
-
-5. PRONOMBRES referidos a esta persona:
-   - "el mismo"  -> "ella misma",  "EL MISMO"  -> "ELLA MISMA"
-   - "aquel"     -> "aquella",     "AQUEL"     -> "AQUELLA"
-   - "dicho"     -> "dicha",       "DICHO"     -> "DICHA"
-   - "el citado" -> "la citada",   "EL CITADO" -> "LA CITADA"
-
-6. FORMULAS MIXTAS notariales — devolver el cambio exacto incluyendo los parentesis:
+4. FORMULAS MIXTAS notariales — devolver el cambio exacto incluyendo los parentesis:
    - "EL(LOS) COMPRADOR(ES)"  -> "LA(LAS) COMPRADORA(S)"
    - "EL(LOS) DEUDOR(ES)"     -> "LA(LAS) DEUDORA(S)"
    - "COMPRADOR(ES)"          -> "COMPRADORA(S)"
    - "DEUDOR(ES)"             -> "DEUDORA(S)"
 
-7. NO devuelvas cambios para:
+5. NO devuelvas cambios para:
    - Frases hechas: "el de la voz", "el suscrito notario", "el presente instrumento"
    - Referencias a OTRAS personas del documento con genero distinto
    - Palabras neutras: otorgante, poderdante, constituyente, representante legal
    - Entidades juridicas
+   - Palabras descriptivas de genero: varon, mujer, identificado/a, domiciliado/a,
+     soltero/a, casado/a, colombiano/a, venezolano/a, autorizado/a, obligado/a,
+     el mismo, ella misma, dicho, dicha — estas NO son tu responsabilidad
 
-8. Una entrada por frase/palabra exacta. Mayusculas y minusculas como entradas SEPARADAS
+6. Una entrada por frase/palabra exacta. Mayusculas y minusculas como entradas SEPARADAS
    si AMBAS variantes aparecen en el texto.
 
-9. Para CADA cambio devuelve:
+7. Para CADA cambio devuelve:
    - palabra_antes: frase o palabra exacta a buscar (respetando mayusculas del documento)
    - palabra_despues: frase o palabra exacta de reemplazo
    - contexto_ejemplo: fragmento de ~15 palabras alrededor del cambio en el documento
@@ -130,28 +116,21 @@ ESQUEMA JSON:
       "palabra_despues": "LA COMPRADORA",
       "contexto_ejemplo": "PRIMERA: EL COMPRADOR declara que ha recibido",
       "confianza": 0.98,
-      "razon": "Articulo + sustantivo referido a esta persona como compradora"
+      "razon": "Articulo + sustantivo de rol referido a esta persona"
     }},
     {{
       "palabra_antes": "DEL COMPRADOR",
       "palabra_despues": "DE LA COMPRADORA",
       "contexto_ejemplo": "los derechos DEL COMPRADOR sobre el inmueble",
       "confianza": 0.98,
-      "razon": "Contraccion DEL + sustantivo referido a esta persona"
+      "razon": "Contraccion DEL + sustantivo de rol"
     }},
     {{
       "palabra_antes": "COMPRADOR",
       "palabra_despues": "COMPRADORA",
       "contexto_ejemplo": "actuando como COMPRADOR del inmueble ubicado",
       "confianza": 1.0,
-      "razon": "Sustantivo sin articulo referido a esta persona"
-    }},
-    {{
-      "palabra_antes": "IDENTIFICADO",
-      "palabra_despues": "IDENTIFICADA",
-      "contexto_ejemplo": "IDENTIFICADO con cedula de ciudadania numero",
-      "confianza": 1.0,
-      "razon": "Participio referido a esta persona"
+      "razon": "Sustantivo de rol sin articulo"
     }}
   ]
 }}
