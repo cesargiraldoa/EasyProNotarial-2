@@ -230,12 +230,23 @@ async def generar_minuta(
         # no detectó (ej. SEBASTIÁN cuando el análisis solo devolvió a DANIELA).
         # Solo se scanean párrafos relevantes para evitar falsos positivos globales.
         _RE_MAYUS = re.compile(r'[A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,})+')
+        _PALABRAS_NO_NOMBRE = {
+            "PARTE", "COMPRADORA", "COMPRADOR", "VENDEDOR", "VENDEDORA",
+            "ACREEDOR", "ACREEDORA", "DEUDOR", "DEUDORA", "HIPOTECANTE",
+            "OTORGANTE", "FIDEICOMISO", "BANCO", "NOTARIA", "NOTARIO",
+            "CONJUNTO", "MUNICIPIO", "DEPARTAMENTO", "REPÚBLICA", "REPUBLICA",
+            "COLOMBIA", "ESCRITURA", "INMUEBLE", "APARTAMENTO", "OFICINA",
+        }
         _ya_conocidos = {n.upper() for n in todos_nombres_doc}
         for _linea in texto_doc.split("\n"):
             for _m in _RE_MAYUS.finditer(_linea):
                 _candidato = _m.group(0)
                 palabras = _candidato.split()
-                if 2 <= len(palabras) <= 5 and _candidato.upper() not in _ya_conocidos:
+                if not (2 <= len(palabras) <= 5):
+                    continue
+                if any(p in _PALABRAS_NO_NOMBRE for p in palabras):
+                    continue
+                if _candidato.upper() not in _ya_conocidos:
                     todos_nombres_doc.append(_candidato)
                     _ya_conocidos.add(_candidato.upper())
 
@@ -246,7 +257,8 @@ async def generar_minuta(
             if not nombre_nuevo or genero_nuevo not in ("M", "F"):
                 continue
             reemplazos_genero = _GENERO_M_A_F if genero_nuevo == "F" else _GENERO_F_A_M
-            pares_genero.append({"nombre": nombre_nuevo, "reemplazos": reemplazos_genero})
+            pares_genero.append({"nombre": nombre_nuevo, "reemplazos": reemplazos_genero, "genero": genero_nuevo})
+        pares_genero.sort(key=lambda x: 0 if x.get("genero") == "F" else 1)
 
         # ── 4. Aplicar reemplazos de datos al .docx ──────────────────────────────
         logger.info(
