@@ -316,6 +316,7 @@ def aplicar_reemplazos_por_contexto(
         texto_upper = paragraph.text.upper()
         if nombre_upper not in texto_upper:
             return 0
+        print(f"[GENERO DEBUG] nombre={nombre_upper[:30]} | excluir={excluir_upper[:5]} | párrafo_tiene_excluido={any(e in texto_upper for e in excluir_upper)} | texto={texto_upper[:80]}", flush=True)
         if any(excl in texto_upper for excl in excluir_upper):
             return 0
         total = 0
