@@ -232,12 +232,10 @@ async def generar_minuta(
         _RE_MAYUS = re.compile(r'[A-ZÁÉÍÓÚÜÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{3,})+')
         _ya_conocidos = {n.upper() for n in todos_nombres_doc}
         for _linea in texto_doc.split("\n"):
-            _linea_up = _linea.upper()
-            if not any(n in _linea_up for n in _ya_conocidos):
-                continue
             for _m in _RE_MAYUS.finditer(_linea):
                 _candidato = _m.group(0)
-                if _candidato.upper() not in _ya_conocidos:
+                palabras = _candidato.split()
+                if 2 <= len(palabras) <= 5 and _candidato.upper() not in _ya_conocidos:
                     todos_nombres_doc.append(_candidato)
                     _ya_conocidos.add(_candidato.upper())
 
