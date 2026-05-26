@@ -155,15 +155,24 @@ INSTRUCCIONES:
    - texto_en_documento: como aparece literalmente ($212.600.000)
    - acto_relacionado: a que acto pertenece (1, 2, 3...) si la escritura tiene multiples actos
 
-4. Para el INMUEBLE:
-   - tipo: "apartamento", "casa", "lote", "local", etc.
-   - numero: el numero del apartamento/casa
+4. Para el INMUEBLE (extraer con maxima precision):
+   - tipo: tipo en minusculas — "apartamento", "casa", "local", "lote", "parqueadero", "bodega", "oficina", "deposito"
+   - numero: numero del apartamento/casa/unidad
    - matricula_inmobiliaria: numero de matricula (formato XXX-XXXXXXX)
    - conjunto_o_edificio: nombre del edificio o conjunto
-   - municipio: ciudad
-   - departamento
+   - municipio: ciudad donde esta el inmueble
+   - departamento: departamento donde esta el inmueble
    - coeficiente_copropiedad: si se menciona
-   - linderos: si se menciona (resumido o texto completo)
+   - cedula_catastral: numero completo tal como aparece (ej: "0881001060001000020000100002"). Buscar etiquetas "CEDULA CATASTRAL:", "Cedula Catastral:", "CODIGO CATASTRAL SEGUN CERTIFICADO"
+   - codigo_catastral: codigo alfanumerico (ej: "AAX0009PUYC"). Buscar "CODIGO CATASTRAL SEGUN CERTIFICADO DE TRADICION:" o similar
+   - area_construida: con unidades exactas (ej: "59.66 M2"). Buscar "Area construida", "area construida interior", "AREA CONSTRUIDA"
+   - area_privada: con unidades (ej: "38.39 m2"). Buscar "Area privada", "area privada cubierta"
+   - area_total: con unidades. Buscar "area total", "area total construida"
+   - piso: planta o piso donde esta (ej: "SEGUNDA PLANTA", "piso catorce", "decimo noveno piso")
+   - barrio: nombre del barrio si aparece
+   - direccion: direccion completa con calle/carrera y numero
+   - nota_linderos: si hay nota introductoria de linderos (ej: "segun planos aprobados")
+   - linderos: texto COMPLETO de linderos tal como aparece — NO resumir ni truncar
 
 5. Para la NOTARIA:
    - nombre_notaria: nombre completo
@@ -174,7 +183,10 @@ INSTRUCCIONES:
    - fecha_otorgamiento: dia, mes, ano
 
 7. Para los ACTOS contenidos en la escritura (puede haber multiples):
-   - lista de actos: "COMPRAVENTA_VIS", "HIPOTECA", "LIBERACION_HIPOTECA", "PROTOCOLIZACION_CTO", "PATRIMONIO_FAMILIA", "PODER_ESPECIAL", "RENUNCIA_CONDICION_RESOLUTORIA", etc.
+   - El PRIMER elemento debe ser el acto PRINCIPAL: el que da nombre a la escritura y tiene cuantia.
+   - Actos principales (van primero): COMPRAVENTA, COMPRAVENTA_VIS, HIPOTECA, LIBERACION_HIPOTECA, AFECTACION_VIVIENDA_FAMILIAR, PODER_GENERAL, CAPITULACIONES_MATRIMONIALES, CORRECCION_REGISTRO_CIVIL
+   - Actos secundarios (van despues): RENUNCIA_CONDICION_RESOLUTORIA, PROTOCOLIZACION_CTO, PODER_ESPECIAL, CANCELACION_COMODATO, PATRIMONIO_FAMILIA
+   - Orden correcto: [acto_principal, ...actos_secundarios]
 
 8. Para DECISIONES / RESPUESTAS del cliente:
    - vivienda_familiar: true/false/null si se menciona
@@ -216,6 +228,15 @@ ESQUEMA JSON:
     "municipio": "Caldas",
     "departamento": "Antioquia",
     "coeficiente_copropiedad": null,
+    "cedula_catastral": "0881001060001000020000100002",
+    "codigo_catastral": "AAX0009PUYC",
+    "area_construida": "59.66 M2",
+    "area_privada": "38.39 m2",
+    "area_total": null,
+    "piso": "OCTAVO PISO",
+    "barrio": null,
+    "direccion": "Carrera 45 # 12-30",
+    "nota_linderos": null,
     "linderos": null
   },
   "notaria": {
@@ -226,7 +247,7 @@ ESQUEMA JSON:
   "fechas": {
     "fecha_otorgamiento": null
   },
-  "actos": ["LIBERACION_HIPOTECA", "PROTOCOLIZACION_CTO", "COMPRAVENTA_VIS", "RENUNCIA_CONDICION_RESOLUTORIA", "HIPOTECA", "PATRIMONIO_FAMILIA", "PODER_ESPECIAL"],
+  "actos": ["COMPRAVENTA_VIS", "HIPOTECA", "LIBERACION_HIPOTECA", "PATRIMONIO_FAMILIA", "RENUNCIA_CONDICION_RESOLUTORIA", "PROTOCOLIZACION_CTO", "PODER_ESPECIAL"],
   "decisiones": {
     "vivienda_familiar": null,
     "patrimonio_familia": null,
