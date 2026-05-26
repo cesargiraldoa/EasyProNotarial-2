@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, BadgeCheck, CheckCircle2 } from "lucide-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ValidatedInput } from "@/components/ui/validated-input";
+import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 import {
   createDocumentCase,
   extractHttpErrorMessage,
@@ -527,6 +528,14 @@ export function CreateCaseWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+
+  function updateStep(id: string, status: AiStep['status'], description?: string) {
+    setAiSteps(prev => prev.map(s => s.id === id ? { ...s, status, ...(description ? { description } : {}) } : s));
+  }
+
   const [canSelectNotary, setCanSelectNotary] = useState(true);
   const [showSubstituteNotary, setShowSubstituteNotary] = useState(false);
   const [expandedGeneralField, setExpandedGeneralField] = useState<string | null>(null);
@@ -1043,8 +1052,20 @@ export function CreateCaseWizard() {
         if (!caseDetail) {
           throw new Error("Primero debes crear la minuta para guardar y generar el Word.");
         }
+        setAiSteps([
+          { id: 'template', label: 'Plantilla cargada', description: 'Variante seleccionada', status: 'done' },
+          { id: 'intervinientes', label: 'Intervinientes procesados', description: 'Personas y entidades', status: 'active' },
+          { id: 'redactar', label: 'Redactando escritura…', description: 'Gari está generando el cuerpo notarial', status: 'pending' },
+          { id: 'clausulas', label: 'Cláusulas finales', description: 'Declaraciones y autenticación', status: 'pending' },
+          { id: 'guardar', label: 'Guardando borrador', description: `cases/case-${caseDetail.id}/draft/`, status: 'pending' },
+        ]);
+        setAiProgress(15);
+        setAiModalOpen(true);
         const updated = await saveCaseActData(caseDetail.id, { data_json: JSON.stringify(actData) });
         setCaseDetail(updated);
+        updateStep('intervinientes', 'done', 'Datos guardados');
+        updateStep('redactar', 'active');
+        setAiProgress(40);
         const base = process.env.NEXT_PUBLIC_API_URL ?? "";
         const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
         const response = await fetch(`${base}/api/v1/document-flow/cases/${caseDetail.id}/generate-from-template`, {
@@ -1060,11 +1081,24 @@ export function CreateCaseWizard() {
           const text = await response.text();
           throw new Error(extractHttpErrorMessage(text, "No fue posible generar el Word de la minuta."));
         }
+        updateStep('redactar', 'done', 'Escritura generada');
+        updateStep('clausulas', 'active');
+        setAiProgress(72);
+        await new Promise(r => setTimeout(r, 600));
+        updateStep('clausulas', 'done', 'Cláusulas incluidas');
+        updateStep('guardar', 'active');
+        setAiProgress(90);
+        await new Promise(r => setTimeout(r, 500));
+        updateStep('guardar', 'done', 'Borrador guardado en Storage');
+        setAiProgress(100);
+        await new Promise(r => setTimeout(r, 400));
+        setAiModalOpen(false);
         setFeedback("Minuta guardada y Word generado. Abriendo detalle de la minuta...");
         router.replace(`/dashboard/casos/${caseDetail.id}`);
         return;
       }
     } catch (stepError) {
+      setAiModalOpen(false);
       setError(stepError instanceof Error ? stepError.message : "No fue posible avanzar en el wizard.");
     } finally {
       setIsSaving(false);
@@ -1414,6 +1448,14 @@ export function CreateCaseWizard() {
           ) : null}
         </div>
       </section>
+
+      <AiProgressModal
+        open={aiModalOpen}
+        title="Generando escritura"
+        subtitle="Gari está redactando el cuerpo notarial"
+        steps={aiSteps}
+        progress={aiProgress}
+      />
     </div>
   );
 }

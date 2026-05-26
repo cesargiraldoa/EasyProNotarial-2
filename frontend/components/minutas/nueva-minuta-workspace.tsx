@@ -11,6 +11,7 @@ import {
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
 } from "@/lib/minuta";
+import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -762,6 +763,15 @@ export function NuevaMinutaWorkspace() {
   const [notariaEdit, setNotariaEdit] = useState<NotariaEdit>(EMPTY_NOTARIA);
   const [valoresEdit, setValoresEdit] = useState<MinutaValor[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiModalTitle, setAiModalTitle] = useState('');
+  const [aiModalSubtitle, setAiModalSubtitle] = useState('');
+
+  function updateStep(id: string, status: AiStep['status'], description?: string) {
+    setAiSteps(prev => prev.map(s => s.id === id ? { ...s, status, ...(description ? { description } : {}) } : s));
+  }
 
   function handleDragOver(e: React.DragEvent) { e.preventDefault(); setIsDragging(true); }
   function handleDragLeave() { setIsDragging(false); }
@@ -788,9 +798,32 @@ export function NuevaMinutaWorkspace() {
 
   async function handleAnalizar() {
     if (!file) return;
-    setError(null); setIsAnalyzing(true);
+    setError(null);
+    setIsAnalyzing(true);
+    setAiModalTitle('Analizando documento');
+    setAiModalSubtitle('Esto puede tomar hasta 30 segundos');
+    setAiSteps([
+      { id: 'upload', label: 'Documento recibido', description: `${file.name} · ${(file.size / 1024).toFixed(0)} KB`, status: 'done' },
+      { id: 'detect', label: 'Detectando tipo de acto…', description: 'Clasificando entre B1 y B2', status: 'active' },
+      { id: 'personas', label: 'Extrayendo personas', description: 'Compradores, vendedores, entidades', status: 'pending' },
+      { id: 'inmueble', label: 'Datos del inmueble y valores', description: 'Municipio, precio, escritura', status: 'pending' },
+    ]);
+    setAiProgress(25);
+    setAiModalOpen(true);
     try {
       const result = await analyzeMinuta(file);
+      updateStep('detect', 'done', `Tipo detectado: ${result.modo_detectado ?? 'B2'}`);
+      updateStep('personas', 'active');
+      setAiProgress(60);
+      await new Promise(r => setTimeout(r, 600));
+      updateStep('personas', 'done', `${result.datos?.personas?.length ?? 0} personas encontradas`);
+      updateStep('inmueble', 'active');
+      setAiProgress(85);
+      await new Promise(r => setTimeout(r, 500));
+      updateStep('inmueble', 'done', 'Inmueble y valores cargados');
+      setAiProgress(100);
+      await new Promise(r => setTimeout(r, 400));
+      setAiModalOpen(false);
       setAnalisisResult(result);
       setPersonas((result.datos.personas ?? []).map((p) => ({ ...p })));
       setInmuebleEdit({ ...EMPTY_INMUEBLE, ...(result.datos.inmueble ?? {}) });
@@ -806,8 +839,11 @@ export function NuevaMinutaWorkspace() {
             : v.texto_en_documento,
       })));
     } catch (err) {
+      setAiModalOpen(false);
       setError(err instanceof Error ? err.message : "Error al analizar el documento.");
-    } finally { setIsAnalyzing(false); }
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
   function updatePersona(idx: number, field: keyof MinutaPersona, value: string) {
@@ -843,7 +879,18 @@ export function NuevaMinutaWorkspace() {
 
   async function handleGenerar() {
     if (!file || !analisisResult) return;
-    setError(null); setIsGenerating(true);
+    setError(null);
+    setIsGenerating(true);
+    setAiModalTitle('Generando minuta');
+    setAiModalSubtitle('Aplicando reemplazos y concordancia de género');
+    setAiSteps([
+      { id: 'validate', label: 'Datos validados', description: 'Personas, inmueble y notaría', status: 'done' },
+      { id: 'replace', label: 'Aplicando reemplazos', description: 'Sustituyendo campos en el documento', status: 'active' },
+      { id: 'concordancia', label: 'Concordancia de género…', description: 'Ajustando artículos y pronombres con IA', status: 'pending' },
+      { id: 'upload', label: 'Guardando documento', description: 'Subiendo a Supabase Storage', status: 'pending' },
+    ]);
+    setAiProgress(20);
+    setAiModalOpen(true);
     try {
       const datosNuevos = {
         ...analisisResult.datos,
@@ -857,13 +904,26 @@ export function NuevaMinutaWorkspace() {
         },
         fechas: { fecha_otorgamiento: notariaEdit.fecha_otorgamiento },
       };
+      await new Promise(r => setTimeout(r, 800));
+      updateStep('replace', 'done', 'Reemplazos aplicados');
+      updateStep('concordancia', 'active');
+      setAiProgress(55);
       const result = await generateMinuta(
         file,
         { ...analisisResult.datos, personas: analisisResult.datos.personas },
         datosNuevos as unknown as MinutaDatos,
       );
+      updateStep('concordancia', 'done', 'Artículos y pronombres ajustados');
+      updateStep('upload', 'active');
+      setAiProgress(85);
+      await new Promise(r => setTimeout(r, 500));
+      updateStep('upload', 'done', 'Documento guardado correctamente');
+      setAiProgress(100);
+      await new Promise(r => setTimeout(r, 400));
+      setAiModalOpen(false);
       router.push(result.onlyoffice_path);
     } catch (err) {
+      setAiModalOpen(false);
       setError(err instanceof Error ? err.message : "Error al generar la minuta.");
       setIsGenerating(false);
     }
@@ -1059,6 +1119,14 @@ export function NuevaMinutaWorkspace() {
           </button>
         </div>
       )}
+
+      <AiProgressModal
+        open={aiModalOpen}
+        title={aiModalTitle}
+        subtitle={aiModalSubtitle}
+        steps={aiSteps}
+        progress={aiProgress}
+      />
     </div>
   );
 }
