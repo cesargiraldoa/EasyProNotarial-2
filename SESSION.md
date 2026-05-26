@@ -1,6 +1,47 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26
+
+**Objetivo de la sesión:** Renovación del design system (tipografía, tokens semánticos, colores de gráficas) e implementación de estados de progreso por pasos para las acciones IA.
+
+**Realizado:**
+- **globals.css — tipografía:** `font-family` cambia de Aptos a `var(--font-jakarta)` con fallback a Segoe UI
+- **layout.tsx — Plus Jakarta Sans (1059f62):** `next/font/google` con pesos 300/400/500/600, variable CSS `--font-jakarta` inyectada en `<body>`
+- **globals.css — variables semánticas (1059f62):** Nuevas vars en `:root` y `[data-theme="dark"]`: `--primary-light`, `--error`, `--error-text`, `--error-border`, `--warning-text`, `--warning-border`, `--success-text`, `--success-border`, `--info-bg`, `--info-text`, `--info-border`
+- **globals.css — componentes .ep-* (1059f62):** `.ep-card` con `0.5px` border + hover state con sombra suave; `.ep-nav-item` con `transition: 0.12s`; 5 nuevas clases `.ep-badge-{success,warning,error,info,neutral}`; sombras inset dark-safe (0.04 light / 0.02 dark con override `[data-theme="dark"]`)
+- **validated-input.tsx (1059f62):** Colores de error usan `var(--error-text)` y `var(--error-border)` en lugar de `rose-500`
+- **color-constants.ts (1059f62):** Nuevo archivo `frontend/lib/color-constants.ts` con `CHART_COLORS` y `CHART_PALETTE` sincronizados con el design system
+- **dashboard.tsx (1059f62 + b3404e6):** `CHART_PALETTE` reemplaza array hardcodeado; luego rediseño completo del PieActCard: donut chart (`innerRadius=55`), leyenda lateral custom con color swatches, tooltip personalizado usando CSS vars del sistema
+- **ai-progress-modal.tsx (b12bb3b):** Nuevo componente reutilizable con pasos `done/active/pending`, barra de progreso animada y `PulseDots` con `@keyframes ep-pulse`; dark-mode nativo vía CSS vars
+- **nueva-minuta-workspace.tsx (b12bb3b):** `handleAnalizar` y `handleGenerar` integran `AiProgressModal` con 4 pasos cada uno; progreso simulado + cierre automático; modal se cierra en `catch`
+- **create-case-wizard.tsx (b12bb3b):** `handlePrimaryAction` paso 2 (Gari) muestra `AiProgressModal` con 5 pasos (plantilla → intervinientes → redactar → cláusulas → guardar); modal se cierra en `catch`
+
+**Archivos creados/modificados:**
+- `frontend/app/layout.tsx` — Plus Jakarta Sans, variable --font-jakarta
+- `frontend/app/globals.css` — font-family, vars semánticas, .ep-badge-*, sombras inset, @keyframes ep-pulse
+- `frontend/components/ui/validated-input.tsx` — error colors con CSS vars
+- `frontend/lib/color-constants.ts` — nuevo archivo, CHART_COLORS + CHART_PALETTE
+- `frontend/components/app-shell/dashboard.tsx` — CHART_PALETTE + rediseño PieActCard donut
+- `frontend/components/ui/ai-progress-modal.tsx` — nuevo componente AiProgressModal
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — AiProgressModal en analizar y generar
+- `frontend/components/cases/create-case-wizard.tsx` — AiProgressModal en Gari paso 2
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Verificar bug SEBASTIÁN en producción** — Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway para confirmar que SEBASTIÁN no recibe reemplazos incorrectos
+2. **[CRÍTICO] Verificar concordancia con Claude** — Confirmar `ANTHROPIC_API_KEY` en Railway y que artículos EL→LA / DEL→DE LA funcionan
+3. **[CRÍTICO] Deploy a producción** — `vercel --cwd frontend --prod` (3 commits nuevos pendientes de deploy) + push a Railway del backend si hay cambios
+4. **[MEDIA] Guiones dobles `-- -` sin resolver del todo** — Confirmar con documento real que `_normalizar_guiones` funciona correctamente
+5. **[BAJA] Alembic out-of-sync** — Ejecutar en Supabase: `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+6. **[BAJA] Debug prints `GENERO DEBUG`** — Remover prints de debug en `router.py` y `reemplazador.py` antes de demo
+
+**Estado al cierre:**
+- Backend: Railway operativo — commit `afab702` activo (sin cambios de backend hoy)
+- Frontend: Vercel pendiente deploy — 3 commits nuevos locales no pusheados a Vercel
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio — 3 commits ahead de origin/main (se pushean en este cierre)
+
+---
 ## Sesión 2026-05-23 (tarde)
 
 **Objetivo de la sesión:** Completar el motor de minutas — fixes de género/guiones, secciones editables de inmueble/notaría/valores en el frontend, y cobertura completa de reemplazos en el backend.
