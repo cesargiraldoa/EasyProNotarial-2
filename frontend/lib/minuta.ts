@@ -36,6 +36,16 @@ export type MinutaInmueble = {
   departamento: string | null;
   coeficiente_copropiedad: string | null;
   linderos: string | null;
+  cedula_catastral: string | null;
+  codigo_catastral: string | null;
+  area_construida: string | null;
+  area_privada: string | null;
+  area_total: string | null;
+  direccion: string | null;
+  barrio: string | null;
+  piso: string | null;
+  nota_linderos: string | null;
+  propiedad_horizontal: string | null;
 };
 
 export type MinutaNotaria = {

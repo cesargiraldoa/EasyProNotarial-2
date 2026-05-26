@@ -101,12 +101,13 @@ domiciliado/a, soltero/a, colombiano/a, etc.) — esas las maneja otro sistema.
 6. Una entrada por frase/palabra exacta. Mayusculas y minusculas como entradas SEPARADAS
    si AMBAS variantes aparecen en el texto.
 
-7. Para CADA cambio devuelve:
+7. Para CADA cambio devuelve SOLO estos tres campos:
    - palabra_antes: frase o palabra exacta a buscar (respetando mayusculas del documento)
    - palabra_despues: frase o palabra exacta de reemplazo
-   - contexto_ejemplo: fragmento de ~15 palabras alrededor del cambio en el documento
    - confianza: float 0-1
-   - razon: breve explicacion
+   NO incluyas contexto_ejemplo ni razon — solo los tres campos esenciales.
+
+Responde con el minimo JSON necesario.
 
 ESQUEMA JSON:
 {{
@@ -114,23 +115,17 @@ ESQUEMA JSON:
     {{
       "palabra_antes": "EL COMPRADOR",
       "palabra_despues": "LA COMPRADORA",
-      "contexto_ejemplo": "PRIMERA: EL COMPRADOR declara que ha recibido",
-      "confianza": 0.98,
-      "razon": "Articulo + sustantivo de rol referido a esta persona"
+      "confianza": 0.98
     }},
     {{
       "palabra_antes": "DEL COMPRADOR",
       "palabra_despues": "DE LA COMPRADORA",
-      "contexto_ejemplo": "los derechos DEL COMPRADOR sobre el inmueble",
-      "confianza": 0.98,
-      "razon": "Contraccion DEL + sustantivo de rol"
+      "confianza": 0.98
     }},
     {{
       "palabra_antes": "COMPRADOR",
       "palabra_despues": "COMPRADORA",
-      "contexto_ejemplo": "actuando como COMPRADOR del inmueble ubicado",
-      "confianza": 1.0,
-      "razon": "Sustantivo de rol sin articulo"
+      "confianza": 1.0
     }}
   ]
 }}
@@ -237,7 +232,7 @@ def detectar_concordancia(
         genero_nuevo=genero_legible.get(genero_nuevo, genero_nuevo),
         rol=rol.replace("_", " "),
         personas_resto_lista=personas_resto_lista,
-        texto_documento=texto_documento[:80000],
+        texto_documento=texto_documento[:40000],
     )
 
     client = _make_openai_client(api_key)
@@ -248,9 +243,20 @@ def detectar_concordancia(
             {"role": "user", "content": prompt_final},
         ],
         temperature=0.1,
-        max_tokens=16384,
+        max_tokens=8000,
         response_format={"type": "json_object"},
     )
+
+    finish_reason = response.choices[0].finish_reason
+    if finish_reason == "length":
+        print(f"[concordancia] ADVERTENCIA: respuesta truncada — finish_reason: length")
+        return {
+            "cambios": [],
+            "costo_usd": 0.0,
+            "tokens": {},
+            "necesario": True,
+            "truncado": True,
+        }
 
     raw = response.choices[0].message.content or "{}"
     usage = response.usage
@@ -263,8 +269,8 @@ def detectar_concordancia(
         data = json.loads(raw_limpio)
     except json.JSONDecodeError as exc:
         print(f"[concordancia] JSONDecodeError: {exc}")
-        print(f"[concordancia] finish_reason: {response.choices[0].finish_reason}")
-        print(f"[concordancia] completion_tokens: {usage.completion_tokens}")
+        print(f"[concordancia] finish_reason: {finish_reason}")
+        print(f"[concordancia] completion_tokens: {response.usage.completion_tokens}")
         print(f"[concordancia] raw (primeros 2000 chars):\n{raw[:2000]}")
         raise
     cambios = data.get("cambios", [])

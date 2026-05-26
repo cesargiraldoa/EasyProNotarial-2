@@ -197,10 +197,14 @@ async def generar_minuta(
                     if (p.get("nombre_completo") or "").strip().upper() != nombre_cambiando
                     and p.get("nombre_completo")
                 ]
-                resultado_conc = detectar_concordancia(
-                    texto_doc, persona_vieja, persona_nueva, api_key,
-                    personas_resto=personas_resto,
-                )
+                try:
+                    resultado_conc = detectar_concordancia(
+                        texto_doc, persona_vieja, persona_nueva, api_key,
+                        personas_resto=personas_resto,
+                    )
+                except Exception as e_conc:
+                    print(f"[concordancia] Error — saltando: {e_conc}")
+                    resultado_conc = {"cambios": []}
                 cambios_conc_todos.extend(resultado_conc.get("cambios", []))
 
         if cambios_conc_todos:

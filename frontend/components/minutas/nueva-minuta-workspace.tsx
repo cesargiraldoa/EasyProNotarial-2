@@ -11,7 +11,7 @@ import {
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
 } from "@/lib/minuta";
-import { TIPOS_DOCUMENTO, getEstadosCiviles } from "@/lib/listas-notariales";
+import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, getEstadosCiviles } from "@/lib/listas-notariales";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -62,6 +62,10 @@ const EMPTY_INMUEBLE: MinutaInmueble = {
   tipo: null, numero: null, matricula_inmobiliaria: null,
   conjunto_o_edificio: null, municipio: null, departamento: null,
   coeficiente_copropiedad: null, linderos: null,
+  cedula_catastral: null, codigo_catastral: null,
+  area_construida: null, area_privada: null, area_total: null,
+  direccion: null, barrio: null, piso: null,
+  nota_linderos: null, propiedad_horizontal: null,
 };
 const EMPTY_NOTARIA: NotariaEdit = {
   nombre_notaria: null, municipio_notaria: null,
@@ -563,6 +567,11 @@ function SectionField({
 
 // ─── Inmueble card ────────────────────────────────────────────────────────────
 
+const TIPO_INMUEBLE_OPTIONS = [
+  "Apartamento", "Casa", "Local", "Oficina",
+  "Lote", "Bodega", "Parqueadero", "Depósito",
+];
+
 function InmuebleCard({
   inmueble,
   onChange,
@@ -570,39 +579,181 @@ function InmuebleCard({
   inmueble: MinutaInmueble;
   onChange: (field: keyof MinutaInmueble, value: string) => void;
 }) {
+  const baseInput =
+    "ep-input w-full rounded-xl px-3 py-2 text-sm transition-all";
+  const pendingInput =
+    "border-amber-300 bg-amber-50 text-amber-900 placeholder:text-amber-400";
+  function cls(val: string | null) {
+    return baseInput + ((!val || val.trim() === "") ? " " + pendingInput : "");
+  }
+
   return (
     <div className="ep-card rounded-2xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-line/70">
         <span className="text-sm font-semibold text-ink">Inmueble</span>
       </div>
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SectionField
-          label="Número / Apto"
-          value={String(inmueble.numero ?? "")}
-          onChange={(v) => onChange("numero", v)}
-        />
-        <SectionField
-          label="Matrícula inmobiliaria"
-          value={String(inmueble.matricula_inmobiliaria ?? "")}
-          onChange={(v) => onChange("matricula_inmobiliaria", v)}
-        />
-        <div className="sm:col-span-2 lg:col-span-3">
+      <div className="p-5 space-y-4">
+
+        {/* Fila 1 — tipo + número + piso */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-muted">Tipo de inmueble</span>
+            <select
+              value={inmueble.tipo ?? ""}
+              onChange={(e) => onChange("tipo", e.target.value)}
+              className={cls(inmueble.tipo) + " ep-select"}
+            >
+              <option value="">Seleccionar...</option>
+              {TIPO_INMUEBLE_OPTIONS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </label>
           <SectionField
-            label="Conjunto / Edificio"
-            value={String(inmueble.conjunto_o_edificio ?? "")}
-            onChange={(v) => onChange("conjunto_o_edificio", v)}
+            label="Número / Apto"
+            value={inmueble.numero}
+            onChange={(v) => onChange("numero", v)}
+          />
+          <SectionField
+            label="Piso"
+            value={inmueble.piso}
+            onChange={(v) => onChange("piso", v)}
           />
         </div>
+
+        {/* Fila 2 — conjunto + barrio */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2">
+            <SectionField
+              label="Conjunto / Edificio"
+              value={inmueble.conjunto_o_edificio}
+              onChange={(v) => onChange("conjunto_o_edificio", v)}
+            />
+          </div>
+          <SectionField
+            label="Barrio"
+            value={inmueble.barrio}
+            onChange={(v) => onChange("barrio", v)}
+          />
+        </div>
+
+        {/* Fila 3 — dirección */}
         <SectionField
-          label="Municipio"
-          value={String(inmueble.municipio ?? "")}
-          onChange={(v) => onChange("municipio", v)}
+          label="Dirección"
+          value={inmueble.direccion}
+          onChange={(v) => onChange("direccion", v)}
         />
-        <SectionField
-          label="Departamento"
-          value={String(inmueble.departamento ?? "")}
-          onChange={(v) => onChange("departamento", v)}
-        />
+
+        {/* Fila 4 — municipio + departamento + propiedad horizontal */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionField
+            label="Municipio"
+            value={inmueble.municipio}
+            onChange={(v) => onChange("municipio", v)}
+          />
+          <SectionField
+            label="Departamento"
+            value={inmueble.departamento}
+            onChange={(v) => onChange("departamento", v)}
+          />
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-muted">Propiedad horizontal</span>
+            <select
+              value={inmueble.propiedad_horizontal ?? ""}
+              onChange={(e) => onChange("propiedad_horizontal", e.target.value)}
+              className={cls(inmueble.propiedad_horizontal) + " ep-select"}
+            >
+              <option value="">Seleccionar...</option>
+              <option value="SI">Sí</option>
+              <option value="NO">No</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Fila 5 — matrícula + cédula catastral + código catastral */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionField
+            label="Matrícula inmobiliaria"
+            value={inmueble.matricula_inmobiliaria}
+            onChange={(v) => onChange("matricula_inmobiliaria", v)}
+          />
+          <SectionField
+            label="Cédula catastral"
+            value={inmueble.cedula_catastral}
+            onChange={(v) => onChange("cedula_catastral", v)}
+          />
+          <SectionField
+            label="Código catastral"
+            value={inmueble.codigo_catastral}
+            onChange={(v) => onChange("codigo_catastral", v)}
+          />
+        </div>
+
+        {/* Fila 6 — áreas */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionField
+            label="Área construida (m²)"
+            value={inmueble.area_construida}
+            onChange={(v) => onChange("area_construida", v)}
+          />
+          <SectionField
+            label="Área privada (m²)"
+            value={inmueble.area_privada}
+            onChange={(v) => onChange("area_privada", v)}
+          />
+          <SectionField
+            label="Área total (m²)"
+            value={inmueble.area_total}
+            onChange={(v) => onChange("area_total", v)}
+          />
+        </div>
+
+        {/* Fila 7 — coeficiente */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <SectionField
+            label="Coeficiente copropiedad"
+            value={inmueble.coeficiente_copropiedad}
+            onChange={(v) => onChange("coeficiente_copropiedad", v)}
+          />
+        </div>
+
+        {/* Fila 8 — nota de linderos */}
+        <label className="grid gap-1">
+          <span className="text-xs font-medium text-muted">Nota de linderos</span>
+          <select
+            value={inmueble.nota_linderos ?? ""}
+            onChange={(e) => onChange("nota_linderos", e.target.value)}
+            className={baseInput + " ep-select"}
+          >
+            <option value="">Sin nota de linderos</option>
+            {NOTAS_LINDEROS.map((nota, i) => (
+              <option key={i} value={nota}>{nota.substring(0, 80)}…</option>
+            ))}
+          </select>
+        </label>
+
+        {/* Fila 9 — linderos (textarea) */}
+        <div className="grid gap-1">
+          <span className="text-xs font-medium text-muted flex items-center gap-1.5">
+            Linderos
+            {(!inmueble.linderos || inmueble.linderos.trim() === "") && (
+              <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
+                pendiente
+              </span>
+            )}
+          </span>
+          <textarea
+            value={inmueble.linderos ?? ""}
+            onChange={(e) => onChange("linderos", e.target.value)}
+            rows={5}
+            placeholder="Descripción completa de los linderos del inmueble..."
+            className={
+              baseInput + " resize-y min-h-[80px] " +
+              ((!inmueble.linderos || inmueble.linderos.trim() === "") ? pendingInput : "")
+            }
+          />
+        </div>
+
       </div>
     </div>
   );

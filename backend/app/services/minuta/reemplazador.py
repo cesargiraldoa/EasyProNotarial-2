@@ -440,8 +440,19 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     inm_old = datos_anteriores.get("inmueble", {}) or {}
     inm_new = datos_nuevos.get("inmueble", {}) or {}
 
-    for campo in ["numero", "matricula_inmobiliaria", "conjunto_o_edificio", "municipio", "departamento"]:
+    for campo in [
+        "numero", "matricula_inmobiliaria", "conjunto_o_edificio", "municipio", "departamento",
+        "coeficiente_copropiedad", "linderos",
+        "cedula_catastral", "codigo_catastral",
+        "area_construida", "area_privada", "area_total",
+        "nota_linderos", "propiedad_horizontal",
+    ]:
         agregar_reemplazo(inm_old.get(campo), inm_new.get(campo), f"inmueble.{campo}")
+    # Etiquetas diferenciadas para evitar conflicto con campos de persona
+    agregar_reemplazo(inm_old.get("tipo"), inm_new.get("tipo"), "inmueble.tipo_inmueble")
+    agregar_reemplazo(inm_old.get("direccion"), inm_new.get("direccion"), "inmueble.direccion_inmueble")
+    agregar_reemplazo(inm_old.get("barrio"), inm_new.get("barrio"), "inmueble.barrio_inmueble")
+    agregar_reemplazo(inm_old.get("piso"), inm_new.get("piso"), "inmueble.piso_inmueble")
 
     # NOTARIA
     not_old = datos_anteriores.get("notaria", {}) or {}

@@ -1,6 +1,42 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-27
+
+**Objetivo de la sesión:** Fix JSON truncado en concordancia + expandir sección inmueble del formulario de minutas (18 campos, select tipo, textarea linderos).
+
+**Realizado:**
+- **concordancia.py — Fix 1 (texto truncado):** `texto_documento[:80000]` → `[:40000]` para reducir tokens enviados al modelo
+- **concordancia.py — Fix 2 (max_tokens + finish_reason):** `max_tokens=16384` → `8000`; si `finish_reason == "length"` retorna `{"cambios": [], "truncado": True}` sin crash
+- **concordancia.py — Fix 3 (prompt simplificado):** Eliminados `contexto_ejemplo` y `razon` del esquema JSON; solo `palabra_antes`, `palabra_despues`, `confianza` — respuestas más cortas
+- **router.py — Fix 4 (try/except concordancia):** `detectar_concordancia` envuelto en try/except; si falla, `resultado_conc = {"cambios": []}` y el endpoint `/generar` continúa sin bloqueo
+- **minuta.ts — MinutaInmueble extendida:** 8 campos → 18 campos nuevos: `cedula_catastral`, `codigo_catastral`, `area_construida`, `area_privada`, `area_total`, `direccion`, `barrio`, `piso`, `nota_linderos`, `propiedad_horizontal`
+- **nueva-minuta-workspace.tsx — InmuebleCard expandida:** 5 inputs → 9 filas: select tipo de inmueble (8 opciones), número/piso, conjunto+barrio, dirección full-width, municipio+departamento+select propiedad horizontal, matrícula+cédula catastral+código catastral, 3 áreas m², coeficiente copropiedad, select nota de linderos (NOTAS_LINDEROS), textarea linderos (rows=5 con resize); `EMPTY_INMUEBLE` actualizado; import `NOTAS_LINDEROS` agregado
+- **reemplazador.py — construir_lista_reemplazos:** Loop inmueble expandido de 5 a 14 campos; `tipo`/`direccion`/`barrio`/`piso` usan etiquetas sufijadas `_inmueble` para evitar conflicto con campos de persona en los logs
+
+**Archivos creados/modificados:**
+- `backend/app/services/minuta/concordancia.py` — fix tokens, prompt simplificado, manejo finish_reason
+- `backend/app/modules/minuta/router.py` — try/except alrededor de detectar_concordancia
+- `backend/app/services/minuta/reemplazador.py` — construir_lista_reemplazos inmueble expandido
+- `frontend/lib/minuta.ts` — MinutaInmueble extendida a 18 campos
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — InmuebleCard expandida, EMPTY_INMUEBLE, import NOTAS_LINDEROS
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Deploy frontend a Vercel** — `vercel --cwd frontend --prod` (commits de esta sesión + sesiones anteriores sin deploy)
+2. **[CRÍTICO] Deploy backend a Railway** — concordancia.py fix crítico para producción; push al repo ya lo activa en Railway
+3. **[CRÍTICO] Verificar bug SEBASTIÁN en producción** — Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway
+4. **[CRÍTICO] Verificar concordancia en producción** — Confirmar que fix finish_reason resuelve el crash; probar con documento real que tenga cambio de género
+5. **[MEDIA] Formulario dinámico — campos faltantes persona** — `actividad_economica` no está en PersonaCard; decisiones (vivienda_familiar, patrimonio_familia, notificacion_electronica) sin UI
+6. **[BAJA] Debug prints `GENERO DEBUG`** — Remover de `router.py` y `reemplazador.py` antes de demo
+7. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase
+
+**Estado al cierre:**
+- Backend: Railway pendiente deploy — fixes concordancia y reemplazador sin push todavía
+- Frontend: Vercel pendiente deploy — InmuebleCard expandida sin deploy a producción
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: 5 archivos modificados sin commitear — se commitean en este cierre
+
+---
 ## Sesión 2026-05-26 (noche)
 
 **Objetivo de la sesión:** Implementar Capa 2 del motor de minutas — listas notariales oficiales, fix estado civil dinámico por género, validador notarial con IA.
