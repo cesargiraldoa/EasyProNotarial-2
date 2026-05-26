@@ -107,7 +107,7 @@ function CustomTooltip({ active, payload }: any) {
 function PieActCard({ data }: { data: DashboardChartDatum[] }) {
   return (
     <article className="ep-card rounded-[2rem] p-6">
-      <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-accent">Tipos de acto</p>
+      <p className="mb-4 text-sm font-semibold text-accent">Tipos de acto</p>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
         <PieChart width={200} height={200}>
           <Pie
@@ -256,7 +256,7 @@ export function DashboardOverview() {
             <Filter className="h-4 w-4 text-primary" />
             <p className="text-sm font-semibold text-primary">Filtros ejecutivos</p>
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <label className="grid gap-2 text-sm font-medium text-primary">Fecha desde<input type="date" value={draftFilters.date_from ?? ""} onChange={(event) => updateDraft("date_from", event.target.value)} className="ep-input h-12 rounded-lg px-4" /></label>
             <label className="grid gap-2 text-sm font-medium text-primary">Fecha hasta<input type="date" value={draftFilters.date_to ?? ""} onChange={(event) => updateDraft("date_to", event.target.value)} className="ep-input h-12 rounded-lg px-4" /></label>
             {isSuperAdmin ? (
