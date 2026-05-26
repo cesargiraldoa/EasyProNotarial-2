@@ -72,7 +72,40 @@ export type MinutaAnalisisResult = {
   tokens: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   chars: number;
   texto_original?: string;
+  validacion?: MinutaValidacion;
 };
+
+export interface MinutaValidacionCampo {
+  estado: 'ok' | 'advertencia' | 'faltante' | 'inferido'
+  mensaje: string | null
+  valor_inferido?: string | null
+}
+
+export interface MinutaValidacion {
+  resumen: {
+    total_campos: number
+    campos_ok: number
+    campos_advertencia: number
+    campos_faltantes: number
+    campos_inferidos: number
+    nivel_confianza: 'alto' | 'medio' | 'bajo'
+    listo_para_generar: boolean
+  }
+  personas: Array<{
+    rol: string
+    nombre: string
+    validaciones: Record<string, MinutaValidacionCampo>
+  }>
+  inmueble: Record<string, MinutaValidacionCampo>
+  notaria: Record<string, MinutaValidacionCampo>
+  valores: Array<{ tipo: string; estado: string; mensaje: string | null }>
+  alertas_criticas: string[]
+  inferencias_aplicadas: string[]
+  campos_faltantes_obligatorios: string[]
+  tokens?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  costo_usd?: number
+  error?: string
+}
 
 export type MinutaGenerarResult = {
   case_id: number | null;

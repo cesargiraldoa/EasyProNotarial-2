@@ -1001,6 +1001,66 @@ export function NuevaMinutaWorkspace() {
             </button>
           </div>
 
+          {/* ── Banner de validación notarial ── */}
+          {analisisResult?.validacion && !analisisResult.validacion.error && (
+            <div className={[
+              "flex items-center gap-3 px-4 py-3 rounded-xl border mb-4",
+              analisisResult.validacion.resumen.nivel_confianza === "alto"
+                ? "bg-success-bg border-emerald-200"
+                : analisisResult.validacion.resumen.nivel_confianza === "medio"
+                ? "bg-amber-50 border-amber-200"
+                : "bg-rose-50 border-rose-200",
+            ].join(" ")}>
+              <div className="flex-1">
+                <p className="text-[13px] font-medium text-ink">
+                  {analisisResult.validacion.resumen.listo_para_generar
+                    ? "Documento validado — listo para generar"
+                    : "Revisar campos antes de generar"}
+                </p>
+                <p className="text-[12px] text-soft mt-0.5">
+                  {analisisResult.validacion.resumen.campos_ok} correctos ·{" "}
+                  {analisisResult.validacion.resumen.campos_advertencia} advertencias ·{" "}
+                  {analisisResult.validacion.resumen.campos_faltantes} faltantes ·{" "}
+                  {analisisResult.validacion.resumen.campos_inferidos} inferidos
+                </p>
+              </div>
+              <span className={[
+                "text-[11px] font-semibold px-2 py-1 rounded-lg",
+                analisisResult.validacion.resumen.nivel_confianza === "alto"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : analisisResult.validacion.resumen.nivel_confianza === "medio"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-rose-100 text-rose-700",
+              ].join(" ")}>
+                Confianza {analisisResult.validacion.resumen.nivel_confianza}
+              </span>
+            </div>
+          )}
+
+          {/* ── Alertas críticas ── */}
+          {(analisisResult?.validacion?.alertas_criticas?.length ?? 0) > 0 && (
+            <div className="mb-4 flex flex-col gap-1.5">
+              {analisisResult!.validacion!.alertas_criticas.map((alerta, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg">
+                  <span className="text-rose-500 text-[12px] mt-0.5">⚠</span>
+                  <p className="text-[12px] text-rose-700">{alerta}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Inferencias aplicadas ── */}
+          {(analisisResult?.validacion?.inferencias_aplicadas?.length ?? 0) > 0 && (
+            <div className="mb-4 flex flex-col gap-1.5">
+              {analisisResult!.validacion!.inferencias_aplicadas.map((inf, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <span className="text-blue-500 text-[12px] mt-0.5">→</span>
+                  <p className="text-[12px] text-blue-700">{inf}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {personas.map((p, i) => (
             <PersonaCard
               key={i} persona={p} index={i}

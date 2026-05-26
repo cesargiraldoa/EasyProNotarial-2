@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
 from app.services.minuta.detector import analizar_documento, extraer_texto_estructurado
+from app.services.minuta.validador import validar_documento
 from app.services.minuta.reemplazador import aplicar_genero_contextual_docx, aplicar_reemplazos_docx, construir_lista_reemplazos
 from app.services.minuta.concordancia import (
     aplicar_cambios_concordancia_a_reemplazos,
@@ -119,6 +120,15 @@ async def analizar_minuta(
         )
 
     Path(tmp_path).unlink(missing_ok=True)
+
+    # Capa 2 — validación notarial (no bloquea si falla)
+    try:
+        actos = resultado.get("datos", {}).get("actos", [])
+        datos = resultado.get("datos", {})
+        resultado["validacion"] = validar_documento(datos, actos)
+    except Exception as e:
+        resultado["validacion"] = {"error": str(e)}
+
     return resultado
 
 
