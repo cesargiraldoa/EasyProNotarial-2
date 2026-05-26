@@ -1,6 +1,39 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (tarde 2)
+
+**Objetivo de la sesión:** Mejorar el formulario de minutas — normalización de campos del inmueble, selectores geográficos Colombia, separador de miles en valores monetarios.
+
+**Realizado:**
+- **nueva-minuta-workspace.tsx — normalizar tipo inmueble (977724e):** `handleAnalizar` aplica `TIPOS_INMUEBLE_MAP` antes de `setInmuebleEdit` para que `"apartamento"` → `"Apartamento"` coincida con las opciones del select; cast a `Partial<MinutaInmueble>` para resolver error TypeScript
+- **detector.py — campos catastrales y orden actos (c11cbb0):** Sección INMUEBLE del PROMPT_B2 expandida con instrucciones precisas para `cedula_catastral`, `codigo_catastral`, `area_construida`, `area_privada`, `area_total`, `piso`, `barrio`, `direccion`, `nota_linderos`, `linderos` (NO resumir). Sección ACTOS con regla de ordenamiento: acto principal primero, accesorios después. Ejemplo JSON actualizado con nuevos campos
+- **detector.py — reforzar código catastral (9da8500):** Instrucción diferencia explícitamente código alfanumérico corto (ej: `AAX0009PUYC`) vs cédula numérica larga de 28 dígitos
+- **nueva-minuta-workspace.tsx — ancho campos catastrales (9da8500):** Grid de 3 columnas partido en dos filas de 2 columnas — matrícula+cédula catastral en primera fila, código catastral en segunda; más espacio para valores largos
+- **colombia-geo.ts — nuevo archivo (5eaf153):** 33 departamentos (incluyendo Bogotá D.C.) con ~900 municipios según DANE. Helpers `getMunicipiosByDepartamento()` y `getDepartamentoByMunicipio()`
+- **nueva-minuta-workspace.tsx — selectores encadenados (5eaf153):** InmuebleCard reemplaza inputs de texto por selects departamento→municipio; al cambiar departamento, municipio se limpia automáticamente. NotariaCard agrega estado local `depNotaria` + selects encadenados con sincronización por ref desde `municipio_notaria`. `handleAnalizar` infiere departamento con `getDepartamentoByMunicipio()` si el detector no lo devuelve
+- **nueva-minuta-workspace.tsx — separador de miles (1df8011):** Helpers `formatCOP()` (→ `200.000.000`) y `parseCOP()` (quita puntos antes de guardar); input de monto reemplaza `SectionField` con `type="text" inputMode="numeric"` que muestra valor formateado pero envía número limpio al backend
+
+**Archivos creados/modificados:**
+- `frontend/lib/colombia-geo.ts` — nuevo: 33 departamentos, ~900 municipios DANE, helpers geo
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — normalización tipo inmueble, selectores geo encadenados, separador miles, ancho campos catastrales
+- `backend/app/services/minuta/detector.py` — PROMPT_B2: campos catastrales expandidos, orden actos, código catastral diferenciado
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Reescribir detector con Structured Outputs de OpenAI** — Cambiar `response_format=json_object` por `json_schema` con `strict: True`; schema completo con `linderos` (norte/sur/oriente/occidente), `adquisicion` (forma, escritura previa, notaría, vendedor original), `poderes`, `valores_notariales` (derechos notariales, superfondo, IVA); prompts mejorados basados en documentos reales de Notaría de Bello
+2. **[CRÍTICO] Verificar bug SEBASTIÁN en producción** — Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway
+3. **[CRÍTICO] Verificar concordancia en producción** — Confirmar que fix `finish_reason` resuelve crash con documento real
+4. **[MEDIA] Formulario dinámico — campos faltantes persona** — `actividad_economica` no en PersonaCard; decisiones (vivienda_familiar, patrimonio_familia, notificacion_electronica) sin UI
+5. **[BAJA] Debug prints `GENERO DEBUG`** — Remover de `router.py` y `reemplazador.py`
+6. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase
+
+**Estado al cierre:**
+- Backend: Railway con deploy activo — `c11cbb0` y `9da8500` pusheados (Railway despliega automáticamente)
+- Frontend: Vercel operativo — easypronotarial.com, 5 deploys realizados en esta sesión
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio — solo `tsconfig.tsbuildinfo` modificado (ignorar)
+
+---
 ## Sesión 2026-05-27
 
 **Objetivo de la sesión:** Fix JSON truncado en concordancia + expandir sección inmueble del formulario de minutas (18 campos, select tipo, textarea linderos).
