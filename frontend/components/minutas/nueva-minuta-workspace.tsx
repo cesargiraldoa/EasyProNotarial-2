@@ -972,7 +972,16 @@ export function NuevaMinutaWorkspace() {
       setAiModalOpen(false);
       setAnalisisResult(result);
       setPersonas((result.datos.personas ?? []).map((p) => ({ ...p })));
-      setInmuebleEdit({ ...EMPTY_INMUEBLE, ...(result.datos.inmueble ?? {}) });
+      const inmuebleRaw = (result.datos.inmueble ?? {}) as Partial<MinutaInmueble>;
+      const TIPOS_INMUEBLE_MAP: Record<string, string> = {
+        'apartamento': 'Apartamento', 'casa': 'Casa', 'local': 'Local',
+        'oficina': 'Oficina', 'lote': 'Lote', 'bodega': 'Bodega',
+        'parqueadero': 'Parqueadero', 'deposito': 'Depósito', 'depósito': 'Depósito',
+      };
+      const tipoNormalizado = inmuebleRaw.tipo
+        ? TIPOS_INMUEBLE_MAP[inmuebleRaw.tipo.toLowerCase().trim()] ?? inmuebleRaw.tipo
+        : null;
+      setInmuebleEdit({ ...EMPTY_INMUEBLE, ...inmuebleRaw, tipo: tipoNormalizado });
       const fechasRaw = (result.datos as Record<string, unknown>).fechas as Record<string, unknown> | null | undefined;
       const fechaRaw = fechasRaw?.fecha_otorgamiento;
       const fechaOtorgamiento = typeof fechaRaw === "string" ? fechaRaw : "";
