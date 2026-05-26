@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BarChart3, Filter, LineChart, RefreshCw, ShieldAlert } from "lucide-react";
+import { BarChart3, Building2, Filter, LineChart, RefreshCw, ShieldAlert } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import {
   getCurrentUser,
@@ -15,6 +15,12 @@ import {
 import { LiveClock } from "@/components/ui/live-clock";
 import { formatDateTime } from "@/lib/datetime";
 import { CHART_PALETTE } from "@/lib/color-constants";
+
+function formatEstado(estado: string): string {
+  return estado
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function toneClasses(tone: string) {
   if (tone === "critical") return "ep-kpi-critical";
@@ -107,7 +113,7 @@ function CustomTooltip({ active, payload }: any) {
 function PieActCard({ data }: { data: DashboardChartDatum[] }) {
   return (
     <article className="ep-card rounded-[2rem] p-6">
-      <p className="mb-4 text-sm font-semibold text-accent">Tipos de acto</p>
+      <p className="mb-4 text-sm font-semibold text-[var(--ink)]">Tipos de acto</p>
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
         <PieChart width={200} height={200}>
           <Pie
@@ -209,7 +215,10 @@ export function DashboardOverview() {
 
   const leadKpis = useMemo(() => dashboard?.kpis.slice(0, 5) ?? [], [dashboard]);
   const docsByType = useMemo(() => dashboard?.documents_by_act_type ?? [], [dashboard]);
-  const docsByState = useMemo(() => dashboard?.documents_by_state ?? [], [dashboard]);
+  const docsByState = useMemo(
+    () => (dashboard?.documents_by_state ?? []).map((item) => ({ ...item, label: formatEstado(item.label) })),
+    [dashboard],
+  );
   const pilot = dashboard?.pilot_reference;
 
   if (isLoading && !dashboard) {
@@ -244,9 +253,14 @@ export function DashboardOverview() {
               <p className="text-xs uppercase tracking-[0.18em] text-secondary">ÚLTIMA ACTUALIZACIÓN</p>
               <p className="mt-2 text-base font-semibold text-primary">{formatDateTime(dashboard.generated_at)}</p>
             </div>
-            <div className="rounded-[1.5rem] bg-primary p-4 text-white shadow-panel sm:col-span-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/70">NOTARÍA PILOTO</p>
-              <p className="mt-2 text-base font-semibold">{pilot ? `${pilot.municipality}, ${pilot.department}` : "Sin referencia"}</p>
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 sm:col-span-2">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary">
+                <Building2 className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">Notaría piloto</p>
+                <p className="text-[14px] font-medium text-[var(--ink)]">{pilot ? `${pilot.municipality}, ${pilot.department}` : "Sin referencia"}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -286,7 +300,7 @@ export function DashboardOverview() {
           const span = index < 2 ? "xl:col-span-3" : "xl:col-span-2";
           return (
             <article key={item.key} className={`${toneClasses(item.tone)} ${span} rounded-[1.7rem] p-5 shadow-soft`}>
-              <p className="text-xs uppercase tracking-[0.18em] text-secondary">{item.label}</p>
+              <p className="text-xs text-secondary">{item.label}</p>
               <p className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-primary">{formatNumber(item.value)}</p>
               <p className="mt-3 text-sm leading-6 text-secondary">{item.detail}</p>
             </article>
