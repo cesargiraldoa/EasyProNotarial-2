@@ -1,6 +1,36 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (tarde)
+
+**Objetivo de la sesión:** Fixes visuales del dashboard ejecutivo (pie chart, filtros, KPIs) y diagnóstico del formulario dinámico de minutas para planificar próxima iteración.
+
+**Realizado:**
+- **dashboard.tsx — rediseño PieActCard (b3404e6):** Donut chart (`innerRadius=55`), leyenda lateral custom con scroll, `CustomTooltip` con nombre + cantidad + porcentaje; removidos `label`/`labelLine`/`Legend`/`ResponsiveContainer`
+- **dashboard.tsx — filtros grid fluido (16e2f76):** Grid `md:grid-cols-2 xl:grid-cols-12` con `col-span-2` fijo → `sm:grid-cols-2 lg:grid-cols-3`; `rounded-2xl` → `rounded-lg` en todos los controles; botones de `rounded-full` + `ep-card-soft` → `rounded-lg` con CSS vars del design system
+- **dashboard.tsx — fixes post-deploy (87eea3f, bcb7646):** Grid reducido a `lg:grid-cols-3` (5 filtros quedan 3+2 sin solitarios); título "Tipos de acto" `uppercase tracking-widest` removido; botón submit `bg-[var(--primary)]` → `bg-primary` (clase Tailwind directa, CSS var no resolvía en producción)
+- **dashboard.tsx — fixes visuales tanda 2 (4730d95):** KPI labels sin `uppercase tracking-[0.18em]`; `formatEstado()` convierte `revision_aprobador` → "Revision Aprobador" en docsByState; card notaría navy full-width reemplazada por tarjeta discreta con icono `Building2`; título pie chart `text-accent` → `text-[var(--ink)]`
+- **Diagnóstico detector.py + /analizar:** Lectura completa — detector usa `gpt-4o-mini`, heurística local para B1/B2, `max_tokens=8000`, endpoint `/analizar` es wrapper directo sin lógica adicional
+- **Diagnóstico formulario dinámico:** El formulario del Paso 2 es completamente estático — no hay lógica por tipo de acto. Campos del backend que no se muestran: `actividad_economica`, `inmueble.tipo`, `inmueble.coeficiente_copropiedad`, `inmueble.linderos`, `datos.decisiones` (vivienda_familiar, patrimonio_familia, notificacion_electronica). `datos.fechas` se accede vía cast manual, no está en el tipo `MinutaDatos`.
+
+**Archivos creados/modificados:**
+- `frontend/components/app-shell/dashboard.tsx` — PieActCard donut, filtros grid fluido, fixes visuales KPIs/estados/notaría/pie title
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Deploy frontend a Vercel** — 4 commits locales sin deploy a producción: `vercel --cwd frontend --prod`
+2. **[CRÍTICO] Verificar bug SEBASTIÁN en producción** — Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway
+3. **[CRÍTICO] Verificar concordancia Claude** — Confirmar `ANTHROPIC_API_KEY` en Railway y artículos EL→LA / DEL→DE LA
+4. **[MEDIA] Formulario dinámico — campos faltantes** — Agregar `actividad_economica` a `PersonaCard`; UI para `decisiones` (checkboxes vivienda_familiar, patrimonio_familia, notificacion_electronica); tipar `fechas` en `MinutaDatos`
+5. **[BAJA] Debug prints `GENERO DEBUG`** — Remover de `router.py` y `reemplazador.py` antes de demo
+6. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase
+
+**Estado al cierre:**
+- Backend: Railway operativo — sin cambios de backend en esta sesión
+- Frontend: Vercel desactualizado — 4 commits locales pendientes de deploy
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio — 4 commits ahead de origin/main (se pushean en este cierre)
+
+---
 ## Sesión 2026-05-26
 
 **Objetivo de la sesión:** Renovación del design system (tipografía, tokens semánticos, colores de gráficas) e implementación de estados de progreso por pasos para las acciones IA.
