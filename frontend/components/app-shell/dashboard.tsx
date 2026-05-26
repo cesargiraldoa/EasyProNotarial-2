@@ -14,8 +14,7 @@ import {
 } from "@/lib/api";
 import { LiveClock } from "@/components/ui/live-clock";
 import { formatDateTime } from "@/lib/datetime";
-
-const COLORS = ["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"];
+import { CHART_PALETTE } from "@/lib/color-constants";
 
 function toneClasses(tone: string) {
   if (tone === "critical") return "ep-kpi-critical";
@@ -110,7 +109,7 @@ function PieActCard({ data }: { data: DashboardChartDatum[] }) {
             label={({ name, percent }) => `${name} ${(((percent ?? 0) * 100)).toFixed(0)}%`}
           >
             {data.map((_, index) => (
-              <Cell key={index} fill={COLORS[index % COLORS.length]} />
+              <Cell key={index} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
             ))}
           </Pie>
           <Tooltip />
