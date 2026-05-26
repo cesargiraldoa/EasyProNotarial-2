@@ -671,7 +671,7 @@ function InmuebleCard({
         </div>
 
         {/* Fila 5 — matrícula + cédula catastral + código catastral */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <SectionField
             label="Matrícula inmobiliaria"
             value={inmueble.matricula_inmobiliaria}
@@ -682,6 +682,8 @@ function InmuebleCard({
             value={inmueble.cedula_catastral}
             onChange={(v) => onChange("cedula_catastral", v)}
           />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <SectionField
             label="Código catastral"
             value={inmueble.codigo_catastral}

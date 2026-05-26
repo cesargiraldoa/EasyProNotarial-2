@@ -164,7 +164,7 @@ INSTRUCCIONES:
    - departamento: departamento donde esta el inmueble
    - coeficiente_copropiedad: si se menciona
    - cedula_catastral: numero completo tal como aparece (ej: "0881001060001000020000100002"). Buscar etiquetas "CEDULA CATASTRAL:", "Cedula Catastral:", "CODIGO CATASTRAL SEGUN CERTIFICADO"
-   - codigo_catastral: codigo alfanumerico (ej: "AAX0009PUYC"). Buscar "CODIGO CATASTRAL SEGUN CERTIFICADO DE TRADICION:" o similar
+   - codigo_catastral: codigo alfanumerico CORTO (ej: "AAX0009PUYC", "ABF0003NRDC") que aparece despues de "CODIGO CATASTRAL SEGUN CERTIFICADO DE TRADICION:" o "Codigo catastral:". Es distinto a la cedula catastral (que es numerica larga de 28 digitos). Buscar especificamente la etiqueta "CODIGO CATASTRAL SEGUN CERTIFICADO DE TRADICION" en el documento.
    - area_construida: con unidades exactas (ej: "59.66 M2"). Buscar "Area construida", "area construida interior", "AREA CONSTRUIDA"
    - area_privada: con unidades (ej: "38.39 m2"). Buscar "Area privada", "area privada cubierta"
    - area_total: con unidades. Buscar "area total", "area total construida"
