@@ -1,6 +1,44 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (noche)
+
+**Objetivo de la sesión:** Implementar Capa 2 del motor de minutas — listas notariales oficiales, fix estado civil dinámico por género, validador notarial con IA.
+
+**Realizado:**
+- **listas-notariales.ts — nuevo archivo (46255cf):** `ESTADOS_CIVILES_F` (12 opciones), `ESTADOS_CIVILES_M` (11 opciones), `ESTADOS_CIVILES_COMPARTIDOS`, `TIPOS_DOCUMENTO` (7 tipos con values C.C/C.E/T.I/PAS/P.P.T/R.C/NIT), `NOTAS_LINDEROS`, helper `getEstadosCiviles(genero)`
+- **nueva-minuta-workspace.tsx — fix estado civil (46255cf):** Select dinámico filtrado por género (solo opciones femeninas/masculinas según selección); `handleChange` corregido — limpia estado_civil si el valor actual no aplica al nuevo género; cascada nacionalidad preservada; eliminadas `TIPO_DOC_OPTIONS` y `ESTADO_CIVIL_OPTIONS` hardcodeadas
+- **detector.py — fix tipo_documento en prompt (3a94650):** Valores estandarizados `"C.C", "C.E", "T.I", "PAS", "P.P.T", "R.C", "NIT"` en PROMPT_B2; ejemplo JSON actualizado `CC → C.C`
+- **minuta.ts — tipos completos (3a94650, 461f958):** Nueva interfaz `MinutaFechas`; `MinutaDatos` incluye `fechas?: MinutaFechas`; `MinutaAnalisisResult` incluye `texto_original?: string`; nuevas interfaces `MinutaValidacionCampo`, `MinutaValidacion`; `MinutaAnalisisResult` incluye `validacion?: MinutaValidacion`
+- **validador.py — nuevo servicio Capa 2 (461f958, 9a1e643):** Validaciones deterministas sin IA (formato cédulas/NIT/T.I., matrícula, número escritura, roles por acto); validación IA con GPT-4o-mini usando `PROMPT_VALIDADOR`; retorna semáforos `ok/advertencia/faltante/inferido` por campo + alertas críticas + inferencias aplicadas + resumen con `listo_para_generar`; usa `_make_openai_client()` igual que `detector.py`
+- **router.py — integración validador (461f958, 9a1e643):** Endpoint `/analizar` llama `validar_documento(datos, actos, api_key)` tras el análisis; try/except garantiza que fallo no bloquea
+- **nueva-minuta-workspace.tsx — banner validación (461f958):** Paso 2 muestra banner verde/amarillo/rojo con nivel de confianza, conteo de campos, alertas críticas en rojo con ⚠, inferencias en azul con →
+
+**Archivos creados/modificados:**
+- `frontend/lib/listas-notariales.ts` — nuevo: listas oficiales notariales colombianas
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — fix estado civil dinámico + banner validación
+- `frontend/lib/minuta.ts` — MinutaFechas, MinutaValidacion, validacion? en AnalisisResult
+- `backend/app/services/minuta/detector.py` — tipo_documento estandarizado en prompt
+- `backend/app/services/minuta/validador.py` — nuevo: validador notarial Capa 2
+- `backend/app/modules/minuta/router.py` — integrar validar_documento en /analizar
+- `backend/requirements.txt` — sin anthropic (se agregó y se revirtió en la misma sesión)
+- `backend/app/core/config.py` — sin anthropic_api_key (idem)
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Verificar validador en producción** — Hacer deploy a Railway y analizar un documento real; revisar que el banner aparece en Paso 2 y que las alertas/inferencias son correctas
+2. **[CRÍTICO] Verificar bug SEBASTIÁN** — Generar minuta real con SEBASTIÁN y DANIELA, revisar logs Railway; múltiples fixes aplicados pero sin verificación en producción desde sesión 2026-05-23
+3. **[CRÍTICO] Verificar concordancia con Claude** — SESSION anterior indica que concordancia.py fue migrada a Claude; confirmar ANTHROPIC_API_KEY en Railway y que artículos EL→LA funcionan
+4. **[MEDIA] Debug prints `GENERO DEBUG`** — Hay prints de debug activos en `router.py` y `reemplazador.py` — remover antes de demo
+5. **[MEDIA] Validador — probar con documentos reales** — Confirmar que inferencias (departamento desde municipio, zona desde matrícula) funcionan y que no hay falsos positivos en alertas críticas
+6. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase producción (pendiente desde sesiones anteriores)
+
+**Estado al cierre:**
+- Backend: Railway operativo — último commit en repo `9a1e643`; pendiente deploy para activar validador
+- Frontend: Vercel operativo — easypronotarial.com; pendiente deploy para activar banner validación
+- BD producción: operativa, alembic_version desincronizada (pendiente)
+- Git: árbol limpio — 4 commits nuevos pusheados
+
+---
 ## Sesión 2026-05-26 (tarde)
 
 **Objetivo de la sesión:** Fixes visuales del dashboard ejecutivo (pie chart, filtros, KPIs) y diagnóstico del formulario dinámico de minutas para planificar próxima iteración.
