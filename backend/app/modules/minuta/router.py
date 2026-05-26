@@ -125,7 +125,7 @@ async def analizar_minuta(
     try:
         actos = resultado.get("datos", {}).get("actos", [])
         datos = resultado.get("datos", {})
-        resultado["validacion"] = validar_documento(datos, actos)
+        resultado["validacion"] = validar_documento(datos, actos, api_key)
     except Exception as e:
         resultado["validacion"] = {"error": str(e)}
 

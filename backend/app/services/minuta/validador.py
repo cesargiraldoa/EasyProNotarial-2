@@ -4,9 +4,9 @@
 
 import json
 import re
-from anthropic import Anthropic
+from openai import OpenAI
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "gpt-4o-mini"
 
 # ── Reglas notariales por tipo de acto ──────────────────────────────────────
 
@@ -184,23 +184,17 @@ Responde SOLO con JSON válido con esta estructura exacta:
 """
 
 
-def _make_anthropic_client() -> Anthropic:
-    import ssl
+def _make_openai_client(api_key: str) -> OpenAI:
+    import os
     import httpx
-    from app.core.config import get_settings
-    api_key = get_settings().anthropic_api_key
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY no configurada en el servidor.")
-    try:
-        ctx = ssl.create_default_context()
-        transport = httpx.HTTPTransport(verify=ctx)
+    if os.getenv("OPENAI_DISABLE_SSL_VERIFY", "").lower() == "true":
+        transport = httpx.HTTPTransport(verify=False)
         http_client = httpx.Client(transport=transport)
-        return Anthropic(api_key=api_key, http_client=http_client)
-    except Exception:
-        return Anthropic(api_key=api_key)
+        return OpenAI(api_key=api_key, http_client=http_client)
+    return OpenAI(api_key=api_key)
 
 
-def validar_documento(datos: dict, actos_detectados: list[str]) -> dict:
+def validar_documento(datos: dict, actos_detectados: list[str], api_key: str) -> dict:
     """
     Capa 2 — Validador notarial.
     Recibe datos{} del detector y retorna reporte de validación.
@@ -208,46 +202,37 @@ def validar_documento(datos: dict, actos_detectados: list[str]) -> dict:
     # Validaciones deterministas (sin IA) — rápidas y baratas
     alertas_previas = _validar_determinista(datos, actos_detectados)
 
-    # Preparar contexto para Claude
+    # Preparar contexto para el modelo
     contexto = {
         "actos": actos_detectados,
         "datos": datos,
         "alertas_previas": alertas_previas,
     }
 
-    client = _make_anthropic_client()
-    response = client.messages.create(
+    client = _make_openai_client(api_key)
+    response = client.chat.completions.create(
         model=MODEL,
-        max_tokens=4096,
         temperature=0,
-        system=PROMPT_VALIDADOR,
+        max_tokens=4096,
+        response_format={"type": "json_object"},
         messages=[
-            {
-                "role": "user",
-                "content": f"Valida este documento notarial:\n\n{json.dumps(contexto, ensure_ascii=False, indent=2)}"
-            }
-        ]
+            {"role": "system", "content": PROMPT_VALIDADOR},
+            {"role": "user", "content": f"Valida este documento notarial:\n\n{json.dumps(contexto, ensure_ascii=False, indent=2)}"},
+        ],
     )
 
-    raw = response.content[0].text.strip()
-    # Strip markdown si viene envuelto
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
+    raw = response.choices[0].message.content.strip()
     resultado = json.loads(raw)
 
-    # Agregar costo (Sonnet 4: $3/M input, $15/M output)
+    # Agregar costo (GPT-4o-mini: $0.15/M input, $0.60/M output)
     resultado["tokens"] = {
-        "prompt_tokens": response.usage.input_tokens,
-        "completion_tokens": response.usage.output_tokens,
-        "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "total_tokens": response.usage.total_tokens,
     }
     resultado["costo_usd"] = round(
-        response.usage.input_tokens * 3 / 1_000_000 +
-        response.usage.output_tokens * 15 / 1_000_000,
+        response.usage.prompt_tokens * 0.15 / 1_000_000 +
+        response.usage.completion_tokens * 0.60 / 1_000_000,
         6
     )
 
