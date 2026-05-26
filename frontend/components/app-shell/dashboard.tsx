@@ -270,7 +270,7 @@ export function DashboardOverview() {
             <label className="grid gap-2 text-sm font-medium text-primary">Responsable<select value={draftFilters.owner_user_id ?? ""} onChange={(event) => updateDraft("owner_user_id", event.target.value)} className="ep-select h-12 rounded-lg px-4">{dashboard.filter_options.owners.map((option) => <option key={`${option.id ?? "all"}-${option.label}`} value={option.id?.toString() ?? ""}>{option.label}</option>)}</select></label>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-5 py-2.5 text-sm font-medium text-white transition-opacity disabled:opacity-70">
+            <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-70">
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               Aplicar filtros
             </button>
