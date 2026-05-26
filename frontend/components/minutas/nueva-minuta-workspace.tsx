@@ -879,6 +879,17 @@ function NotariaCard({
 
 // ─── Valores card ─────────────────────────────────────────────────────────────
 
+function formatCOP(value: number | string | null): string {
+  if (value === null || value === undefined || value === '') return '';
+  const num = typeof value === 'string' ? parseInt(value.replace(/\./g, ''), 10) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('es-CO');
+}
+
+function parseCOP(formatted: string): number {
+  return parseInt(formatted.replace(/\./g, '').replace(/\D/g, ''), 10) || 0;
+}
+
 function ValorRow({
   val, idx, onChangeMonto, onChangeTexto,
 }: {
@@ -901,11 +912,17 @@ function ValorRow({
           <span className="text-xs text-soft">Acto {val.acto_relacionado}</span>
         )}
       </div>
-      <SectionField
-        label="Monto ($)"
-        value={String(val.monto_numerico ?? "")}
-        onChange={(v) => onChangeMonto(idx, v)}
-      />
+      <label className="grid gap-1">
+        <span className="text-xs font-medium text-muted">Monto ($)</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={formatCOP(val.monto_numerico)}
+          onChange={(e) => onChangeMonto(idx, String(parseCOP(e.target.value)))}
+          className="ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
+          placeholder="0"
+        />
+      </label>
       {letras && (
         <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "10px 12px" }}>
           <p style={{ fontSize: "12px", color: "#0369a1", fontWeight: 600, lineHeight: 1.6, margin: 0 }}>
