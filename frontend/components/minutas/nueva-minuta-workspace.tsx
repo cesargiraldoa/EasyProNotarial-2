@@ -11,20 +11,17 @@ import {
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
 } from "@/lib/minuta";
+import { TIPOS_DOCUMENTO, getEstadosCiviles } from "@/lib/listas-notariales";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STEPS = ["Subir documento", "Revisar personas", "Generar"];
 
-const TIPO_DOC_OPTIONS = ["CC", "CE", "TI", "PP", "NIT"];
 const GENERO_OPTIONS = [
   { value: "M", label: "Masculino (M)" },
   { value: "F", label: "Femenino (F)" },
   { value: "J", label: "Juridica (J)" },
-];
-const ESTADO_CIVIL_OPTIONS = [
-  "Soltero(a)", "Casado(a)", "Union marital", "Divorciado(a)", "Viudo(a)",
 ];
 
 const GENTILICIOS_M_A_F: Record<string, string> = {
@@ -402,22 +399,17 @@ function PersonaCard({
   function handleChange(field: keyof MinutaPersona, value: string) {
     onChange(field, value);
     if (field !== "genero") return;
-    const nac = (persona.nacionalidad || "").toLowerCase().trim();
-    const ec = (persona.estado_civil || "").toLowerCase();
-    if (value === "F") {
-      const nacF = GENTILICIOS_M_A_F[nac];
-      if (nacF) onChange("nacionalidad", nacF);
-      if (ec === "soltero") onChange("estado_civil", "soltera");
-      else if (ec === "casado") onChange("estado_civil", "casada");
-      else if (ec === "divorciado") onChange("estado_civil", "divorciada");
-      else if (ec === "viudo") onChange("estado_civil", "viuda");
-    } else if (value === "M") {
-      const nacM = GENTILICIOS_F_A_M[nac];
-      if (nacM) onChange("nacionalidad", nacM);
-      if (ec === "soltera") onChange("estado_civil", "soltero");
-      else if (ec === "casada") onChange("estado_civil", "casado");
-      else if (ec === "divorciada") onChange("estado_civil", "divorciado");
-      else if (ec === "viuda") onChange("estado_civil", "viudo");
+
+    const nat = (persona.nacionalidad ?? "").toLowerCase().trim();
+    if (value === "F" && nat && GENTILICIOS_M_A_F[nat]) {
+      onChange("nacionalidad", GENTILICIOS_M_A_F[nat]);
+    } else if (value === "M" && nat && GENTILICIOS_F_A_M[nat]) {
+      onChange("nacionalidad", GENTILICIOS_F_A_M[nat]);
+    }
+
+    const estadosValidos = getEstadosCiviles(value as "M" | "F" | "J" | "");
+    if (persona.estado_civil && !estadosValidos.includes((persona.estado_civil ?? "").toLowerCase())) {
+      onChange("estado_civil", "");
     }
   }
 
@@ -460,7 +452,7 @@ function PersonaCard({
           field="tipo_documento"
           value={String(persona.tipo_documento ?? "")}
           as="select"
-          options={TIPO_DOC_OPTIONS.map((v) => ({ value: v, label: v }))}
+          options={TIPOS_DOCUMENTO}
           onChange={handleChange}
         />
         <PersonaField
@@ -488,7 +480,10 @@ function PersonaCard({
           field="estado_civil"
           value={String(persona.estado_civil ?? "")}
           as="select"
-          options={ESTADO_CIVIL_OPTIONS.map((v) => ({ value: v, label: v }))}
+          options={getEstadosCiviles((persona.genero ?? "") as "M" | "F" | "J" | "").map((ec) => ({
+            value: ec,
+            label: ec.charAt(0).toUpperCase() + ec.slice(1),
+          }))}
           onChange={handleChange}
         />
         <PersonaField
