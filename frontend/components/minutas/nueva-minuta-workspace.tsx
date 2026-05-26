@@ -12,6 +12,7 @@ import {
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
 } from "@/lib/minuta";
 import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, getEstadosCiviles } from "@/lib/listas-notariales";
+import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -644,18 +645,38 @@ function InmuebleCard({
           onChange={(v) => onChange("direccion", v)}
         />
 
-        {/* Fila 4 — municipio + departamento + propiedad horizontal */}
+        {/* Fila 4 — departamento + municipio + propiedad horizontal */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <SectionField
-            label="Municipio"
-            value={inmueble.municipio}
-            onChange={(v) => onChange("municipio", v)}
-          />
-          <SectionField
-            label="Departamento"
-            value={inmueble.departamento}
-            onChange={(v) => onChange("departamento", v)}
-          />
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-muted">Departamento</span>
+            <select
+              value={inmueble.departamento ?? ""}
+              onChange={(e) => {
+                onChange("departamento", e.target.value);
+                onChange("municipio", "");
+              }}
+              className={cls(inmueble.departamento) + " ep-select"}
+            >
+              <option value="">Seleccionar...</option>
+              {DEPARTAMENTOS_COLOMBIA.map(d => (
+                <option key={d.codigo} value={d.nombre}>{d.nombre}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-muted">Municipio</span>
+            <select
+              value={inmueble.municipio ?? ""}
+              onChange={(e) => onChange("municipio", e.target.value)}
+              className={cls(inmueble.municipio) + " ep-select"}
+              disabled={!inmueble.departamento}
+            >
+              <option value="">Seleccionar...</option>
+              {getMunicipiosByDepartamento(inmueble.departamento ?? "").map(m => (
+                <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
+              ))}
+            </select>
+          </label>
           <label className="grid gap-1">
             <span className="text-xs font-medium text-muted">Propiedad horizontal</span>
             <select
@@ -770,6 +791,20 @@ function NotariaCard({
   notaria: NotariaEdit;
   onChange: (field: keyof NotariaEdit, value: string) => void;
 }) {
+  const [depNotaria, setDepNotaria] = useState<string>(() =>
+    getDepartamentoByMunicipio(String(notaria.municipio_notaria ?? "")) ?? ""
+  );
+
+  // Sincronizar cuando el padre actualiza municipio_notaria (ej: desde handleAnalizar)
+  const prevMunicipioRef = useRef(notaria.municipio_notaria);
+  if (prevMunicipioRef.current !== notaria.municipio_notaria) {
+    prevMunicipioRef.current = notaria.municipio_notaria;
+    const inferred = getDepartamentoByMunicipio(String(notaria.municipio_notaria ?? ""));
+    if (inferred && inferred !== depNotaria) {
+      setDepNotaria(inferred);
+    }
+  }
+
   return (
     <div className="ep-card rounded-2xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-line/70">
@@ -783,11 +818,36 @@ function NotariaCard({
             onChange={(v) => onChange("nombre_notaria", v)}
           />
         </div>
-        <SectionField
-          label="Municipio notaría"
-          value={String(notaria.municipio_notaria ?? "")}
-          onChange={(v) => onChange("municipio_notaria", v)}
-        />
+        <label className="grid gap-1">
+          <span className="text-xs font-medium text-muted">Departamento notaría</span>
+          <select
+            value={depNotaria}
+            onChange={(e) => {
+              setDepNotaria(e.target.value);
+              onChange("municipio_notaria", "");
+            }}
+            className="ep-select ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
+          >
+            <option value="">Seleccionar...</option>
+            {DEPARTAMENTOS_COLOMBIA.map(d => (
+              <option key={d.codigo} value={d.nombre}>{d.nombre}</option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1">
+          <span className="text-xs font-medium text-muted">Municipio notaría</span>
+          <select
+            value={String(notaria.municipio_notaria ?? "")}
+            onChange={(e) => onChange("municipio_notaria", e.target.value)}
+            className="ep-select ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
+            disabled={!depNotaria}
+          >
+            <option value="">Seleccionar...</option>
+            {getMunicipiosByDepartamento(depNotaria).map(m => (
+              <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
+            ))}
+          </select>
+        </label>
         <SectionField
           label="Número escritura"
           value={String(notaria.numero_escritura ?? "")}
@@ -983,7 +1043,18 @@ export function NuevaMinutaWorkspace() {
       const tipoNormalizado = inmuebleRaw.tipo
         ? TIPOS_INMUEBLE_MAP[inmuebleRaw.tipo.toLowerCase().trim()] ?? inmuebleRaw.tipo
         : null;
-      setInmuebleEdit({ ...EMPTY_INMUEBLE, ...inmuebleRaw, tipo: tipoNormalizado });
+      const municipioDetectado = inmuebleRaw.municipio ?? '';
+      const departamentoDetectado =
+        inmuebleRaw.departamento ??
+        getDepartamentoByMunicipio(municipioDetectado) ??
+        '';
+      setInmuebleEdit({
+        ...EMPTY_INMUEBLE,
+        ...inmuebleRaw,
+        tipo: tipoNormalizado,
+        municipio: municipioDetectado || null,
+        departamento: departamentoDetectado || null,
+      });
       const fechasRaw = (result.datos as Record<string, unknown>).fechas as Record<string, unknown> | null | undefined;
       const fechaRaw = fechasRaw?.fecha_otorgamiento;
       const fechaOtorgamiento = typeof fechaRaw === "string" ? fechaRaw : "";
