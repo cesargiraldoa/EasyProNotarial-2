@@ -256,25 +256,25 @@ export function DashboardOverview() {
             <Filter className="h-4 w-4 text-primary" />
             <p className="text-sm font-semibold text-primary">Filtros ejecutivos</p>
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-            <label className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">Fecha desde<input type="date" value={draftFilters.date_from ?? ""} onChange={(event) => updateDraft("date_from", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
-            <label className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">Fecha hasta<input type="date" value={draftFilters.date_to ?? ""} onChange={(event) => updateDraft("date_to", event.target.value)} className="ep-input h-12 rounded-2xl px-4" /></label>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <label className="grid gap-2 text-sm font-medium text-primary">Fecha desde<input type="date" value={draftFilters.date_from ?? ""} onChange={(event) => updateDraft("date_from", event.target.value)} className="ep-input h-12 rounded-lg px-4" /></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Fecha hasta<input type="date" value={draftFilters.date_to ?? ""} onChange={(event) => updateDraft("date_to", event.target.value)} className="ep-input h-12 rounded-lg px-4" /></label>
             {isSuperAdmin ? (
-              <div className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">
+              <div className="grid gap-2 text-sm font-medium text-primary">
                 <label>Notaría</label>
-                <select value={draftFilters.notary_id ?? ""} onChange={(event) => updateDraft("notary_id", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{dashboard.filter_options.notaries.map((option) => <option key={`${option.id ?? "all"}-${option.label}`} value={option.id?.toString() ?? ""}>{option.label}</option>)}</select>
+                <select value={draftFilters.notary_id ?? ""} onChange={(event) => updateDraft("notary_id", event.target.value)} className="ep-select h-12 rounded-lg px-4">{dashboard.filter_options.notaries.map((option) => <option key={`${option.id ?? "all"}-${option.label}`} value={option.id?.toString() ?? ""}>{option.label}</option>)}</select>
               </div>
             ) : null}
-            <label className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">Estado<select value={draftFilters.state ?? ""} onChange={(event) => updateDraft("state", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{dashboard.filter_options.states.map((option) => <option key={option.label} value={option.label === "Todos los estados" ? "" : option.label}>{option.label}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">Tipo de acto<select value={draftFilters.act_type ?? ""} onChange={(event) => updateDraft("act_type", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{dashboard.filter_options.act_types.map((option) => <option key={option.label} value={option.label === "Todos los actos" ? "" : option.label}>{option.label}</option>)}</select></label>
-            <label className="grid gap-2 text-sm font-medium text-primary xl:col-span-2">Responsable<select value={draftFilters.owner_user_id ?? ""} onChange={(event) => updateDraft("owner_user_id", event.target.value)} className="ep-select h-12 rounded-2xl px-4">{dashboard.filter_options.owners.map((option) => <option key={`${option.id ?? "all"}-${option.label}`} value={option.id?.toString() ?? ""}>{option.label}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Estado<select value={draftFilters.state ?? ""} onChange={(event) => updateDraft("state", event.target.value)} className="ep-select h-12 rounded-lg px-4">{dashboard.filter_options.states.map((option) => <option key={option.label} value={option.label === "Todos los estados" ? "" : option.label}>{option.label}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Tipo de acto<select value={draftFilters.act_type ?? ""} onChange={(event) => updateDraft("act_type", event.target.value)} className="ep-select h-12 rounded-lg px-4">{dashboard.filter_options.act_types.map((option) => <option key={option.label} value={option.label === "Todos los actos" ? "" : option.label}>{option.label}</option>)}</select></label>
+            <label className="grid gap-2 text-sm font-medium text-primary">Responsable<select value={draftFilters.owner_user_id ?? ""} onChange={(event) => updateDraft("owner_user_id", event.target.value)} className="ep-select h-12 rounded-lg px-4">{dashboard.filter_options.owners.map((option) => <option key={`${option.id ?? "all"}-${option.label}`} value={option.id?.toString() ?? ""}>{option.label}</option>)}</select></label>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel disabled:opacity-70">
+            <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-5 py-2.5 text-sm font-medium text-white transition-opacity disabled:opacity-70">
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
               Aplicar filtros
             </button>
-            <button type="button" onClick={resetFilters} className="ep-card-soft inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-primary">
+            <button type="button" onClick={resetFilters} className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-5 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--line)]">
               Limpiar
             </button>
           </div>
