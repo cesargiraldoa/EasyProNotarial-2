@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BarChart3, Filter, LineChart, RefreshCw, ShieldAlert } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import {
   getCurrentUser,
   getExecutiveDashboard,
@@ -93,29 +93,53 @@ function TrendCard({ data }: { data: DashboardTrendDatum[] }) {
   );
 }
 
+function CustomTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div style={{ background: "var(--panel)", border: "0.5px solid var(--line)", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "var(--ink)", boxShadow: "0 2px 8px rgba(20,30,56,0.08)" }}>
+      <p style={{ fontWeight: 500, marginBottom: 2 }}>{d.name}</p>
+      <p style={{ color: "var(--text-muted)" }}>{d.value} casos · {d.payload.percent ? (d.payload.percent * 100).toFixed(1) : "—"}%</p>
+    </div>
+  );
+}
+
 function PieActCard({ data }: { data: DashboardChartDatum[] }) {
   return (
     <article className="ep-card rounded-[2rem] p-6">
       <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-accent">Tipos de acto</p>
-      <ResponsiveContainer width="100%" height={260}>
-        <PieChart>
+      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
+        <PieChart width={200} height={200}>
           <Pie
             data={data}
+            cx={100}
+            cy={100}
+            innerRadius={55}
+            outerRadius={90}
+            paddingAngle={2}
             dataKey="value"
             nameKey="label"
-            cx="50%"
-            cy="50%"
-            outerRadius={90}
-            label={({ name, percent }) => `${name} ${(((percent ?? 0) * 100)).toFixed(0)}%`}
           >
-            {data.map((_, index) => (
-              <Cell key={index} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
+            {data.map((_, i) => (
+              <Cell key={i} fill={CHART_PALETTE[i % CHART_PALETTE.length]} />
             ))}
           </Pie>
-          <Tooltip />
-          <Legend />
+          <Tooltip content={<CustomTooltip />} />
         </PieChart>
-      </ResponsiveContainer>
+        <div style={{ flex: 1, maxHeight: 200, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+          {data.map((entry, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 10, height: 10, borderRadius: 3, background: CHART_PALETTE[i % CHART_PALETTE.length], flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {entry.label}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--ink)", flexShrink: 0 }}>
+                {entry.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </article>
   );
 }
