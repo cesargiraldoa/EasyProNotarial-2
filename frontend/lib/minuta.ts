@@ -44,6 +44,11 @@ export type MinutaNotaria = {
   numero_escritura: string | null;
 };
 
+export interface MinutaFechas {
+  fecha_otorgamiento: string;
+  fecha_otorgamiento_letras: string;
+}
+
 export type MinutaDatos = {
   personas: MinutaPersona[];
   valores: MinutaValor[];
@@ -51,6 +56,7 @@ export type MinutaDatos = {
   notaria: MinutaNotaria | null;
   actos: string[];
   decisiones: Record<string, boolean | null>;
+  fechas?: MinutaFechas;
 };
 
 export type MinutaAnalisisResult = {
@@ -65,6 +71,7 @@ export type MinutaAnalisisResult = {
   costo_usd: number;
   tokens: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   chars: number;
+  texto_original?: string;
 };
 
 export type MinutaGenerarResult = {

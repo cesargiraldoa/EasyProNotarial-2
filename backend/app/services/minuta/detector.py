@@ -137,7 +137,7 @@ INSTRUCCIONES:
 2. Para CADA persona detectada (cada comprador, vendedor, deudor, apoderado, conyuge, otorgante, notario, protocolista, representante legal):
    - rol: "comprador_1", "vendedor", "deudor_hipotecante", "apoderado", "conyuge_comprador_1", "notario", "protocolista", etc.
    - nombre_completo: tal cual aparece (preservar mayusculas)
-   - tipo_documento: "CC", "CE", "PASAPORTE", "NIT", "TI"
+   - tipo_documento: usar exactamente uno de estos valores: "C.C", "C.E", "T.I", "PAS", "P.P.T", "R.C", "NIT"
    - numero_documento: con el formato original (con puntos o sin puntos como aparece)
    - genero: "M" (masculino), "F" (femenino), "J" (juridica empresa/banco/fideicomiso)
    - estado_civil: si se menciona ("CASADO", "SOLTERO", "UNION_MARITAL", etc.)
@@ -187,7 +187,7 @@ ESQUEMA JSON:
     {
       "rol": "comprador_1",
       "nombre_completo": "JUAN CAMILO VASQUEZ MIRA",
-      "tipo_documento": "CC",
+      "tipo_documento": "C.C",
       "numero_documento": "1.037.657.164",
       "genero": "M",
       "estado_civil": null,
