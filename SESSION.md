@@ -1,6 +1,39 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (noche 2)
+
+**Objetivo de la sesión:** Auditoría técnica completa del motor de minutas — lectura y análisis de todos los archivos del sistema sin modificar código.
+
+**Realizado:**
+- **Lectura completa de 9 archivos clave:** `router.py`, `detector.py`, `reemplazador.py`, `concordancia.py`, `validador.py`, `nueva-minuta-workspace.tsx`, `minuta.ts`, `listas-notariales.ts`, `colombia-geo.ts`
+- **Flujo completo documentado:** desde upload del .docx hasta apertura en OnlyOffice, con cada función, endpoint y transformación identificada paso a paso
+- **Análisis del formulario:** PersonaCard estática (11 campos visibles, `actividad_economica` ausente), InmuebleCard 18 campos, NotariaCard con selectores geo encadenados, ValoresCard dinámica
+- **Detector auditado:** clasificación B1/B2 heurística, PROMPT_B2 con 8 secciones, uso de `json_object` sin schema estricto, `max_tokens=8000`
+- **Reemplazador auditado:** `construir_lista_reemplazos` cubre 14 campos inmueble + personas + notaría + fechas; `domicilio` y `estado_civil` se editan en UI pero NO se reemplazan; `_normalizar_guiones` parcialmente inefectivo
+- **Validador auditado:** capa determinista + GPT-4o-mini; valida datos del detector, no los editados por el usuario; `CAMPOS_OBLIGATORIOS_POR_ACTO` incompleto
+- **Concordancia auditada:** solo se dispara si nombre Y género cambian; artículos de rol ordenados por longitud; texto truncado a 40k chars
+- **10 gaps críticos identificados** con archivos y líneas exactas
+
+**Archivos creados/modificados:**
+- (ninguno — sesión de solo lectura)
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard** en `nueva-minuta-workspace.tsx:446` (campo en tipo y reemplazador pero sin UI)
+2. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`** en `reemplazador.py:408`
+3. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** (sin cambio de nombre) en `concordancia.py:152`
+4. **[CRÍTICO] Reescribir detector con Structured Outputs** (`json_schema` + `strict: True`) per gap 5
+5. **[MEDIA] Fix gap 3 — UI para decisiones** (vivienda_familiar, patrimonio_familia, notificacion_electronica)
+6. **[BAJA] Remover `[GENERO DEBUG]` prints** de `reemplazador.py:319`
+7. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+
+**Estado al cierre:**
+- Backend: Railway operativo — último commit `9ec57a5`, sin cambios de backend en esta sesión
+- Frontend: Vercel operativo — easypronotarial.com, sin cambios de frontend en esta sesión
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio — solo `tsconfig.tsbuildinfo` (ignorar)
+
+---
 ## Sesión 2026-05-26 (tarde 2)
 
 **Objetivo de la sesión:** Mejorar el formulario de minutas — normalización de campos del inmueble, selectores geográficos Colombia, separador de miles en valores monetarios.
