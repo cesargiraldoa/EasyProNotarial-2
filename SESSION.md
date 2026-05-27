@@ -1,6 +1,38 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (noche 3)
+
+**Objetivo de la sesión:** Implementar tour guiado del módulo de minutas con overlay spotlight, tooltip posicionado dinámicamente y estado persistente entre re-renders.
+
+**Realizado:**
+- **minutas-tour.tsx — nuevo componente (v1):** Tour de 7 pasos con overlay `box-shadow: 0 0 0 9999px` (más confiable que SVG mask), tooltip con flecha CSS border-trick posicionado automáticamente (top/bottom/left/right según espacio disponible), animación pulse en el elemento destacado, progress dots, botón `?` fijo para relanzar
+- **nueva-minuta-workspace.tsx — IDs de tour:** Agregados 7 `id` a elementos target: `tour-upload-zone`, `tour-btn-analizar`, `tour-validacion-banner`, `tour-persona-0`, `tour-inmueble-card`, `tour-valores-card`, `tour-btn-generar`; `PersonaCard` recibe prop `id?: string`
+- **minutas-tour.tsx — fix overlay SVG:** Reemplazado `<svg mask>` por `div` con `box-shadow: 0 0 0 9999px rgba(0,0,0,0.60)` — el SVG usaba `fill="rgba()"` que no es válido en atributos SVG; tambien eliminado `rgba(var(--primary))` que tampoco es válido CSS en `rgba()`
+- **minutas-tour.tsx — fix delay inicial:** Eliminado `setTimeout(setActive, 750)` — el tour ahora activa inmediatamente en el `useEffect` de mount; reducida latencia total de ~1150ms a ~400ms
+- **minutas-tour.tsx — refactor state lifting:** Estado `active`/`currentStep`/`visible` movido al padre `NuevaMinutaWorkspace`; `MinutasTour` pasa a ser componente controlado que recibe `visible`, `currentStep`, `onNext`, `onPrev`, `onSkip`, `onFinish`, `onRelaunch` como props — así el estado del tour sobrevive cualquier re-render del workspace (file upload, drag, edición de campos, etc.)
+- **nueva-minuta-workspace.tsx — tour state:** `tourVisible` + `tourStep` como `useState`; `useEffect([], ...)` chequea localStorage (`easypro_minutas_tour_done`) y activa el tour en primera visita; handlers: `handleTourNext/Prev/Skip/Finish/Relaunch`
+
+**Archivos creados/modificados:**
+- `frontend/components/minutas/minutas-tour.tsx` — nuevo: tour guiado 7 pasos, overlay box-shadow, tooltip auto-posicionado, estado controlado por props
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — IDs de tour en 7 elementos, prop `id` en PersonaCard, estado del tour (`tourVisible`/`tourStep`), handlers, `<MinutasTour>` con props completos
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard** en `nueva-minuta-workspace.tsx:446` (campo en tipo y reemplazador pero sin UI)
+2. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`** en `reemplazador.py:408`
+3. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** (sin cambio de nombre) en `concordancia.py:152`
+4. **[CRÍTICO] Reescribir detector con Structured Outputs** (`json_schema` + `strict: True`) per gap 5
+5. **[MEDIA] Fix gap 3 — UI para decisiones** (vivienda_familiar, patrimonio_familia, notificacion_electronica)
+6. **[BAJA] Remover `[GENERO DEBUG]` prints** de `reemplazador.py`
+7. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+
+**Estado al cierre:**
+- Backend: Railway operativo — sin cambios de backend en esta sesión
+- Frontend: Vercel pendiente deploy — `minutas-tour.tsx` nuevo + `nueva-minuta-workspace.tsx` modificado sin deploy a producción
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: 2 archivos sin commitear — se commitean en este cierre
+
+---
 ## Sesión 2026-05-26 (noche 2)
 
 **Objetivo de la sesión:** Auditoría técnica completa del motor de minutas — lectura y análisis de todos los archivos del sistema sin modificar código.

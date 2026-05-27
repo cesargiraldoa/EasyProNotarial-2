@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, CheckCircle2, ChevronRight, ExternalLink,
@@ -14,6 +14,7 @@ import {
 import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, getEstadosCiviles } from "@/lib/listas-notariales";
 import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
+import { MinutasTour, type TourStep } from "@/components/minutas/minutas-tour";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -388,11 +389,13 @@ function PersonaCard({
   index,
   onChange,
   onRemove,
+  id,
 }: {
   persona: MinutaPersona;
   index: number;
   onChange: (field: keyof MinutaPersona, value: string) => void;
   onRemove: () => void;
+  id?: string;
 }) {
   const pendingCount = (
     ["nombre_completo", "tipo_documento", "numero_documento", "genero"] as (keyof MinutaPersona)[]
@@ -419,7 +422,7 @@ function PersonaCard({
   }
 
   return (
-    <div className="ep-card rounded-2xl overflow-hidden">
+    <div id={id} className="ep-card rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-line/70">
         <div className="flex items-center gap-3">
           <span className="w-7 h-7 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">
@@ -973,6 +976,50 @@ function ValoresCard({
   );
 }
 
+// ─── Tour ─────────────────────────────────────────────────────────────────────
+
+const TOUR_KEY = "easypro_minutas_tour_done";
+
+// ─── Tour steps ───────────────────────────────────────────────────────────────
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "tour-upload-zone",
+    titulo: "Sube tu escritura base",
+    texto: "Arrastra o selecciona el .docx de una escritura anterior. La IA la usará como plantilla para generar la nueva minuta.",
+  },
+  {
+    targetId: "tour-btn-analizar",
+    titulo: "Análisis automático",
+    texto: "La IA extrae personas, inmueble, actos y valores del documento. Solo toma unos segundos.",
+  },
+  {
+    targetId: "tour-validacion-banner",
+    titulo: "Semáforo de campos",
+    texto: "Verde = listo, amarillo = revisar, rojo = campo crítico faltante. Completa los pendientes antes de generar.",
+  },
+  {
+    targetId: "tour-persona-0",
+    titulo: "Datos de los intervinientes",
+    texto: "Revisa y corrige nombre, documento, género y estado civil de cada persona. El género actualiza automáticamente la concordancia del documento.",
+  },
+  {
+    targetId: "tour-inmueble-card",
+    titulo: "Datos del inmueble",
+    texto: "Verifica matrícula, municipio, áreas y linderos. Los selectores de departamento y municipio están encadenados.",
+  },
+  {
+    targetId: "tour-valores-card",
+    titulo: "Valores y tarifas",
+    texto: "Los derechos notariales se calculan automáticamente según la Res. 2026-000964-6. Puedes ajustar cualquier valor manualmente.",
+  },
+  {
+    targetId: "tour-btn-generar",
+    titulo: "Genera la escritura",
+    texto: "EasyPro reemplaza los datos, aplica concordancia de género y abre el .docx final en el editor. ¡Listo para firmar!",
+  },
+];
+
 // ─── Main workspace ───────────────────────────────────────────────────────────
 
 export function NuevaMinutaWorkspace() {
@@ -993,6 +1040,27 @@ export function NuevaMinutaWorkspace() {
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiModalTitle, setAiModalTitle] = useState('');
   const [aiModalSubtitle, setAiModalSubtitle] = useState('');
+
+  // ── Tour state — lives here so workspace re-renders don't reset it ──────────
+  const [tourVisible, setTourVisible] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+
+  useEffect(() => {
+    if (!localStorage.getItem(TOUR_KEY)) setTourVisible(true);
+  }, []);
+
+  function handleTourNext() {
+    if (tourStep < TOUR_STEPS.length - 1) setTourStep(s => s + 1);
+    else handleTourFinish();
+  }
+  function handleTourPrev() { if (tourStep > 0) setTourStep(s => s - 1); }
+  function handleTourSkip() { setTourVisible(false); }
+  function handleTourFinish() {
+    setTourVisible(false);
+    localStorage.setItem(TOUR_KEY, "1");
+  }
+  function handleTourRelaunch() { setTourStep(0); setTourVisible(true); }
+  // ────────────────────────────────────────────────────────────────────────────
 
   function updateStep(id: string, status: AiStep['status'], description?: string) {
     setAiSteps(prev => prev.map(s => s.id === id ? { ...s, status, ...(description ? { description } : {}) } : s));
@@ -1201,14 +1269,17 @@ export function NuevaMinutaWorkspace() {
       {/* ── PASO 1 ── */}
       {step === 0 && (
         <div className="space-y-5">
-          <UploadZone
-            file={file} isDragging={isDragging}
-            onFile={handleFileSelected} onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave} onDrop={handleDrop} onClear={clearFile}
-          />
+          <div id="tour-upload-zone">
+            <UploadZone
+              file={file} isDragging={isDragging}
+              onFile={handleFileSelected} onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave} onDrop={handleDrop} onClear={clearFile}
+            />
+          </div>
 
           {!analisisResult && (
             <button
+              id="tour-btn-analizar"
               onClick={handleAnalizar} disabled={!canAnalyze}
               className={[
                 "w-full h-12 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
@@ -1253,7 +1324,7 @@ export function NuevaMinutaWorkspace() {
 
           {/* ── Banner de validación notarial ── */}
           {analisisResult?.validacion && !analisisResult.validacion.error && (
-            <div className={[
+            <div id="tour-validacion-banner" className={[
               "flex items-center gap-3 px-4 py-3 rounded-xl border mb-4",
               analisisResult.validacion.resumen.nivel_confianza === "alto"
                 ? "bg-success-bg border-emerald-200"
@@ -1314,6 +1385,7 @@ export function NuevaMinutaWorkspace() {
           {personas.map((p, i) => (
             <PersonaCard
               key={i} persona={p} index={i}
+              id={i === 0 ? "tour-persona-0" : undefined}
               onChange={(field, value) => updatePersona(i, field, value)}
               onRemove={() => removePersona(i)}
             />
@@ -1326,11 +1398,15 @@ export function NuevaMinutaWorkspace() {
             <Plus size={15} /> Agregar persona manualmente
           </button>
 
-          <InmuebleCard inmueble={inmuebleEdit} onChange={updateInmueble} />
+          <div id="tour-inmueble-card">
+            <InmuebleCard inmueble={inmuebleEdit} onChange={updateInmueble} />
+          </div>
 
           <NotariaCard notaria={notariaEdit} onChange={updateNotaria} />
 
-          <ValoresCard valores={valoresEdit} onChangeMonto={updateValor} onChangeTexto={updateValorTexto} />
+          <div id="tour-valores-card">
+            <ValoresCard valores={valoresEdit} onChangeMonto={updateValor} onChangeTexto={updateValorTexto} />
+          </div>
 
           <button
             onClick={() => setStep(2)} disabled={!canGenerate}
@@ -1408,6 +1484,7 @@ export function NuevaMinutaWorkspace() {
           </div>
 
           <button
+            id="tour-btn-generar"
             onClick={handleGenerar} disabled={!canGenerate || isGenerating}
             className={[
               "w-full h-14 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all",
@@ -1431,6 +1508,17 @@ export function NuevaMinutaWorkspace() {
         subtitle={aiModalSubtitle}
         steps={aiSteps}
         progress={aiProgress}
+      />
+
+      <MinutasTour
+        steps={TOUR_STEPS}
+        visible={tourVisible}
+        currentStep={tourStep}
+        onNext={handleTourNext}
+        onPrev={handleTourPrev}
+        onSkip={handleTourSkip}
+        onFinish={handleTourFinish}
+        onRelaunch={handleTourRelaunch}
       />
     </div>
   );
