@@ -225,7 +225,11 @@ export function MinutasTour({
           <div
             aria-hidden="true"
             style={{ position: "fixed", inset: 0, zIndex: 9998, cursor: "default" }}
-            onClick={onSkip}
+            onClick={(e) => {
+              const targetEl = document.getElementById(steps[currentStep]?.targetId);
+              if (targetEl && targetEl.contains(e.target as Node)) return;
+              onSkip();
+            }}
           />
 
           {/* ── Spotlight — box-shadow creates dark overlay around target ───── */}
@@ -238,7 +242,7 @@ export function MinutasTour({
                 borderRadius: 10,
                 boxShadow: `0 0 0 9999px rgba(0,0,0,0.60), 0 0 0 2px ${PRIMARY}`,
                 zIndex: 9999,
-                pointerEvents: "none",
+                pointerEvents: "auto",
                 animation: "ep-tour-spotlight-pulse 2s ease-in-out infinite",
               }}
             />

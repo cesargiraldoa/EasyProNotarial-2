@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, CheckCircle2, ChevronRight, ExternalLink,
-  FileText, Loader2, Plus, Upload, X,
+  FileText, HelpCircle, Loader2, Plus, Upload, X,
 } from "lucide-react";
 import {
   analyzeMinuta, generateMinuta, emptyPersona,
@@ -1245,6 +1245,8 @@ export function NuevaMinutaWorkspace() {
   const canAnalyze = !!file && !isAnalyzing;
   const canGenerate = personas.length > 0 && !isGenerating;
 
+  console.log("TOUR VISIBLE:", tourVisible);
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="mb-8">
@@ -1501,6 +1503,16 @@ export function NuevaMinutaWorkspace() {
           </button>
         </div>
       )}
+
+      {/* Botón fijo para relanzar el tour — z-[9997] queda debajo del overlay cuando el tour está activo */}
+      <button
+        onClick={handleTourRelaunch}
+        title="Ver tour guiado"
+        aria-label="Ver tour guiado"
+        className="fixed bottom-6 right-6 z-[9997] w-11 h-11 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
+      >
+        <HelpCircle size={20} />
+      </button>
 
       <AiProgressModal
         open={aiModalOpen}

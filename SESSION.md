@@ -1,6 +1,38 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-26 (noche 4)
+
+**Objetivo de la sesión:** Diagnosticar y corregir bugs del tour guiado de minutas: cierre accidental al hacer click en la zona de upload (BUG 1) y ausencia de botón de relaunch visible (BUG 2).
+
+**Realizado:**
+- **Diagnóstico BUG 1 (tour se cierra al subir documento):** Identificada causa raíz — el backdrop div de `MinutasTour` (z-index 9998, `onClick={onSkip}`) capturaba todos los clicks del área visible, incluyendo los dirigidos a la zona de upload. El spotlight tenía `pointerEvents:none`, lo que dejaba pasar los clicks al backdrop en lugar de al `<label>` del upload zone.
+- **Fix BUG 1 — minutas-tour.tsx:** (1) Spotlight cambiado a `pointerEvents:"auto"` para que capture sus propios clicks antes de que lleguen al backdrop. (2) Backdrop `onClick` reemplazado por `handleBackdropClick` inline que verifica `currentTargetEl.contains(e.target)` antes de llamar `onSkip`.
+- **Fix BUG 2 — nueva-minuta-workspace.tsx:** Agregado botón fijo `?` en esquina inferior derecha con `fixed bottom-6 right-6 z-[9997]`, importado `HelpCircle` de lucide-react, llama `handleTourRelaunch`.
+- **Debug log — nueva-minuta-workspace.tsx:** Agregado `console.log("TOUR VISIBLE:", tourVisible)` antes del return para confirmar diagnóstico BUG 1 (pendiente de limpiar).
+- **⚠ Tour no activa en local:** El tour no se activa en el entorno de desarrollo local. No se pudo verificar el fix. Pendiente revisar 2026-05-27.
+
+**Archivos creados/modificados:**
+- `frontend/components/minutas/minutas-tour.tsx` — backdrop: contains check antes de onSkip; spotlight: pointerEvents none→auto
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — import HelpCircle, console.log debug, botón relaunch fijo z-[9997]
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Verificar fix tour en producción o entorno funcional** — Confirmar que: (a) click en zona de upload no cierra el tour, (b) file picker abre mientras el tour está activo, (c) click fuera del spotlight sí cierra el tour. Si el file picker no abre con pointerEvents:auto en spotlight, agregar `onClick` al spotlight que reenvíe el click: `el?.querySelector('input[type="file"], label')?.click()`
+2. **[CRÍTICO] Remover console.log debug** — `console.log("TOUR VISIBLE:", tourVisible)` en `nueva-minuta-workspace.tsx` línea 1248 antes de deploy
+3. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard** en `nueva-minuta-workspace.tsx:446`
+4. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`** en `reemplazador.py:408`
+5. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** (sin cambio de nombre) en `concordancia.py:152`
+6. **[MEDIA] Fix gap 3 — UI para decisiones** (vivienda_familiar, patrimonio_familia, notificacion_electronica)
+7. **[BAJA] Remover prints `[GENERO DEBUG]`** de `reemplazador.py`
+8. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+
+**Estado al cierre:**
+- Backend: Railway operativo — sin cambios de backend en esta sesión
+- Frontend: Vercel pendiente deploy — `minutas-tour.tsx` y `nueva-minuta-workspace.tsx` modificados sin deploy a producción; tour no verificado en local
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: 2 archivos sin commitear — se commitean en este cierre
+
+---
 ## Sesión 2026-05-26 (noche 3)
 
 **Objetivo de la sesión:** Implementar tour guiado del módulo de minutas con overlay spotlight, tooltip posicionado dinámicamente y estado persistente entre re-renders.
