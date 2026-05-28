@@ -1,6 +1,42 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-28 (sesión 3)
+
+**Objetivo de la sesión:** Resolver 2 bugs reportados: (1) no se detecta ADQUISICIÓN, (2) no se detecta/muestra INDAGACIÓN SOBRE AFECTACIÓN A VIVIENDA FAMILIAR.
+
+**Realizado:**
+- **Bug 2 — Decisiones (vivienda familiar):** Implementadas 2 capas faltantes: `DecisionesCard` en frontend con 3 toggles Sí/No/? y bloque `# DECISIONES` en `construir_lista_reemplazos()`. ✅
+- **Bug 1 — Adquisición:** Implementadas 5 capas desde cero: sección ADQUISICION PREVIA en PROMPT_B2 del detector, `MinutaAdquisicion` en `minuta.ts`, bloque `# ADQUISICION` en reemplazador, `AdquisicionCard` en frontend, payload verificado en `/generar`. ✅
+- **Bug A — NO→SÍ destruía texto legal:** Eliminado bloque `# DECISIONES` del reemplazador — las decisiones son booleanos para UI, no variables de plantilla. ✅
+- **Bug B — Notaria→Sítaria:** Resuelto al eliminar el bloque DECISIONES que reemplazaba NO→SÍ sin `palabra_completa=True`. ✅
+- **Bug C — 854 contaminaba ley 854 y parágrafo PH:** Guard `len(str(valor)) > 4` en `escritura_numero_adquisicion` — el valor "854" (3 chars) no pasa el guard. ✅
+- **forma_adquisicion contaminaba párrafos legales:** Eliminado del reemplazador — campo informativo, no variable de plantilla. ✅
+- **Verificación con diff exacto:** 4 generados analizados con diff entre plantilla y generado. Último diff limpio — solo cambios esperados (valores en letras, vendedor original en cláusula ADQUISICIÓN). ✅
+
+**Archivos creados/modificados:**
+- `backend/app/services/minuta/detector.py` — sección ADQUISICION PREVIA en PROMPT_B2
+- `backend/app/services/minuta/reemplazador.py` — bloque ADQUISICION con guards, bloque DECISIONES eliminado, `forma_adquisicion` eliminada
+- `backend/app/modules/minuta/router.py` — sin cambios
+- `frontend/lib/minuta.ts` — tipo `MinutaAdquisicion`, campo `adquisicion?` en `MinutaDatos`
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — `AdquisicionCard`, `DecisionesCard`, estados, payload
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Remover console.log debug** — `console.log("TOUR VISIBLE:", tourVisible)` en `nueva-minuta-workspace.tsx`
+2. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard**
+3. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`**
+4. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** en `concordancia.py`
+5. **[MEDIA] Verificar tour en producción** — click en upload no debe cerrar el tour
+6. **[MEDIA] Remover prints `[GENERO DEBUG]`** de `reemplazador.py`
+7. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';`
+
+**Estado al cierre:**
+- Backend: Railway desplegado — fixes reemplazador y detector activos
+- Frontend: Vercel desplegado — `AdquisicionCard` y `DecisionesCard` activos
+- BD producción: operativa, alembic_version desincronizada (pendiente)
+- Git: árbol limpio
+
+---
 ## Sesión 2026-05-28 (sesión 2)
 
 **Objetivo de la sesión:** Implementar campo ADQUISICIÓN en las 5 capas del motor de minutas y corregir 3 bugs críticos de reemplazo en `reemplazador.py`.
