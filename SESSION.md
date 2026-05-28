@@ -1,6 +1,42 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-28 (sesión 2)
+
+**Objetivo de la sesión:** Implementar campo ADQUISICIÓN en las 5 capas del motor de minutas y corregir 3 bugs críticos de reemplazo en `reemplazador.py`.
+
+**Realizado:**
+- **ADQUISICIÓN — Capa 1 (detector.py):** Sección `5. ADQUISICION PREVIA` insertada en PROMPT_B2 entre INMUEBLE y NOTARIA (secciones 6-9 renumeradas). 6 campos: `forma_adquisicion`, `escritura_numero`, `fecha_escritura_anterior`, `notaria_anterior`, `municipio_notaria_anterior`, `vendedor_original`. Instrucción explícita de devolver `null` si no hay antecedente de adquisición. Ejemplo JSON actualizado con caso real.
+- **ADQUISICIÓN — Capa 2 (minuta.ts):** Tipo `MinutaAdquisicion` exportado con 6 campos `string | null`. Campo `adquisicion?: MinutaAdquisicion | null` agregado a `MinutaDatos`.
+- **ADQUISICIÓN — Capa 3 (reemplazador.py):** Bloque `# ADQUISICION` en `construir_lista_reemplazos()` con 6 campos, guard `{} or {}`, etiquetas sufijadas `_adquisicion`, `palabra_completa=True` en todos.
+- **ADQUISICIÓN — Capa 4 (nueva-minuta-workspace.tsx):** `AdquisicionCard` con 6 `SectionField` en grid 2 columnas. Estado `adquisicionEdit` (EMPTY_ADQUISICION), inicializado desde `result.datos.adquisicion` en `handleAnalizar`, reseteado en `clearFile`, handler `updateAdquisicion`. Card insertada en Paso 2 entre InmuebleCard y NotariaCard.
+- **ADQUISICIÓN — Capa 5 (payload verificado):** `adquisicion: adquisicionEdit` explícito en `datosNuevos` en `handleGenerar` (sobreescribe el spread de `analisisResult.datos`).
+- **BUG A+B — Decisiones destruyen texto legal (fix):** `"NO" → "SÍ"` sin límites de palabra corrompía "Notaria" → "Sítaria", "conocimiento" → "cosícimiento", e invertía "NO ESTÁ AFECTADO" → "SÍ ESTÁ AFECTADO". Fix: `agregar_reemplazo()` extendida con parámetro `palabra_completa: bool = False` propagado al dict. Bloque DECISIONES llama con `palabra_completa=True`.
+- **BUG C — escritura_numero contamina referencias legales (fix):** El número corto (ej: "854") reemplazaba en "ley 854 de 2003" y otros contextos. Fix: bloque ADQUISICION usa `palabra_completa=True` en todos sus campos. Guard existente `viejo == nuevo` ya cubre el caso de número idéntico sin lógica adicional.
+
+**Archivos creados/modificados:**
+- `backend/app/services/minuta/detector.py` — PROMPT_B2: sección ADQUISICION, renumeración 5→9, ejemplo JSON actualizado
+- `frontend/lib/minuta.ts` — tipo `MinutaAdquisicion` + campo `adquisicion` en `MinutaDatos`
+- `backend/app/services/minuta/reemplazador.py` — `agregar_reemplazo` con `palabra_completa`, bloque ADQUISICION, bloque DECISIONES con `palabra_completa=True`
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — import `MinutaAdquisicion`, `EMPTY_ADQUISICION`, `AdquisicionCard`, estado + handler + inicialización + reset + payload
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Deploy frontend a Vercel** — Múltiples sesiones acumuladas sin deploy: `vercel --cwd frontend --prod`
+2. **[CRÍTICO] Deploy backend a Railway** — `detector.py` y `reemplazador.py` modificados; push al repo activa Railway automáticamente
+3. **[CRÍTICO] Verificar fix tour en producción** — Remover `console.log("TOUR VISIBLE:", tourVisible)` en `nueva-minuta-workspace.tsx` antes de demo
+4. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard** — campo en tipo y reemplazador pero sin UI en el formulario
+5. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`** en `reemplazador.py`
+6. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** (sin cambio de nombre) en `concordancia.py:152`
+7. **[BAJA] Remover prints `[GENERO DEBUG]`** de `reemplazador.py`
+8. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase
+
+**Estado al cierre:**
+- Backend: Railway pendiente deploy — `detector.py` y `reemplazador.py` modificados, commits `ad7dc06` y `eb15519` en main sin deploy activo
+- Frontend: Vercel pendiente deploy — `nueva-minuta-workspace.tsx` y `minuta.ts` modificados, múltiples commits acumulados
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: árbol limpio — 2 commits nuevos en main (`ad7dc06`, `eb15519`)
+
+---
 ## Sesión 2026-05-28
 
 **Objetivo de la sesión:** Diagnóstico de dos bugs en el motor de minutas (campos ADQUISICIÓN y VIVIENDA FAMILIAR) e implementación de la UI y lógica de reemplazo para las decisiones notariales.
