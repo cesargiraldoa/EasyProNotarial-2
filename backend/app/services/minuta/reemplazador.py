@@ -471,27 +471,21 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
         "fechas.fecha_otorgamiento",
     )
 
-    # DECISIONES
-    dec_old = datos_anteriores.get("decisiones", {}) or {}
-    dec_new = datos_nuevos.get("decisiones", {}) or {}
-
-    for campo in ["vivienda_familiar", "patrimonio_familia", "notificacion_electronica"]:
-        val_old = dec_old.get(campo)
-        val_new = dec_new.get(campo)
-        if val_old is None or val_new is None:
-            continue
-        texto_old = "SÍ" if val_old else "NO"
-        texto_new = "SÍ" if val_new else "NO"
-        agregar_reemplazo(texto_old, texto_new, f"decisiones.{campo}", palabra_completa=True)
-
     # ADQUISICION
     adq_old = datos_anteriores.get("adquisicion", {}) or {}
     adq_new = datos_nuevos.get("adquisicion", {}) or {}
 
-    for campo in [
-        "forma_adquisicion", "escritura_numero", "fecha_escritura_anterior",
-        "notaria_anterior", "municipio_notaria_anterior", "vendedor_original",
-    ]:
+    # Campos cortos/ambiguos: solo reemplazar si el valor es suficientemente específico
+    val_forma = adq_new.get("forma_adquisicion")
+    if val_forma and len(str(val_forma).strip()) > 6:
+        agregar_reemplazo(adq_old.get("forma_adquisicion"), val_forma, "adquisicion.forma_adquisicion_adquisicion", palabra_completa=True)
+
+    val_num = adq_new.get("escritura_numero")
+    if val_num and len(str(val_num).strip()) > 4:
+        agregar_reemplazo(adq_old.get("escritura_numero"), val_num, "adquisicion.escritura_numero_adquisicion", palabra_completa=True)
+
+    # Campos largos y específicos: siempre reemplazar
+    for campo in ["fecha_escritura_anterior", "notaria_anterior", "municipio_notaria_anterior", "vendedor_original"]:
         agregar_reemplazo(adq_old.get(campo), adq_new.get(campo), f"adquisicion.{campo}_adquisicion", palabra_completa=True)
 
     return reemplazos
