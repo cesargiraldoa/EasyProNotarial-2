@@ -475,11 +475,6 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     adq_old = datos_anteriores.get("adquisicion", {}) or {}
     adq_new = datos_nuevos.get("adquisicion", {}) or {}
 
-    # Campos cortos/ambiguos: solo reemplazar si el valor es suficientemente específico
-    val_forma = adq_new.get("forma_adquisicion")
-    if val_forma and len(str(val_forma).strip()) > 6:
-        agregar_reemplazo(adq_old.get("forma_adquisicion"), val_forma, "adquisicion.forma_adquisicion_adquisicion", palabra_completa=True)
-
     val_num = adq_new.get("escritura_numero")
     if val_num and len(str(val_num).strip()) > 4:
         agregar_reemplazo(adq_old.get("escritura_numero"), val_num, "adquisicion.escritura_numero_adquisicion", palabra_completa=True)
