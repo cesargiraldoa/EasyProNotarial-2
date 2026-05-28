@@ -392,7 +392,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
     # usar un set de (viejo, nuevo) ya agregados
     pares_ya_agregados = set()
 
-    def agregar_reemplazo(viejo, nuevo, etiqueta):
+    def agregar_reemplazo(viejo, nuevo, etiqueta, palabra_completa: bool = False):
         if not isinstance(viejo, str) or not isinstance(nuevo, str):
             return
         viejo = viejo.strip()
@@ -403,7 +403,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
         if clave in pares_ya_agregados:
             return
         pares_ya_agregados.add(clave)
-        reemplazos.append({"viejo": viejo, "nuevo": nuevo, "etiqueta": etiqueta})
+        reemplazos.append({"viejo": viejo, "nuevo": nuevo, "etiqueta": etiqueta, "palabra_completa": palabra_completa})
 
     for rol, persona_new in personas_new.items():
         persona_old = personas_old.get(rol, {})
@@ -482,7 +482,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
             continue
         texto_old = "SÍ" if val_old else "NO"
         texto_new = "SÍ" if val_new else "NO"
-        agregar_reemplazo(texto_old, texto_new, f"decisiones.{campo}")
+        agregar_reemplazo(texto_old, texto_new, f"decisiones.{campo}", palabra_completa=True)
 
     # ADQUISICION
     adq_old = datos_anteriores.get("adquisicion", {}) or {}
@@ -492,7 +492,7 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
         "forma_adquisicion", "escritura_numero", "fecha_escritura_anterior",
         "notaria_anterior", "municipio_notaria_anterior", "vendedor_original",
     ]:
-        agregar_reemplazo(adq_old.get(campo), adq_new.get(campo), f"adquisicion.{campo}_adquisicion")
+        agregar_reemplazo(adq_old.get(campo), adq_new.get(campo), f"adquisicion.{campo}_adquisicion", palabra_completa=True)
 
     return reemplazos
 
