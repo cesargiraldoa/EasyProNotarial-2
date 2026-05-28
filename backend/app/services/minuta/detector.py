@@ -174,21 +174,30 @@ INSTRUCCIONES:
    - nota_linderos: si hay nota introductoria de linderos (ej: "segun planos aprobados")
    - linderos: texto COMPLETO de linderos tal como aparece — NO resumir ni truncar
 
-5. Para la NOTARIA:
+5. Para la ADQUISICION PREVIA del inmueble (antecedente notarial):
+   - forma_adquisicion: como adquirio el inmueble el actual propietario (ej: "compraventa", "herencia", "donacion", "permuta")
+   - escritura_numero: numero de la escritura de adquisicion previa
+   - fecha_escritura_anterior: fecha en formato texto tal como aparece en el documento
+   - notaria_anterior: nombre o numero de la notaria donde se otorgo la escritura anterior
+   - municipio_notaria_anterior: municipio de esa notaria
+   - vendedor_original: nombre del vendedor, causante o donante original
+   Si el documento NO menciona antecedente de adquisicion, devuelve todos los campos como null.
+
+6. Para la NOTARIA:
    - nombre_notaria: nombre completo
    - municipio_notaria
    - numero_escritura: si esta diligenciado, "PENDIENTE" si esta en blanco
 
-6. Para FECHAS:
+7. Para FECHAS:
    - fecha_otorgamiento: dia, mes, ano
 
-7. Para los ACTOS contenidos en la escritura (puede haber multiples):
+8. Para los ACTOS contenidos en la escritura (puede haber multiples):
    - El PRIMER elemento debe ser el acto PRINCIPAL: el que da nombre a la escritura y tiene cuantia.
    - Actos principales (van primero): COMPRAVENTA, COMPRAVENTA_VIS, HIPOTECA, LIBERACION_HIPOTECA, AFECTACION_VIVIENDA_FAMILIAR, PODER_GENERAL, CAPITULACIONES_MATRIMONIALES, CORRECCION_REGISTRO_CIVIL
    - Actos secundarios (van despues): RENUNCIA_CONDICION_RESOLUTORIA, PROTOCOLIZACION_CTO, PODER_ESPECIAL, CANCELACION_COMODATO, PATRIMONIO_FAMILIA
    - Orden correcto: [acto_principal, ...actos_secundarios]
 
-8. Para DECISIONES / RESPUESTAS del cliente:
+9. Para DECISIONES / RESPUESTAS del cliente:
    - vivienda_familiar: true/false/null si se menciona
    - patrimonio_familia: true/false/null
    - notificacion_electronica: true/false/null
@@ -238,6 +247,14 @@ ESQUEMA JSON:
     "direccion": "Carrera 45 # 12-30",
     "nota_linderos": null,
     "linderos": null
+  },
+  "adquisicion": {
+    "forma_adquisicion": "compraventa",
+    "escritura_numero": "1234",
+    "fecha_escritura_anterior": "veinte (20) de enero de dos mil veinte (2020)",
+    "notaria_anterior": "Notaria Segunda del Circulo de Medellin",
+    "municipio_notaria_anterior": "Medellin",
+    "vendedor_original": "MARIA ELENA GOMEZ RESTREPO"
   },
   "notaria": {
     "nombre_notaria": "Notaria Unica del Circulo de Caldas",

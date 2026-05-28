@@ -1,6 +1,41 @@
 # SESSION.md — EasyProNotarial-2
 
 ---
+## Sesión 2026-05-28
+
+**Objetivo de la sesión:** Diagnóstico de dos bugs en el motor de minutas (campos ADQUISICIÓN y VIVIENDA FAMILIAR) e implementación de la UI y lógica de reemplazo para las decisiones notariales.
+
+**Realizado:**
+- **Diagnóstico Bug 1 — ADQUISICIÓN:** Confirmada ausencia total en todas las capas — prompt detector, tipo TypeScript, reemplazador, UI y payload. Requiere implementación completa desde cero.
+- **Diagnóstico Bug 2 — VIVIENDA FAMILIAR:** Confirmado gap parcial — detector y tipo TS existen (`datos.decisiones`), faltaban UI y bloque en reemplazador.
+- **nueva-minuta-workspace.tsx — DecisionesCard:** Nuevo componente con 3 toggles de 3 estados (`?`/`Sí`/`No`) para `vivienda_familiar`, `patrimonio_familia`, `notificacion_electronica`; colores amber/emerald/rose consistentes con el design system; badge "pendiente" cuando el valor es null.
+- **nueva-minuta-workspace.tsx — estado y flujo:** `decisionesEdit` añadido como `useState`; inicialización desde `result.datos.decisiones` en `handleAnalizar` (merge con defaults null para los 3 campos); reset en `clearFile`; `updateDecision` handler; `decisiones: decisionesEdit` incluido en `datosNuevos` de `handleGenerar` (sobrescribe el spread de `analisisResult.datos`).
+- **nueva-minuta-workspace.tsx — render Paso 2:** `<DecisionesCard>` renderizado después de ValoresCard, antes del botón "Continuar a generar".
+- **reemplazador.py — construir_lista_reemplazos:** Bloque `# DECISIONES` añadido al final; itera los 3 campos; guarda contra `None` en cualquier extremo; convierte bool → `"SÍ"`/`"NO"` antes de llamar `agregar_reemplazo`; reutiliza el guard `viejo == nuevo` existente para no generar par inútil cuando no hay cambio.
+
+**Archivos creados/modificados:**
+- `backend/app/services/minuta/reemplazador.py` — bloque DECISIONES en construir_lista_reemplazos (L474–487)
+- `frontend/components/minutas/nueva-minuta-workspace.tsx` — DecisionesCard, estado decisionesEdit, inicialización, handler, render y payload
+
+**Pendientes para la próxima sesión:**
+1. **[CRÍTICO] Deploy frontend a Vercel** — Múltiples sesiones de cambios acumulados sin deploy: `vercel --cwd frontend --prod`
+2. **[CRÍTICO] Deploy backend a Railway** — reemplazador.py modificado; push al repo activa Railway automáticamente
+3. **[CRÍTICO] Verificar fix tour en producción** — Confirmar que click en zona de upload no cierra el tour; remover `console.log("TOUR VISIBLE:", tourVisible)` en `nueva-minuta-workspace.tsx` línea ~1340 antes de demo
+4. **[CRÍTICO] Bug 1 ADQUISICIÓN — implementar desde cero** — Requiere: (a) nueva sección en PROMPT_B2 con campos `forma_adquisicion`, `escritura_anterior`, `notaria_anterior`, `vendedor_original`; (b) nuevo tipo `MinutaAdquisicion` en minuta.ts; (c) sección en construir_lista_reemplazos; (d) `AdquisicionCard` en el formulario
+5. **[CRÍTICO] Fix gap 1 — agregar `actividad_economica` a PersonaCard** — campo en tipo y reemplazador pero sin UI en el formulario
+6. **[CRÍTICO] Fix gap 2 — agregar `domicilio` y `estado_civil` a `construir_lista_reemplazos()`** en `reemplazador.py:408`
+7. **[CRÍTICO] Fix gap 4 — concordancia cuando solo cambia género** (sin cambio de nombre) en `concordancia.py:152`
+8. **[MEDIA] Fix gap 3 — UI para decisiones** ✅ RESUELTO en esta sesión
+9. **[BAJA] Remover prints `[GENERO DEBUG]`** de `reemplazador.py`
+10. **[BAJA] Alembic out-of-sync** — `UPDATE alembic_version SET version_num = '20260513_promote_legacy_notary_to_titular';` en Supabase
+
+**Estado al cierre:**
+- Backend: Railway operativo — `reemplazador.py` modificado, pendiente push/deploy
+- Frontend: Vercel pendiente deploy — múltiples sesiones acumuladas sin deploy a producción
+- BD producción: operativa, alembic_version desincronizada (pendiente UPDATE manual)
+- Git: 2 archivos modificados sin commitear — se commitean en este cierre
+
+---
 ## Sesión 2026-05-26 (noche 4)
 
 **Objetivo de la sesión:** Diagnosticar y corregir bugs del tour guiado de minutas: cierre accidental al hacer click en la zona de upload (BUG 1) y ausencia de botón de relaunch visible (BUG 2).

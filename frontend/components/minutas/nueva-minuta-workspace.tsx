@@ -10,6 +10,7 @@ import {
   analyzeMinuta, generateMinuta, emptyPersona,
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
+  type MinutaAdquisicion,
 } from "@/lib/minuta";
 import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, getEstadosCiviles } from "@/lib/listas-notariales";
 import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
@@ -72,6 +73,10 @@ const EMPTY_INMUEBLE: MinutaInmueble = {
 const EMPTY_NOTARIA: NotariaEdit = {
   nombre_notaria: null, municipio_notaria: null,
   numero_escritura: null, fecha_otorgamiento: null,
+};
+const EMPTY_ADQUISICION: MinutaAdquisicion = {
+  forma_adquisicion: null, escritura_numero: null, fecha_escritura_anterior: null,
+  notaria_anterior: null, municipio_notaria_anterior: null, vendedor_original: null,
 };
 
 // ─── Número a letras (español, pesos moneda corriente) ───────────────────────
@@ -976,6 +981,145 @@ function ValoresCard({
   );
 }
 
+// ─── Decisiones card ──────────────────────────────────────────────────────────
+
+const DECISIONES_CONFIG: { key: string; label: string; hint: string }[] = [
+  {
+    key: "vivienda_familiar",
+    label: "¿Afecta vivienda familiar?",
+    hint: "El inmueble constituye vivienda familiar del enajenante",
+  },
+  {
+    key: "patrimonio_familia",
+    label: "¿Es patrimonio de familia?",
+    hint: "El inmueble está afectado a patrimonio de familia inembargable",
+  },
+  {
+    key: "notificacion_electronica",
+    label: "¿Acepta notificación electrónica?",
+    hint: "Las partes aceptan recibir notificaciones por correo electrónico",
+  },
+];
+
+function DecisionesCard({
+  decisiones,
+  onChange,
+}: {
+  decisiones: Record<string, boolean | null>;
+  onChange: (key: string, value: boolean | null) => void;
+}) {
+  return (
+    <div className="ep-card rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-line/70">
+        <span className="text-sm font-semibold text-ink">Indagaciones y decisiones</span>
+      </div>
+      <div className="p-5 space-y-5">
+        {DECISIONES_CONFIG.map(({ key, label, hint }) => {
+          const val = decisiones[key] ?? null;
+          return (
+            <div key={key} className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-ink flex items-center gap-1.5 flex-wrap">
+                  {label}
+                  {val === null && (
+                    <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full leading-none">
+                      pendiente
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-soft mt-0.5">{hint}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {(
+                  [
+                    { v: null as boolean | null, lbl: "?" },
+                    { v: true as boolean | null, lbl: "Sí" },
+                    { v: false as boolean | null, lbl: "No" },
+                  ]
+                ).map(({ v, lbl }) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    onClick={() => onChange(key, v)}
+                    className={[
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                      val === v
+                        ? v === true
+                          ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                          : v === false
+                          ? "bg-rose-100 text-rose-700 border border-rose-300"
+                          : "bg-amber-100 text-amber-700 border border-amber-300"
+                        : "bg-panel-soft text-soft border border-line hover:border-primary hover:text-primary",
+                    ].join(" ")}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Adquisición card ─────────────────────────────────────────────────────────
+
+function AdquisicionCard({
+  adquisicion,
+  onChange,
+}: {
+  adquisicion: MinutaAdquisicion;
+  onChange: (field: keyof MinutaAdquisicion, value: string) => void;
+}) {
+  return (
+    <div className="ep-card rounded-2xl overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-line/70">
+        <span className="text-sm font-semibold text-ink">Antecedente de adquisición</span>
+      </div>
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <SectionField
+          label="Forma de adquisición"
+          value={adquisicion.forma_adquisicion}
+          onChange={(v) => onChange("forma_adquisicion", v)}
+          placeholder="compraventa, herencia, donación..."
+        />
+        <SectionField
+          label="Número escritura anterior"
+          value={adquisicion.escritura_numero}
+          onChange={(v) => onChange("escritura_numero", v)}
+        />
+        <div className="sm:col-span-2">
+          <SectionField
+            label="Fecha escritura anterior"
+            value={adquisicion.fecha_escritura_anterior}
+            onChange={(v) => onChange("fecha_escritura_anterior", v)}
+            placeholder="tal como aparece en el documento"
+          />
+        </div>
+        <SectionField
+          label="Notaría anterior"
+          value={adquisicion.notaria_anterior}
+          onChange={(v) => onChange("notaria_anterior", v)}
+        />
+        <SectionField
+          label="Municipio notaría anterior"
+          value={adquisicion.municipio_notaria_anterior}
+          onChange={(v) => onChange("municipio_notaria_anterior", v)}
+        />
+        <div className="sm:col-span-2">
+          <SectionField
+            label="Vendedor / causante / donante original"
+            value={adquisicion.vendedor_original}
+            onChange={(v) => onChange("vendedor_original", v)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tour ─────────────────────────────────────────────────────────────────────
 
 const TOUR_KEY = "easypro_minutas_tour_done";
@@ -1034,6 +1178,10 @@ export function NuevaMinutaWorkspace() {
   const [inmuebleEdit, setInmuebleEdit] = useState<MinutaInmueble>(EMPTY_INMUEBLE);
   const [notariaEdit, setNotariaEdit] = useState<NotariaEdit>(EMPTY_NOTARIA);
   const [valoresEdit, setValoresEdit] = useState<MinutaValor[]>([]);
+  const [decisionesEdit, setDecisionesEdit] = useState<Record<string, boolean | null>>({
+    vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null,
+  });
+  const [adquisicionEdit, setAdquisicionEdit] = useState<MinutaAdquisicion>(EMPTY_ADQUISICION);
   const [error, setError] = useState<string | null>(null);
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
   const [aiProgress, setAiProgress] = useState(0);
@@ -1086,6 +1234,8 @@ export function NuevaMinutaWorkspace() {
     setInmuebleEdit(EMPTY_INMUEBLE);
     setNotariaEdit(EMPTY_NOTARIA);
     setValoresEdit([]);
+    setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
+    setAdquisicionEdit(EMPTY_ADQUISICION);
     setError(null);
   }
 
@@ -1151,6 +1301,13 @@ export function NuevaMinutaWorkspace() {
             ? numeroALetras(v.monto_numerico)
             : v.texto_en_documento,
       })));
+      setDecisionesEdit({
+        vivienda_familiar: null,
+        patrimonio_familia: null,
+        notificacion_electronica: null,
+        ...(result.datos.decisiones ?? {}),
+      });
+      setAdquisicionEdit({ ...EMPTY_ADQUISICION, ...(result.datos.adquisicion ?? {}) });
     } catch (err) {
       setAiModalOpen(false);
       setError(err instanceof Error ? err.message : "Error al analizar el documento.");
@@ -1189,6 +1346,12 @@ export function NuevaMinutaWorkspace() {
       prev.map((v, i) => i === idx ? { ...v, texto_en_documento: value || null } : v)
     );
   }
+  function updateDecision(key: string, value: boolean | null) {
+    setDecisionesEdit((prev) => ({ ...prev, [key]: value }));
+  }
+  function updateAdquisicion(field: keyof MinutaAdquisicion, value: string) {
+    setAdquisicionEdit((prev) => ({ ...prev, [field]: value || null }));
+  }
 
   async function handleGenerar() {
     if (!file || !analisisResult) return;
@@ -1216,6 +1379,8 @@ export function NuevaMinutaWorkspace() {
           numero_escritura: notariaEdit.numero_escritura,
         },
         fechas: { fecha_otorgamiento: notariaEdit.fecha_otorgamiento },
+        decisiones: decisionesEdit,
+        adquisicion: adquisicionEdit,
       };
       await new Promise(r => setTimeout(r, 800));
       updateStep('replace', 'done', 'Reemplazos aplicados');
@@ -1404,11 +1569,15 @@ export function NuevaMinutaWorkspace() {
             <InmuebleCard inmueble={inmuebleEdit} onChange={updateInmueble} />
           </div>
 
+          <AdquisicionCard adquisicion={adquisicionEdit} onChange={updateAdquisicion} />
+
           <NotariaCard notaria={notariaEdit} onChange={updateNotaria} />
 
           <div id="tour-valores-card">
             <ValoresCard valores={valoresEdit} onChangeMonto={updateValor} onChangeTexto={updateValorTexto} />
           </div>
+
+          <DecisionesCard decisiones={decisionesEdit} onChange={updateDecision} />
 
           <button
             onClick={() => setStep(2)} disabled={!canGenerate}

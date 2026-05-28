@@ -59,6 +59,15 @@ export interface MinutaFechas {
   fecha_otorgamiento_letras: string;
 }
 
+export type MinutaAdquisicion = {
+  forma_adquisicion: string | null;
+  escritura_numero: string | null;
+  fecha_escritura_anterior: string | null;
+  notaria_anterior: string | null;
+  municipio_notaria_anterior: string | null;
+  vendedor_original: string | null;
+};
+
 export type MinutaDatos = {
   personas: MinutaPersona[];
   valores: MinutaValor[];
@@ -67,6 +76,7 @@ export type MinutaDatos = {
   actos: string[];
   decisiones: Record<string, boolean | null>;
   fechas?: MinutaFechas;
+  adquisicion?: MinutaAdquisicion | null;
 };
 
 export type MinutaAnalisisResult = {

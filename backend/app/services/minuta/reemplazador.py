@@ -471,6 +471,29 @@ def construir_lista_reemplazos(datos_anteriores: dict, datos_nuevos: dict) -> li
         "fechas.fecha_otorgamiento",
     )
 
+    # DECISIONES
+    dec_old = datos_anteriores.get("decisiones", {}) or {}
+    dec_new = datos_nuevos.get("decisiones", {}) or {}
+
+    for campo in ["vivienda_familiar", "patrimonio_familia", "notificacion_electronica"]:
+        val_old = dec_old.get(campo)
+        val_new = dec_new.get(campo)
+        if val_old is None or val_new is None:
+            continue
+        texto_old = "SÍ" if val_old else "NO"
+        texto_new = "SÍ" if val_new else "NO"
+        agregar_reemplazo(texto_old, texto_new, f"decisiones.{campo}")
+
+    # ADQUISICION
+    adq_old = datos_anteriores.get("adquisicion", {}) or {}
+    adq_new = datos_nuevos.get("adquisicion", {}) or {}
+
+    for campo in [
+        "forma_adquisicion", "escritura_numero", "fecha_escritura_anterior",
+        "notaria_anterior", "municipio_notaria_anterior", "vendedor_original",
+    ]:
+        agregar_reemplazo(adq_old.get(campo), adq_new.get(campo), f"adquisicion.{campo}_adquisicion")
+
     return reemplazos
 
 # deploy 2026-05-23
