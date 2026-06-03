@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Download, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { ArrowLeft, Download, ReceiptText, Upload } from "lucide-react";
+import { addInternalNote, approveDocumentCase, createGariInvoiceFromCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase, type GariBillingInvoiceResult } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
@@ -128,6 +128,8 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [isApproving, setIsApproving] = useState(false);
   const [isReviewTransitioning, setIsReviewTransitioning] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isCreatingBillingInvoice, setIsCreatingBillingInvoice] = useState(false);
+  const [billingInvoiceResult, setBillingInvoiceResult] = useState<GariBillingInvoiceResult | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
   const [pdfPreviewError, setPdfPreviewError] = useState<string | null>(null);
@@ -184,6 +186,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const isApprover = normalizedRoleCodes.includes("approver");
   const isNotary = normalizedRoleCodes.includes("notary") || normalizedRoleCodes.includes("titular_notary") || normalizedRoleCodes.includes("substitute_notary");
   const isAdminNotary = normalizedRoleCodes.includes("admin_notary");
+  const canCreateBillingInvoice = isSuperAdmin || isAdminNotary;
   const canSeeTechnicalHistory = isSuperAdmin;
   const tabs = useMemo(() => (canSeeTechnicalHistory ? superAdminTabs : baseTabs), [canSeeTechnicalHistory]);
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
@@ -484,6 +487,25 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     }
   }
 
+  async function handleCreateBillingInvoice() {
+    if (!canCreateBillingInvoice) {
+      return;
+    }
+    setError(null);
+    setFeedback(null);
+    setIsCreatingBillingInvoice(true);
+    try {
+      const result = await createGariInvoiceFromCase(caseId, "draft");
+      setBillingInvoiceResult(result);
+      setFeedback("Factura en borrador enviada a Gari Billing.");
+    } catch (issue) {
+      setBillingInvoiceResult(null);
+      setError(issue instanceof Error ? issue.message : "No fue posible crear la factura en Gari Billing.");
+    } finally {
+      setIsCreatingBillingInvoice(false);
+    }
+  }
+
   async function handleRequestAdjustments() {
     const note = internalNote.trim();
     if (!note) {
@@ -628,6 +650,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 {isGenerating ? "Generando..." : generateWordLabel}
               </button>
             ) : null}
+            {canCreateBillingInvoice ? (
+              <button
+                type="button"
+                onClick={() => void handleCreateBillingInvoice()}
+                disabled={isCreatingBillingInvoice}
+                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+              >
+                <ReceiptText className="h-4 w-4" />
+                {isCreatingBillingInvoice ? "Creando factura..." : "Crear factura en Gari Billing"}
+              </button>
+            ) : null}
             {hasWordVersion ? (
               <button
                 type="button"
@@ -650,6 +683,34 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
             ) : null}
             <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
           </div>
+          {canCreateBillingInvoice && billingInvoiceResult ? (
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm text-primary">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Resultado de Gari Billing</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">invoice_id</p>
+                  <p className="mt-1 font-semibold">{billingInvoiceResult.invoice_id ?? "Sin dato"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">status</p>
+                  <p className="mt-1 font-semibold">{billingInvoiceResult.status ?? "Sin estado"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">full_number</p>
+                  <p className="mt-1 font-semibold">{billingInvoiceResult.full_number ?? "Sin número"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">total</p>
+                  <p className="mt-1 font-semibold">{billingInvoiceResult.total ?? "Sin total"}</p>
+                </div>
+              </div>
+              {billingInvoiceResult.error_message ? (
+                <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {billingInvoiceResult.error_message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
