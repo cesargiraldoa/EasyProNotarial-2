@@ -324,7 +324,7 @@ export function CaseBillingPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6"
       role="dialog"
       aria-modal="true"
       aria-label="Facturación del caso"
@@ -334,17 +334,17 @@ export function CaseBillingPanel({
         }
       }}
     >
-      <div className="w-full max-w-5xl rounded-[2rem] border border-[var(--line)] bg-[var(--panel)] shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-6 py-5">
+      <div className="w-full max-w-5xl rounded-[2rem] border border-slate-200 bg-white text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-secondary">Facturación del caso</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-primary">{caseLabel || `Caso ${caseId}`}</h2>
-            <p className="mt-1 text-sm text-secondary">Configura el pagador y los servicios antes de enviar el borrador a Gari Billing.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Facturación del caso</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-slate-900">{caseLabel || `Caso ${caseId}`}</h2>
+            <p className="mt-1 text-sm text-slate-600">Configura el pagador y los servicios antes de enviar el borrador a Gari Billing.</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] text-secondary"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             aria-label="Cerrar"
           >
             <X className="h-4 w-4" />
@@ -353,18 +353,18 @@ export function CaseBillingPanel({
 
         <div className="grid gap-6 px-6 py-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
-            <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
+            <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-primary">Pagador</p>
-                  <p className="text-xs text-secondary">Debes registrar al menos un pagador. La versión actual trabaja con uno solo.</p>
+                  <p className="text-sm font-semibold text-slate-900">Pagador</p>
+                  <p className="text-xs text-slate-600">Debes registrar al menos un pagador. La versión actual trabaja con uno solo.</p>
                 </div>
-                <span className="rounded-full border border-[var(--line)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary">Draft</span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">Draft</span>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Tipo de cliente</span>
-                  <select className="ep-select w-full rounded-2xl px-4 py-3" value={customer.customer_kind} onChange={(event) => updateCustomer("customer_kind", event.target.value as CustomerFormState["customer_kind"])}>
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Tipo de cliente</span>
+                  <select className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.customer_kind} onChange={(event) => updateCustomer("customer_kind", event.target.value as CustomerFormState["customer_kind"])}>
                     {CUSTOMER_KIND_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -373,8 +373,8 @@ export function CaseBillingPanel({
                   </select>
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Tipo de documento</span>
-                  <select className="ep-select w-full rounded-2xl px-4 py-3" value={customer.document_type} onChange={(event) => updateCustomer("document_type", event.target.value as BillingCustomerInput["document_type"])}>
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Tipo de documento</span>
+                  <select className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.document_type} onChange={(event) => updateCustomer("document_type", event.target.value as BillingCustomerInput["document_type"])}>
                     {DOCUMENT_KIND_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -383,50 +383,50 @@ export function CaseBillingPanel({
                   </select>
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Número de documento</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.document_number} onChange={(event) => updateCustomer("document_number", event.target.value)} placeholder="123456789" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Número de documento</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.document_number} onChange={(event) => updateCustomer("document_number", event.target.value)} placeholder="123456789" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Nombre o razón social</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.legal_name} onChange={(event) => updateCustomer("legal_name", event.target.value)} placeholder="Nombre del pagador" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Nombre o razón social</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.legal_name} onChange={(event) => updateCustomer("legal_name", event.target.value)} placeholder="Nombre del pagador" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Nombre comercial</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.trade_name} onChange={(event) => updateCustomer("trade_name", event.target.value)} placeholder="Opcional" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Nombre comercial</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.trade_name} onChange={(event) => updateCustomer("trade_name", event.target.value)} placeholder="Opcional" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Correo</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.email} onChange={(event) => updateCustomer("email", event.target.value)} placeholder="correo@dominio.com" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Correo</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.email} onChange={(event) => updateCustomer("email", event.target.value)} placeholder="correo@dominio.com" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Teléfono</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.phone} onChange={(event) => updateCustomer("phone", event.target.value)} placeholder="3001234567" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Teléfono</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.phone} onChange={(event) => updateCustomer("phone", event.target.value)} placeholder="3001234567" />
                 </label>
                 <label className="space-y-1 text-sm md:col-span-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Dirección</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.address} onChange={(event) => updateCustomer("address", event.target.value)} placeholder="Dirección de facturación" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Dirección</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.address} onChange={(event) => updateCustomer("address", event.target.value)} placeholder="Dirección de facturación" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Pago %</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.payment_percentage} onChange={(event) => updateCustomer("payment_percentage", event.target.value)} placeholder="Opcional" inputMode="decimal" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Pago %</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.payment_percentage} onChange={(event) => updateCustomer("payment_percentage", event.target.value)} placeholder="Opcional" inputMode="decimal" />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Pago monto</span>
-                  <input className="ep-input w-full rounded-2xl px-4 py-3" value={customer.payment_amount} onChange={(event) => updateCustomer("payment_amount", event.target.value)} placeholder="Opcional" inputMode="decimal" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Pago monto</span>
+                  <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={customer.payment_amount} onChange={(event) => updateCustomer("payment_amount", event.target.value)} placeholder="Opcional" inputMode="decimal" />
                 </label>
               </div>
             </section>
 
-            <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
+            <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-primary">Servicios facturables</p>
-                  <p className="text-xs text-secondary">Agrega al menos un servicio. Los campos son editables en esta versión.</p>
+                  <p className="text-sm font-semibold text-slate-900">Servicios facturables</p>
+                  <p className="text-xs text-slate-600">Agrega al menos un servicio. Los campos son editables en esta versión.</p>
                 </div>
                 <button
                   type="button"
                   onClick={addService}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-4 py-2 text-sm font-semibold text-primary"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
                 >
                   <Plus className="h-4 w-4" />
                   Agregar servicio
@@ -435,13 +435,13 @@ export function CaseBillingPanel({
 
               <div className="mt-4 space-y-4">
                 {services.map((service, index) => (
-                  <div key={`${service.code}-${index}`} className="rounded-[1.25rem] border border-[var(--line)] bg-[var(--panel)] p-4">
+                  <div key={`${service.code}-${index}`} className="rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div className="grid flex-1 gap-3 md:grid-cols-2">
                         <label className="space-y-1 text-sm md:col-span-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Servicio sugerido</span>
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Servicio sugerido</span>
                           <select
-                            className="ep-select w-full rounded-2xl px-4 py-3"
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
                             value={service.code}
                             onChange={(event) => applyPreset(index, event.target.value)}
                           >
@@ -453,40 +453,40 @@ export function CaseBillingPanel({
                           </select>
                         </label>
                         <label className="space-y-1 text-sm md:col-span-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Código</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.code} onChange={(event) => updateService(index, "code", event.target.value)} />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Código</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.code} onChange={(event) => updateService(index, "code", event.target.value)} />
                         </label>
                         <label className="space-y-1 text-sm md:col-span-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Descripción</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.description} onChange={(event) => updateService(index, "description", event.target.value)} />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Descripción</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.description} onChange={(event) => updateService(index, "description", event.target.value)} />
                         </label>
                         <label className="space-y-1 text-sm">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Cantidad</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.quantity} onChange={(event) => updateService(index, "quantity", event.target.value)} inputMode="decimal" />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Cantidad</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.quantity} onChange={(event) => updateService(index, "quantity", event.target.value)} inputMode="decimal" />
                         </label>
                         <label className="space-y-1 text-sm">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Valor unitario</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.unit_price} onChange={(event) => updateService(index, "unit_price", event.target.value)} inputMode="decimal" />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Valor unitario</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.unit_price} onChange={(event) => updateService(index, "unit_price", event.target.value)} inputMode="decimal" />
                         </label>
                         <label className="space-y-1 text-sm">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Descuento</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.discount_amount} onChange={(event) => updateService(index, "discount_amount", event.target.value)} inputMode="decimal" />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Descuento</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.discount_amount} onChange={(event) => updateService(index, "discount_amount", event.target.value)} inputMode="decimal" />
                         </label>
                         <label className="space-y-1 text-sm">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">IVA %</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.tax_rate} onChange={(event) => updateService(index, "tax_rate", event.target.value)} inputMode="decimal" />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">IVA %</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.tax_rate} onChange={(event) => updateService(index, "tax_rate", event.target.value)} inputMode="decimal" />
                         </label>
                         <label className="space-y-1 text-sm">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Unidad</span>
-                          <input className="ep-input w-full rounded-2xl px-4 py-3" value={service.unit_measure} onChange={(event) => updateService(index, "unit_measure", event.target.value)} />
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Unidad</span>
+                          <input className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.unit_measure} onChange={(event) => updateService(index, "unit_measure", event.target.value)} />
                         </label>
-                        <label className="flex items-center gap-2 text-sm md:col-span-2">
+                        <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
                           <input type="checkbox" checked={service.editable} onChange={(event) => updateService(index, "editable", event.target.checked)} />
                           <span>Editable</span>
                         </label>
                         <label className="space-y-1 text-sm md:col-span-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">Modo de cálculo</span>
-                          <select className="ep-select w-full rounded-2xl px-4 py-3" value={service.calculation_mode} onChange={(event) => updateService(index, "calculation_mode", event.target.value)}>
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Modo de cálculo</span>
+                          <select className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200" value={service.calculation_mode} onChange={(event) => updateService(index, "calculation_mode", event.target.value)}>
                             <option value="fixed">Fijo</option>
                             <option value="manual">Manual</option>
                             <option value="by_document_amount">Por monto del documento</option>
@@ -497,7 +497,7 @@ export function CaseBillingPanel({
                         type="button"
                         onClick={() => removeService(index)}
                         disabled={services.length <= 1}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] text-secondary disabled:opacity-40"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm disabled:opacity-40"
                         aria-label="Eliminar servicio"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -510,46 +510,46 @@ export function CaseBillingPanel({
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
-              <p className="text-sm font-semibold text-primary">Contexto del documento</p>
-              <div className="mt-4 space-y-3 text-sm text-secondary">
+            <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Contexto del documento</p>
+              <div className="mt-4 space-y-3 text-sm text-slate-600">
                 <div className="flex items-center justify-between gap-4">
                   <span>case_id</span>
-                  <span className="font-semibold text-primary">{caseId}</span>
+                  <span className="font-semibold text-slate-900">{caseId}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>document_id</span>
-                  <span className="font-semibold text-primary">{documentId ?? "Sin documento"}</span>
+                  <span className="font-semibold text-slate-900">{documentId ?? "Sin documento"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>version_id</span>
-                  <span className="font-semibold text-primary">{versionId ?? "Sin versión"}</span>
+                  <span className="font-semibold text-slate-900">{versionId ?? "Sin versión"}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>document_type</span>
-                  <span className="rounded-full border border-[var(--line)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary">{documentType}</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">{documentType}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>emit_mode</span>
-                  <span className="rounded-full border border-[var(--line)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-secondary">draft</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">draft</span>
                 </div>
               </div>
             </section>
 
-            <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
-              <p className="text-sm font-semibold text-primary">Previsualización</p>
+            <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-slate-900">Previsualización</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">Subtotal</p>
-                  <p className="mt-2 text-lg font-semibold text-primary">${formatAmount(totals.subtotal)}</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Subtotal</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">${formatAmount(totals.subtotal)}</p>
                 </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">IVA</p>
-                  <p className="mt-2 text-lg font-semibold text-primary">${formatAmount(totals.tax)}</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">IVA</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">${formatAmount(totals.tax)}</p>
                 </div>
-                <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">Total</p>
-                  <p className="mt-2 text-lg font-semibold text-primary">${formatAmount(totals.total)}</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Total</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">${formatAmount(totals.total)}</p>
                 </div>
               </div>
             </section>
@@ -557,24 +557,24 @@ export function CaseBillingPanel({
             <div className="flex flex-col gap-3">
               {error ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
               {result ? (
-                <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
-                  <p className="text-sm font-semibold text-primary">Resultado de Gari Billing</p>
+                <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-900">Resultado de Gari Billing</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">invoice_id</p>
-                      <p className="mt-2 font-semibold text-primary">{result.invoice_id ?? "Sin dato"}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">invoice_id</p>
+                      <p className="mt-2 font-semibold text-slate-900">{result.invoice_id ?? "Sin dato"}</p>
                     </div>
-                    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">status</p>
-                      <p className="mt-2 font-semibold text-primary">{result.status ?? "Sin estado"}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">status</p>
+                      <p className="mt-2 font-semibold text-slate-900">{result.status ?? "Sin estado"}</p>
                     </div>
-                    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">full_number</p>
-                      <p className="mt-2 font-semibold text-primary">{result.full_number ?? "Sin número"}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">full_number</p>
+                      <p className="mt-2 font-semibold text-slate-900">{result.full_number ?? "Sin número"}</p>
                     </div>
-                    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">total</p>
-                      <p className="mt-2 font-semibold text-primary">{result.total ?? "Sin total"}</p>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">total</p>
+                      <p className="mt-2 font-semibold text-slate-900">{result.total ?? "Sin total"}</p>
                     </div>
                   </div>
                   {result.error_message ? <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{result.error_message}</p> : null}
