@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -31,15 +32,35 @@ class GariBillingClient:
         timeout_seconds: int | None = None,
     ) -> None:
         settings = get_settings()
-        self.base_url = (base_url if base_url is not None else settings.gari_billing_base_url).strip().rstrip("/")
-        self.internal_key = (internal_key if internal_key is not None else settings.gari_billing_internal_key).strip()
-        self.timeout_seconds = int(timeout_seconds if timeout_seconds is not None else settings.gari_billing_timeout_seconds)
+        self.base_url = self._resolve_config_value(
+            explicit_value=base_url,
+            env_key="GARI_BILLING_BASE_URL",
+            settings_value=settings.gari_billing_base_url,
+        ).rstrip("/")
+        self.internal_key = self._resolve_config_value(
+            explicit_value=internal_key,
+            env_key="GARI_BILLING_INTERNAL_KEY",
+            settings_value=settings.gari_billing_internal_key,
+        )
+        timeout_value = timeout_seconds if timeout_seconds is not None else os.getenv("GARI_BILLING_TIMEOUT_SECONDS")
+        if timeout_value is None or str(timeout_value).strip() == "":
+            timeout_value = settings.gari_billing_timeout_seconds
+        self.timeout_seconds = int(timeout_value)
+
+    @staticmethod
+    def _resolve_config_value(*, explicit_value: str | int | None, env_key: str, settings_value: str | int) -> str:
+        if explicit_value is not None:
+            return str(explicit_value).strip()
+        env_value = os.getenv(env_key, "")
+        if env_value.strip():
+            return env_value.strip()
+        return str(settings_value).strip()
 
     def _ensure_configured(self) -> None:
         if not self.base_url:
-            raise GariBillingError("GARI_BILLING_BASE_URL no está configurada.")
+            raise GariBillingError("GARI_BILLING_BASE_URL no está configurada en backend/.env de EasyPro.")
         if not self.internal_key:
-            raise GariBillingError("GARI_BILLING_INTERNAL_KEY no está configurada.")
+            raise GariBillingError("GARI_BILLING_INTERNAL_KEY no está configurada en backend/.env de EasyPro.")
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         self._ensure_configured()

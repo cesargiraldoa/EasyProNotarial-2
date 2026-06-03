@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
 from app.main import app
 from app.services.gari_billing_client import GariBillingClient, GariBillingError
@@ -150,6 +152,59 @@ class GariBillingPayloadTests(unittest.TestCase):
 
 
 class GariBillingClientTests(unittest.TestCase):
+    def tearDown(self):
+        get_settings.cache_clear()
+
+    @patch.dict(
+        os.environ,
+        {
+            "GARI_BILLING_BASE_URL": "http://127.0.0.1:8000",
+            "GARI_BILLING_INTERNAL_KEY": "local-gari-billing-dev-key-2026",
+            "GARI_BILLING_TIMEOUT_SECONDS": "30",
+        },
+        clear=True,
+    )
+    def test_client_reads_env_configuration(self):
+        get_settings.cache_clear()
+
+        client = GariBillingClient()
+
+        self.assertEqual(client.base_url, "http://127.0.0.1:8000")
+        self.assertEqual(client.internal_key, "local-gari-billing-dev-key-2026")
+        self.assertEqual(client.timeout_seconds, 30)
+
+    @patch("app.services.gari_billing_client.get_settings")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_client_raises_clear_error_when_base_url_missing(self, settings_mock: Mock):
+        settings_mock.return_value = SimpleNamespace(
+            gari_billing_base_url="",
+            gari_billing_internal_key="secret",
+            gari_billing_timeout_seconds=30,
+        )
+
+        client = GariBillingClient()
+
+        with self.assertRaises(GariBillingError) as exc:
+            client.create_invoice({"external_reference": "case_18"})
+
+        self.assertIn("GARI_BILLING_BASE_URL no está configurada en backend/.env de EasyPro", str(exc.exception))
+
+    @patch("app.services.gari_billing_client.get_settings")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_client_raises_clear_error_when_internal_key_missing(self, settings_mock: Mock):
+        settings_mock.return_value = SimpleNamespace(
+            gari_billing_base_url="http://127.0.0.1:8000",
+            gari_billing_internal_key="",
+            gari_billing_timeout_seconds=30,
+        )
+
+        client = GariBillingClient()
+
+        with self.assertRaises(GariBillingError) as exc:
+            client.create_invoice({"external_reference": "case_18"})
+
+        self.assertIn("GARI_BILLING_INTERNAL_KEY no está configurada en backend/.env de EasyPro", str(exc.exception))
+
     @patch("app.services.gari_billing_client.requests.request")
     def test_create_invoice_sends_internal_key_header(self, request_mock: Mock):
         response = Mock()
