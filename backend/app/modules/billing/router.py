@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
 from app.models.case import Case
 from app.models.case_participant import CaseParticipant
 from app.models.user import User
-from app.schemas.billing import EmitMode, GariBillingInvoiceResult
+from app.schemas.billing import EmitMode, GariBillingFromCaseRequest, GariBillingInvoiceResult
 from app.services.gari_billing_client import GariBillingClient, GariBillingError
 from app.services.gari_billing_payload import build_gari_billing_invoice_payload
 
@@ -51,19 +51,23 @@ def _build_response(result: dict, payload: dict) -> GariBillingInvoiceResult:
 def create_invoice_from_case(
     case_id: int,
     emit_mode: EmitMode = Query(default="draft"),
+    payload: GariBillingFromCaseRequest | None = Body(default=None),
     db: Session = Depends(get_db),
     _current_user: User = Depends(require_roles("super_admin", "admin_notary")),
 ):
     case = load_case_for_billing(db, case_id)
+    resolved_emit_mode = emit_mode
+    if payload is not None and payload.emit_mode:
+        resolved_emit_mode = emit_mode or payload.emit_mode
     try:
-        payload = build_gari_billing_invoice_payload(case, emit_mode=emit_mode)
+        billing_payload = build_gari_billing_invoice_payload(case, emit_mode=resolved_emit_mode)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     client = GariBillingClient()
     try:
-        result = client.create_invoice(payload)
+        result = client.create_invoice(billing_payload)
     except GariBillingError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
-    return _build_response(result, payload)
+    return _build_response(result, billing_payload)

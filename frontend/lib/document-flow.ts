@@ -603,6 +603,7 @@ export async function createGariInvoiceFromCase(caseId: number, emitMode: "draft
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    body: JSON.stringify({ emit_mode: emitMode }),
   });
   if (!response.ok) {
     const text = await response.text();
