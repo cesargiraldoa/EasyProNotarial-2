@@ -13,23 +13,15 @@ from app.services.gari_billing_payload import build_gari_billing_invoice_payload
 
 
 def _make_case(**overrides):
-    person = SimpleNamespace(
-        full_name="Ana Maria Perez",
-        document_type="CC",
-        document_number="123456789",
-        email="ana@example.com",
-        phone="3001234567",
-        address="Cra 1 # 2-3",
-    )
-    participant = SimpleNamespace(person=person, legal_entity=None)
     notary = SimpleNamespace(notary_label="Notaría Primera de Prueba")
+    template = SimpleNamespace(document_type="minuta")
     base = SimpleNamespace(
         id=18,
         notary_id=7,
         case_type="escritura",
         act_type="compraventa",
         metadata_json="{}",
-        participants=[participant],
+        template=template,
         notary=notary,
     )
     for key, value in overrides.items():
@@ -49,21 +41,112 @@ def _make_user():
 
 
 class GariBillingPayloadTests(unittest.TestCase):
-    def test_builds_default_invoice_payload_from_case(self):
+    def test_builds_payload_with_explicit_billing_customer(self):
+        case = _make_case()
+        payload = build_gari_billing_invoice_payload(
+            case,
+            billing_customer={
+                "customer_kind": "natural",
+                "document_type": "CC",
+                "document_number": "123456789",
+                "legal_name": "Ana Maria Perez",
+                "email": "ana@example.com",
+            },
+            billing_lines=[
+                {
+                    "code": "SERV-NOTARIAL-001",
+                    "description": "Servicio notarial",
+                    "quantity": 1,
+                    "unit_price": 100000,
+                    "discount_amount": 0,
+                    "tax_rate": 19,
+                    "unit_measure": "NIU",
+                }
+            ],
+            document_id=86,
+            version_id=198,
+            document_type="minuta",
+        )
+
+        self.assertEqual(payload["customer"]["legal_name"], "Ana Maria Perez")
+        self.assertEqual(payload["customer"]["document_type"], "CC")
+        self.assertEqual(payload["lines"][0]["code"], "SERV-NOTARIAL-001")
+        self.assertEqual(payload["metadata"]["document_id"], 86)
+        self.assertEqual(payload["metadata"]["version_id"], 198)
+        self.assertEqual(payload["metadata"]["document_type"], "minuta")
+
+    def test_builds_payload_with_explicit_billing_lines(self):
+        case = _make_case()
+        payload = build_gari_billing_invoice_payload(
+            case,
+            billing_customer={
+                "customer_kind": "juridica",
+                "document_type": "NIT",
+                "document_number": "900123456-7",
+                "legal_name": "Empresa Ejemplo SAS",
+            },
+            billing_lines=[
+                {
+                    "code": "SERV-COPIAS-001",
+                    "description": "Copias",
+                    "quantity": 2,
+                    "unit_price": 5000,
+                    "discount_amount": 0,
+                    "tax_rate": 19,
+                    "unit_measure": "NIU",
+                },
+                {
+                    "code": "SERV-OTRO-001",
+                    "description": "Otro servicio",
+                    "quantity": 1,
+                    "unit_price": 20000,
+                    "discount_amount": 1000,
+                    "tax_rate": 19,
+                    "unit_measure": "NIU",
+                },
+            ],
+        )
+
+        self.assertEqual(len(payload["lines"]), 2)
+        self.assertEqual(payload["lines"][0]["code"], "SERV-COPIAS-001")
+        self.assertEqual(payload["lines"][1]["discount_amount"], 1000)
+
+    def test_raises_clear_error_without_billing_customer(self):
         case = _make_case()
 
-        payload = build_gari_billing_invoice_payload(case)
+        with self.assertRaises(ValueError) as exc:
+            build_gari_billing_invoice_payload(
+                case,
+                billing_lines=[
+                    {
+                        "code": "SERV-NOTARIAL-001",
+                        "description": "Servicio notarial",
+                        "quantity": 1,
+                        "unit_price": 100000,
+                        "discount_amount": 0,
+                        "tax_rate": 19,
+                        "unit_measure": "NIU",
+                    }
+                ],
+            )
 
-        self.assertEqual(payload["source_system"], "easypro")
-        self.assertEqual(payload["external_reference"], "case_18")
-        self.assertEqual(payload["idempotency_key"], "easypro-case_18")
-        self.assertEqual(payload["emit_mode"], "draft")
-        self.assertEqual(payload["customer"]["customer_kind"], "natural")
-        self.assertEqual(payload["customer"]["document_type"], "CC")
-        self.assertEqual(payload["customer"]["document_number"], "123456789")
-        self.assertEqual(payload["lines"][0]["code"], "SERV-NOTARIAL-001")
-        self.assertEqual(payload["metadata"]["document_type"], "minuta")
-        self.assertEqual(payload["metadata"]["case_id"], 18)
+        self.assertIn("billing_customer", str(exc.exception))
+
+    def test_raises_clear_error_without_billing_lines(self):
+        case = _make_case()
+
+        with self.assertRaises(ValueError) as exc:
+            build_gari_billing_invoice_payload(
+                case,
+                billing_customer={
+                    "customer_kind": "natural",
+                    "document_type": "CC",
+                    "document_number": "123456789",
+                    "legal_name": "Ana Maria Perez",
+                },
+            )
+
+        self.assertIn("billing_lines", str(exc.exception))
 
 
 class GariBillingClientTests(unittest.TestCase):
@@ -138,16 +221,25 @@ class GariBillingEndpointTests(unittest.TestCase):
         response = self.client.post("/api/v1/billing/gari/invoices/from-case/18?emit_mode=draft")
 
         self.assertEqual(response.status_code, 200)
-        payload_builder.assert_called_once_with(case, emit_mode="draft")
+        payload_builder.assert_called_once_with(
+            case,
+            emit_mode="draft",
+            billing_customer=None,
+            billing_lines=None,
+            document_id=None,
+            version_id=None,
+            document_type=None,
+        )
         client_instance.create_invoice.assert_called_once()
 
     @patch("app.modules.billing.router.load_case_for_billing")
     @patch("app.modules.billing.router.GariBillingClient")
     @patch("app.modules.billing.router.build_gari_billing_invoice_payload")
-    def test_post_from_case_accepts_empty_object_body(self, payload_builder: Mock, client_cls: Mock, load_case: Mock):
+    def test_post_from_case_accepts_explicit_body(self, payload_builder: Mock, client_cls: Mock, load_case: Mock):
         case = _make_case()
         load_case.return_value = case
-        payload_builder.return_value = {"external_reference": "case_18", "emit_mode": "draft", "source_system": "easypro"}
+        billing_payload = {"external_reference": "case_18", "emit_mode": "draft", "source_system": "easypro"}
+        payload_builder.return_value = billing_payload
         client_instance = Mock()
         client_instance.create_invoice.return_value = {
             "invoice_id": "INV-2",
@@ -158,37 +250,35 @@ class GariBillingEndpointTests(unittest.TestCase):
         }
         client_cls.return_value = client_instance
 
-        response = self.client.post("/api/v1/billing/gari/invoices/from-case/18?emit_mode=draft", json={})
-
-        self.assertEqual(response.status_code, 200)
-        payload_builder.assert_called_once_with(case, emit_mode="draft")
-        client_instance.create_invoice.assert_called_once()
-
-    @patch("app.modules.billing.router.load_case_for_billing")
-    @patch("app.modules.billing.router.GariBillingClient")
-    @patch("app.modules.billing.router.build_gari_billing_invoice_payload")
-    def test_post_from_case_passes_emit_mode_to_builder_and_client(self, payload_builder: Mock, client_cls: Mock, load_case: Mock):
-        case = _make_case()
-        load_case.return_value = case
-        billing_payload = {"external_reference": "case_18", "emit_mode": "draft", "source_system": "easypro"}
-        payload_builder.return_value = billing_payload
-        client_instance = Mock()
-        client_instance.create_invoice.return_value = {
-            "invoice_id": "INV-3",
-            "status": "draft",
-            "full_number": "FV-3",
-            "total": 300000,
-            "gari_response": {"invoice_id": "INV-3"},
-        }
-        client_cls.return_value = client_instance
-
         response = self.client.post(
             "/api/v1/billing/gari/invoices/from-case/18?emit_mode=draft",
-            json={"emit_mode": "draft"},
+            json={
+                "emit_mode": "draft",
+                "document_id": 86,
+                "version_id": 198,
+                "document_type": "minuta",
+                "billing_customer": {
+                    "customer_kind": "natural",
+                    "document_type": "CC",
+                    "document_number": "123456789",
+                    "legal_name": "Ana Maria Perez",
+                },
+                "billing_lines": [
+                    {
+                        "code": "SERV-NOTARIAL-001",
+                        "description": "Servicio notarial",
+                        "quantity": 1,
+                        "unit_price": 100000,
+                        "discount_amount": 0,
+                        "tax_rate": 19,
+                        "unit_measure": "NIU",
+                    }
+                ],
+            },
         )
 
         self.assertEqual(response.status_code, 200)
-        payload_builder.assert_called_once_with(case, emit_mode="draft")
+        payload_builder.assert_called_once()
         client_instance.create_invoice.assert_called_once_with(billing_payload)
 
 

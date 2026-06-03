@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, ReceiptText, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, createGariInvoiceFromCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase, type GariBillingInvoiceResult } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { formatDateTime } from "@/lib/datetime";
+import { CaseBillingPanel } from "@/components/cases/case-billing-panel";
 
 const baseTabs = ["Minuta", "Diligenciamiento", "Observaciones"] as const;
 const superAdminTabs = ["Minuta", "Diligenciamiento", "Observaciones", "Historial técnico"] as const;
@@ -128,8 +129,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const [isApproving, setIsApproving] = useState(false);
   const [isReviewTransitioning, setIsReviewTransitioning] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
-  const [isCreatingBillingInvoice, setIsCreatingBillingInvoice] = useState(false);
-  const [billingInvoiceResult, setBillingInvoiceResult] = useState<GariBillingInvoiceResult | null>(null);
+  const [billingPanelOpen, setBillingPanelOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
   const [pdfPreviewError, setPdfPreviewError] = useState<string | null>(null);
@@ -192,6 +192,12 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
   const latestWordVersion = draftDocument?.versions?.[0] ?? null;
   const hasWordVersion = Boolean(draftDocument?.versions?.[0]);
+  const billingDocumentType = (() => {
+    const raw = (caseDetail?.template?.document_type || caseDetail?.case_type || "").toLowerCase();
+    if (raw.includes("escrit")) return "escritura" as const;
+    if (raw.includes("minuta")) return "minuta" as const;
+    return "otro" as const;
+  })();
   const canEditCaseData = tab !== "Diligenciamiento";
   const canGenerateWord = isProtocolist || isAdminNotary || isSuperAdmin;
   const generateWordLabel = hasWordVersion ? "Regenerar Word" : "Generar Word";
@@ -487,25 +493,6 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     }
   }
 
-  async function handleCreateBillingInvoice() {
-    if (!canCreateBillingInvoice) {
-      return;
-    }
-    setError(null);
-    setFeedback(null);
-    setIsCreatingBillingInvoice(true);
-    try {
-      const result = await createGariInvoiceFromCase(caseId, "draft");
-      setBillingInvoiceResult(result);
-      setFeedback("Factura en borrador enviada a Gari Billing.");
-    } catch (issue) {
-      setBillingInvoiceResult(null);
-      setError(issue instanceof Error ? issue.message : "No fue posible crear la factura en Gari Billing.");
-    } finally {
-      setIsCreatingBillingInvoice(false);
-    }
-  }
-
   async function handleRequestAdjustments() {
     const note = internalNote.trim();
     if (!note) {
@@ -653,12 +640,11 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
             {canCreateBillingInvoice ? (
               <button
                 type="button"
-                onClick={() => void handleCreateBillingInvoice()}
-                disabled={isCreatingBillingInvoice}
-                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                onClick={() => setBillingPanelOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
               >
                 <ReceiptText className="h-4 w-4" />
-                {isCreatingBillingInvoice ? "Creando factura..." : "Crear factura en Gari Billing"}
+                Crear factura en Gari Billing
               </button>
             ) : null}
             {hasWordVersion ? (
@@ -683,34 +669,6 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
             ) : null}
             <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
           </div>
-          {canCreateBillingInvoice && billingInvoiceResult ? (
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm text-primary">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Resultado de Gari Billing</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">invoice_id</p>
-                  <p className="mt-1 font-semibold">{billingInvoiceResult.invoice_id ?? "Sin dato"}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">status</p>
-                  <p className="mt-1 font-semibold">{billingInvoiceResult.status ?? "Sin estado"}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">full_number</p>
-                  <p className="mt-1 font-semibold">{billingInvoiceResult.full_number ?? "Sin número"}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-secondary">total</p>
-                  <p className="mt-1 font-semibold">{billingInvoiceResult.total ?? "Sin total"}</p>
-                </div>
-              </div>
-              {billingInvoiceResult.error_message ? (
-                <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {billingInvoiceResult.error_message}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -1236,6 +1194,16 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         {feedback ? <div className="ep-kpi-success mt-6 rounded-2xl px-4 py-3 text-sm">{feedback}</div> : null}
         {error ? <div className="ep-kpi-critical mt-6 rounded-2xl px-4 py-3 text-sm">{error}</div> : null}
       </section>
+
+      <CaseBillingPanel
+        open={billingPanelOpen && canCreateBillingInvoice}
+        onClose={() => setBillingPanelOpen(false)}
+        caseId={caseId}
+        caseLabel={caseDetail?.internal_case_number || `Caso ${caseId}`}
+        documentType={billingDocumentType}
+        documentId={draftDocument?.id ?? null}
+        versionId={latestWordVersion?.id ?? null}
+      />
     </div>
   );
 }
