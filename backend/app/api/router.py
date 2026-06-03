@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.modules.auth.router import router as auth_router
 from app.modules.act_catalog.router import act_catalog_router
+from app.modules.billing.router import router as billing_router
 from app.modules.cases.router import router as cases_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.document_flow.router import router as document_flow_router
@@ -24,3 +25,4 @@ api_router.include_router(document_flow_router)
 api_router.include_router(legal_entities_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(minuta_router)
+api_router.include_router(billing_router)

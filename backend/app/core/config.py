@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480
     openai_api_key: str = ""
+    gari_billing_base_url: str = ""
+    gari_billing_internal_key: str = ""
+    gari_billing_timeout_seconds: int = 30
 
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), env_file_encoding="utf-8", extra="ignore")
 

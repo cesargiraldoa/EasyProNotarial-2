@@ -141,6 +141,19 @@ export function extractHttpErrorMessage(text: string, fallback = "No fue posible
   return trimmed.replace(/\s+/g, " ").slice(0, 500);
 }
 
+export type GariBillingInvoiceResult = {
+  source_system?: string | null;
+  external_reference?: string | null;
+  idempotency_key?: string | null;
+  emit_mode?: string | null;
+  invoice_id?: string | number | null;
+  status?: string | null;
+  full_number?: string | null;
+  total?: number | string | null;
+  error_message?: string | null;
+  gari_response?: Record<string, unknown>;
+};
+
 export type TemplateRequiredRole = { id: number; role_code: string; label: string; is_required: boolean; step_order: number };
 export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; table_master?: string | null; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
 export type TemplateRecord = { id: number; name: string; slug: string; case_type: string; document_type: string; description?: string | null; scope_type: string; notary_id?: number | null; notary_label?: string | null; is_active: boolean; source_filename?: string | null; storage_path?: string | null; internal_variable_map_json: string; required_roles: TemplateRequiredRole[]; fields: TemplateField[] };
@@ -578,5 +591,23 @@ export async function saveCaseActs(caseId: number, acts: CaseActItem[]): Promise
     method: "PUT",
     body: { acts },
   });
+}
+
+export async function createGariInvoiceFromCase(caseId: number, emitMode: "draft" | "ready" | "stub" | "matias_sandbox" = "draft"): Promise<GariBillingInvoiceResult> {
+  const token = getToken();
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const response = await fetch(`${baseUrl}/api/v1/billing/gari/invoices/from-case/${caseId}?emit_mode=${encodeURIComponent(emitMode)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(extractHttpErrorMessage(text, "No fue posible crear la factura en Gari Billing."));
+  }
+  return response.json() as Promise<GariBillingInvoiceResult>;
 }
 
