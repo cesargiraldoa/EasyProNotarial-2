@@ -1,12 +1,17 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 ENV_FILE = BASE_DIR / ".env"
 DEFAULT_DATABASE_PATH = BASE_DIR / "easypro2.db"
 DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+
+# Load backend/.env early so imports that call get_settings() at module scope
+# see the same values even before app.main runs.
+load_dotenv(ENV_FILE, override=False)
 
 
 class Settings(BaseSettings):
