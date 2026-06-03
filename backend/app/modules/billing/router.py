@@ -19,6 +19,7 @@ def load_case_for_billing(db: Session, case_id: int) -> Case:
         db.query(Case)
         .options(
             joinedload(Case.notary),
+            joinedload(Case.template),
             joinedload(Case.act_data),
             joinedload(Case.participants).joinedload(CaseParticipant.person),
             joinedload(Case.participants).joinedload(CaseParticipant.legal_entity),
@@ -57,10 +58,23 @@ def create_invoice_from_case(
 ):
     case = load_case_for_billing(db, case_id)
     resolved_emit_mode = emit_mode
+    billing_customer = payload.billing_customer if payload else None
+    billing_lines = payload.billing_lines if payload else None
+    document_id = payload.document_id if payload else None
+    version_id = payload.version_id if payload else None
+    document_type = payload.document_type if payload else None
     if payload is not None and payload.emit_mode:
         resolved_emit_mode = emit_mode or payload.emit_mode
     try:
-        billing_payload = build_gari_billing_invoice_payload(case, emit_mode=resolved_emit_mode)
+        billing_payload = build_gari_billing_invoice_payload(
+            case,
+            emit_mode=resolved_emit_mode,
+            billing_customer=billing_customer,
+            billing_lines=billing_lines,
+            document_id=document_id,
+            version_id=version_id,
+            document_type=document_type,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 

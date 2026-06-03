@@ -154,6 +154,40 @@ export type GariBillingInvoiceResult = {
   gari_response?: Record<string, unknown>;
 };
 
+export type BillingCustomerInput = {
+  customer_kind: "natural" | "juridica";
+  document_type: "CC" | "NIT" | "CE" | "PASAPORTE" | "OTRO";
+  document_number: string;
+  legal_name: string;
+  trade_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  payment_percentage?: number | null;
+  payment_amount?: number | null;
+};
+
+export type BillingLineInput = {
+  code: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  discount_amount: number;
+  tax_rate: number;
+  unit_measure: string;
+  editable: boolean;
+  calculation_mode: "fixed" | "manual" | "by_document_amount";
+};
+
+export type CreateGariBillingInvoicePayload = {
+  emit_mode?: "draft" | "ready" | "stub" | "matias_sandbox";
+  billing_customer?: BillingCustomerInput | null;
+  billing_lines?: BillingLineInput[] | null;
+  document_id?: number | null;
+  version_id?: number | null;
+  document_type?: "minuta" | "escritura" | "otro" | string | null;
+};
+
 export type TemplateRequiredRole = { id: number; role_code: string; label: string; is_required: boolean; step_order: number };
 export type TemplateField = { id: number; field_code: string; label: string; field_type: string; section: string; is_required: boolean; table_master?: string | null; options_json?: string | null; placeholder_key?: string | null; help_text?: string | null; step_order: number };
 export type TemplateRecord = { id: number; name: string; slug: string; case_type: string; document_type: string; description?: string | null; scope_type: string; notary_id?: number | null; notary_label?: string | null; is_active: boolean; source_filename?: string | null; storage_path?: string | null; internal_variable_map_json: string; required_roles: TemplateRequiredRole[]; fields: TemplateField[] };
@@ -593,9 +627,10 @@ export async function saveCaseActs(caseId: number, acts: CaseActItem[]): Promise
   });
 }
 
-export async function createGariInvoiceFromCase(caseId: number, emitMode: "draft" | "ready" | "stub" | "matias_sandbox" = "draft"): Promise<GariBillingInvoiceResult> {
+export async function createGariInvoiceFromCase(caseId: number, payload: CreateGariBillingInvoicePayload): Promise<GariBillingInvoiceResult> {
   const token = getToken();
   const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const emitMode = payload.emit_mode ?? "draft";
   const response = await fetch(`${baseUrl}/api/v1/billing/gari/invoices/from-case/${caseId}?emit_mode=${encodeURIComponent(emitMode)}`, {
     method: "POST",
     headers: {
@@ -603,7 +638,10 @@ export async function createGariInvoiceFromCase(caseId: number, emitMode: "draft
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ emit_mode: emitMode }),
+    body: JSON.stringify({
+      ...payload,
+      emit_mode: emitMode,
+    }),
   });
   if (!response.ok) {
     const text = await response.text();

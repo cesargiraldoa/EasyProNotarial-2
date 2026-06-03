@@ -31,10 +31,11 @@ X-Billing-Internal-Key: <valor interno>
 
 ## Flujo
 
-1. El usuario autenticado crea una factura desde un caso/minuta en EasyPro.
-2. EasyPro carga el caso completo y construye el payload de facturación.
-3. El backend envía el payload a Gari Billing con `emit_mode=draft` por defecto.
-4. Gari Billing responde con el resultado de la factura y EasyPro lo devuelve al frontend.
+1. El usuario abre el detalle del caso/minuta y pulsa `Crear factura en Gari Billing`.
+2. EasyPro abre un panel de facturación del caso.
+3. El usuario configura el pagador, los servicios y el contexto del documento.
+4. EasyPro arma el payload y envía el borrador a Gari Billing con `emit_mode=draft`.
+5. Gari Billing responde con el resultado de la factura y EasyPro lo muestra en el panel.
 
 ## Payload base
 
@@ -44,7 +45,7 @@ X-Billing-Internal-Key: <valor interno>
   "external_reference": "case_<case_id>",
   "idempotency_key": "easypro-case_<case_id>",
   "emit_mode": "draft",
-  "customer": {
+  "billing_customer": {
     "customer_kind": "natural|juridica",
     "document_type": "CC|NIT",
     "document_number": "...",
@@ -52,9 +53,11 @@ X-Billing-Internal-Key: <valor interno>
     "trade_name": "...",
     "email": "...",
     "phone": "...",
-    "address": "..."
+    "address": "...",
+    "payment_percentage": 50,
+    "payment_amount": 0
   },
-  "lines": [
+  "billing_lines": [
     {
       "code": "SERV-NOTARIAL-001",
       "description": "Servicio notarial",
@@ -62,9 +65,14 @@ X-Billing-Internal-Key: <valor interno>
       "unit_price": 100000,
       "discount_amount": 0,
       "tax_rate": 19,
-      "unit_measure": "NIU"
+      "unit_measure": "NIU",
+      "editable": true,
+      "calculation_mode": "fixed"
     }
   ],
+  "document_id": 86,
+  "version_id": 198,
+  "document_type": "minuta",
   "metadata": {
     "case_id": "...",
     "document_type": "minuta",
@@ -87,6 +95,12 @@ ready
 stub
 matias_sandbox
 ```
+
+Recomendación operativa:
+
+- Desde EasyPro usar `draft` por defecto.
+- `by_document_amount` queda preparado en la estructura de servicio, pero no se usa todavía.
+- La versión actual del frontend trabaja con un pagador y una lista de servicios editable. Multi-pagador queda documentado para una siguiente iteración.
 
 ## Seguridad
 
