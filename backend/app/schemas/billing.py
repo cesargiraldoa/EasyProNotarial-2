@@ -21,3 +21,7 @@ class GariBillingInvoiceResult(BaseModel):
     total: float | int | None = None
     error_message: str | None = None
     gari_response: dict[str, Any] = Field(default_factory=dict)
+
+
+class GariBillingFromCaseRequest(BaseModel):
+    emit_mode: EmitMode | None = None
