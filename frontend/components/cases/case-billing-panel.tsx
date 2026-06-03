@@ -324,7 +324,7 @@ export function CaseBillingPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-4"
       role="dialog"
       aria-modal="true"
       aria-label="Facturación del caso"
@@ -334,8 +334,8 @@ export function CaseBillingPanel({
         }
       }}
     >
-      <div className="w-full max-w-5xl rounded-[2rem] border border-slate-200 bg-white text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+      <div className="flex min-h-0 max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.28)]">
+        <div className="flex flex-none items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Facturación del caso</p>
             <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-slate-900">{caseLabel || `Caso ${caseId}`}</h2>
@@ -351,8 +351,9 @@ export function CaseBillingPanel({
           </button>
         </div>
 
-        <div className="grid gap-6 px-6 py-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+          <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-6">
             <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -509,7 +510,7 @@ export function CaseBillingPanel({
             </section>
           </div>
 
-          <div className="space-y-6">
+            <div className="space-y-6">
             <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold text-slate-900">Contexto del documento</p>
               <div className="mt-4 space-y-3 text-sm text-slate-600">
@@ -580,19 +581,24 @@ export function CaseBillingPanel({
                   {result.error_message ? <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{result.error_message}</p> : null}
                 </section>
               ) : null}
-              <button
-                type="button"
-                onClick={() => void handleSubmit()}
-                disabled={isSubmitting}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                <ReceiptText className="h-4 w-4" />
-                {isSubmitting ? "Creando borrador..." : "Crear borrador en Gari Billing"}
-              </button>
             </div>
           </div>
         </div>
+
+        <div className="flex flex-none items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">
+          <p className="text-xs text-slate-600">El contenido tiene scroll interno. El botón permanece visible.</p>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSubmitting}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            <ReceiptText className="h-4 w-4" />
+            {isSubmitting ? "Creando borrador..." : "Crear borrador en Gari Billing"}
+          </button>
+        </div>
       </div>
+    </div>
     </div>
   );
 }
