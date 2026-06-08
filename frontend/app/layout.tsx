@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import "@/app/globals.css";
+import "./globals.css";
 import { BrandProvider } from "@/components/ui/brand-provider";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 
