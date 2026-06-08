@@ -370,6 +370,15 @@ def minuta_onlyoffice_config(
             "key": doc_key,
             "title": filename,
             "url": file_url,
+            # OnlyOffice soporta ocultar "Download as..." dejando download=false.
+            # No hay un ajuste oficial para permitir solo PDF desde permissions.
+            "permissions": {
+                "download": False,
+                "print": True,
+                "edit": True,
+                "review": True,
+                "comment": True,
+            },
         },
         "documentType": "word",
         "editorConfig": {
