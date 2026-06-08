@@ -141,6 +141,27 @@ export type MinutaGenerarResult = {
   };
 };
 
+export type MarkedTemplateField = {
+  key: string;
+  label: string;
+  section: string;
+  occurrences: number;
+  marker_types: string[];
+  raw_markers: string[];
+};
+
+export type MarkedTemplateDetectResult = {
+  fields: MarkedTemplateField[];
+  total_fields: number;
+  total_occurrences: number;
+  marker_types: {
+    bracket: number;
+    curly: number;
+    parenthesis: number;
+    highlight: number;
+  };
+};
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function authHeaders(): Headers {
@@ -221,6 +242,40 @@ export async function generateMinuta(
   form.append("datos_anteriores", JSON.stringify(sanitizeDatos(datosAnteriores)));
   form.append("datos_nuevos", JSON.stringify(sanitizeDatos(datosNuevos)));
   const response = await fetch(`${API_URL}/api/v1/minuta/generar`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<MinutaGenerarResult>;
+}
+
+export async function detectMarkedTemplate(file: File): Promise<MarkedTemplateDetectResult> {
+  const form = new FormData();
+  form.append("archivo", file);
+  const response = await fetch(`${API_URL}/api/v1/minutas/marked-template/detect`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<MarkedTemplateDetectResult>;
+}
+
+export async function generateMarkedTemplate(
+  file: File,
+  values: Record<string, string>,
+  fields: MarkedTemplateField[],
+): Promise<MinutaGenerarResult> {
+  const form = new FormData();
+  form.append("archivo", file);
+  form.append("values", JSON.stringify(values ?? {}));
+  form.append("fields", JSON.stringify(fields ?? []));
+  const response = await fetch(`${API_URL}/api/v1/minutas/marked-template/generate`, {
     method: "POST",
     headers: authHeaders(),
     body: form,

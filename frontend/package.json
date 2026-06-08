@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "set NEXT_PUBLIC_FRONTEND_URL=http://127.0.0.1:5179&& set NEXT_PUBLIC_API_URL=http://127.0.0.1:8001&& next dev --hostname 127.0.0.1 -p 5179",
+    "dev": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\dev\\start-frontend-local.ps1",
+    "dev:next": "set NEXT_PUBLIC_FRONTEND_URL=http://127.0.0.1:5179&& set NEXT_PUBLIC_API_URL=http://127.0.0.1:8001&& next dev --hostname 127.0.0.1 -p 5179",
     "build": "next build",
     "start": "set NEXT_PUBLIC_FRONTEND_URL=http://127.0.0.1:5179&& set NEXT_PUBLIC_API_URL=http://127.0.0.1:8001&& next start --hostname 127.0.0.1 -p 5179",
     "lint": "next lint"

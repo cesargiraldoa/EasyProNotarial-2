@@ -7,19 +7,21 @@ import {
   FileText, HelpCircle, Loader2, Plus, Upload, X,
 } from "lucide-react";
 import {
-  analyzeMinuta, generateMinuta, emptyPersona,
+  analyzeMinuta, detectMarkedTemplate, generateMinuta, generateMarkedTemplate, emptyPersona,
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
-  type MinutaAdquisicion,
+  type MinutaAdquisicion, type MarkedTemplateDetectResult, type MarkedTemplateField,
 } from "@/lib/minuta";
-import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, getEstadosCiviles } from "@/lib/listas-notariales";
+import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, ESTADOS_CIVILES_GENERALES, PAISES, getEstadosCiviles, getNacionalidadesPorGenero } from "@/lib/listas-notariales";
 import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
+import { getCurrentUser } from "@/lib/api";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 import { MinutasTour, type TourStep } from "@/components/minutas/minutas-tour";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STEPS = ["Subir documento", "Revisar personas", "Generar"];
+const IA_STEPS = ["Subir documento", "Revisar personas", "Generar"];
+const MARKED_STEPS = ["Subir documento", "Diligenciar campos", "Generar"];
 
 const GENERO_OPTIONS = [
   { value: "M", label: "Masculino (M)" },
@@ -132,10 +134,10 @@ function numeroALetras(n: number): string {
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function StepBar({ current }: { current: number }) {
+function StepBar({ current, labels }: { current: number; labels: string[] }) {
   return (
     <div className="flex items-center gap-0 mb-8">
-      {STEPS.map((label, i) => (
+      {labels.map((label, i) => (
         <div key={i} className="flex items-center gap-0 flex-1 last:flex-none">
           <div className="flex flex-col items-center gap-1.5">
             <div
@@ -159,7 +161,7 @@ function StepBar({ current }: { current: number }) {
               {label}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < labels.length - 1 && (
             <div
               className={[
                 "flex-1 h-0.5 mx-2 mb-5 rounded",
@@ -334,6 +336,1448 @@ function AnalysisSummary({ result }: { result: MinutaAnalisisResult }) {
   );
 }
 
+function groupMarkedFields(fields: MarkedTemplateField[]) {
+  const groups = new Map<string, MarkedTemplateField[]>();
+  fields.forEach((field) => {
+    const bucket = groups.get(field.section) ?? [];
+    bucket.push(field);
+    groups.set(field.section, bucket);
+  });
+  return Array.from(groups.entries()).map(([section, sectionFields]) => ({ section, fields: sectionFields }));
+}
+
+type MarkedSectionId =
+  | "basic"
+  | "buyers"
+  | "values"
+  | "decisions"
+  | "protocol"
+  | "liquidation"
+  | "others";
+
+const MARKED_BUYER_NOTE_KEYS = new Set([
+  "nacionalidad_comprador",
+  "estado_civil_comprador",
+  "profesion_u_oficio",
+  "actividad_economica_comprador",
+]);
+
+const MARKED_BASIC_ORDER = [
+  "numero_escritura",
+  "numero_apartamento",
+  "numero_matricula",
+  "numero_de_piso",
+  "linderos",
+  "coeficiente_copropiedad",
+  "fecha_celebracion_de_la_promesa_compraventa",
+];
+
+const MARKED_VALUE_ORDER = [
+  "valor_de_la_venta_en_numeros",
+  "valor_apartamento_en_letras",
+  "en_numeros_cuota_inicial",
+  "en_letras_cuota_inicial",
+  "origen_cuota_inicial",
+  "valor_del_acto_de_la_hipoteca",
+  "valor_del_acto_de_la_hipoteca_en_letras",
+];
+
+const MARKED_DECISION_ORDER = [
+  "inmueble_sera_su_casa",
+  "tiene_inmueble_afectado",
+  "afectacion_cumple_ley_258",
+  "cumple_ley_258",
+  "queda_afectado",
+  "constitucion_patrimonio_de_familia",
+  "acepta_notificacion_electronica",
+  "nombre_pareja_o_conyuge",
+  "numero_documento_pareja_o_conyuge",
+  "celular_pareja_o_conyuge",
+  "direccion_pareja_o_conyuge",
+  "email_pareja_o_conyuge",
+  "pareja_o_conyuge",
+];
+
+const MARKED_PROTOCOL_ORDER = [
+  "dia_elaboracion_escritura",
+  "mes_elaboracion_escritura",
+  "protocolista",
+  "consecutivo_hojas_papel_notarial",
+];
+
+const MARKED_LIQUIDATION_ORDER = [
+  "derechos_notariales",
+  "iva",
+  "aporte_superintendencia",
+  "fondo_nacional_notariado",
+];
+
+const MARKED_MONTH_LABELS = [
+  { value: "1", label: "Enero" },
+  { value: "2", label: "Febrero" },
+  { value: "3", label: "Marzo" },
+  { value: "4", label: "Abril" },
+  { value: "5", label: "Mayo" },
+  { value: "6", label: "Junio" },
+  { value: "7", label: "Julio" },
+  { value: "8", label: "Agosto" },
+  { value: "9", label: "Septiembre" },
+  { value: "10", label: "Octubre" },
+  { value: "11", label: "Noviembre" },
+  { value: "12", label: "Diciembre" },
+];
+
+const MARKED_DECISION_OPTIONS = [
+  { value: "", label: "Selecciona..." },
+  { value: "Sí", label: "Sí" },
+  { value: "No", label: "No" },
+  { value: "No aplica", label: "No aplica" },
+  { value: "Pendiente", label: "Pendiente" },
+];
+
+const MARKED_DECISION_SELECT_KEYS = new Set([
+  "inmueble_sera_su_casa",
+  "tiene_inmueble_afectado",
+  "afectacion_cumple_ley_258",
+  "cumple_ley_258",
+  "queda_afectado",
+  "constitucion_patrimonio_de_familia",
+  "acepta_notificacion_electronica",
+]);
+
+const MARKED_DECISION_TEXT_KEYS = new Set([
+  "nombre_pareja_o_conyuge",
+  "numero_documento_pareja_o_conyuge",
+  "celular_pareja_o_conyuge",
+  "direccion_pareja_o_conyuge",
+  "email_pareja_o_conyuge",
+  "pareja_o_conyuge",
+]);
+
+const MARKED_NATIONALITY_KEYWORDS = ["nacionalidad", "pais", "país", "pais_expedicion", "país_expedicion"];
+const MARKED_MUNICIPALITY_KEYWORDS = [
+  "municipio",
+  "ciudad",
+  "domicilio",
+  "municipio_domicilio",
+  "municipio_notaria",
+  "ciudad_expedicion",
+  "lugar_expedicion",
+];
+
+const MARKED_BUYER_LABELS: Record<1 | 2 | 3, string> = {
+  1: "Comprador 1",
+  2: "Comprador 2",
+  3: "Comprador 3",
+};
+
+function normalizeMarkedKey(value: string): string {
+  return normalizeMarkedText(value);
+}
+
+function markedFieldKey(field: MarkedTemplateField): string {
+  return normalizeMarkedKey(field.key);
+}
+
+function matchesMarkedKey(field: MarkedTemplateField, keys: string[]): boolean {
+  const blob = markedFieldKey(field);
+  return keys.some((key) => blob === normalizeMarkedKey(key) || blob.includes(normalizeMarkedKey(key)));
+}
+
+function getMarkedBuyerIndex(field: MarkedTemplateField): 1 | 2 | 3 | null {
+  const blob = markedFieldKey(field);
+  if (blob.includes("comprador_3") || blob.includes("comprador3")) return 3;
+  if (blob.includes("comprador_2") || blob.includes("comprador2")) return 2;
+  if (blob.includes("comprador_1") || blob.includes("comprador1")) return 1;
+  if (blob.includes("comprador")) return 1;
+  return null;
+}
+
+function isMarkedBuyerSharedField(field: MarkedTemplateField): boolean {
+  return MARKED_BUYER_NOTE_KEYS.has(markedFieldKey(field)) || matchesMarkedKey(field, ["comprador_es_hombre_o_mujer"]);
+}
+
+function getMarkedSectionId(field: MarkedTemplateField): MarkedSectionId {
+  if (isMarkedPartnerDescriptorField(field)) return "decisions";
+  if (matchesMarkedKey(field, MARKED_BASIC_ORDER)) return "basic";
+  if (getMarkedBuyerIndex(field) != null || isMarkedBuyerSharedField(field)) return "buyers";
+  if (matchesMarkedKey(field, MARKED_VALUE_ORDER)) return "values";
+  if (matchesMarkedKey(field, MARKED_DECISION_ORDER)) return "decisions";
+  if (matchesMarkedKey(field, MARKED_PROTOCOL_ORDER)) return "protocol";
+  if (matchesMarkedKey(field, MARKED_LIQUIDATION_ORDER)) return "liquidation";
+  return "others";
+}
+
+function sortMarkedFieldsByOrder(fields: MarkedTemplateField[], order: string[]) {
+  const orderIndex = new Map(order.map((key, index) => [normalizeMarkedKey(key), index]));
+  return [...fields].sort((a, b) => {
+    const aIndex = orderIndex.get(markedFieldKey(a));
+    const bIndex = orderIndex.get(markedFieldKey(b));
+    if (aIndex != null && bIndex != null) return aIndex - bIndex;
+    if (aIndex != null) return -1;
+    if (bIndex != null) return 1;
+    return 0;
+  });
+}
+
+function getMarkedLetterTargetKey(field: MarkedTemplateField): string | null {
+  const key = markedFieldKey(field);
+  if (key === "valor_de_la_venta_en_numeros") return "valor_apartamento_en_letras";
+  if (key === "en_numeros_cuota_inicial") return "en_letras_cuota_inicial";
+  if (key === "valor_del_acto_de_la_hipoteca") return "valor_del_acto_de_la_hipoteca_en_letras";
+  if (key.endsWith("_en_numeros")) return key.replace(/_en_numeros$/, "_en_letras");
+  return null;
+}
+
+function getMarkedMoneySourceKeyForLetter(field: MarkedTemplateField): string | null {
+  const key = markedFieldKey(field);
+  if (key === "valor_apartamento_en_letras") return "valor_de_la_venta_en_numeros";
+  if (key === "en_letras_cuota_inicial") return "en_numeros_cuota_inicial";
+  if (key === "valor_del_acto_de_la_hipoteca_en_letras") return "valor_del_acto_de_la_hipoteca";
+  if (key.endsWith("_en_letras")) return key.replace(/_en_letras$/, "_en_numeros");
+  return null;
+}
+
+function getMarkedBuyerFields(fields: MarkedTemplateField[], buyerIndex: 1 | 2 | 3) {
+  const exactBuyerFields = fields.filter((field) => getMarkedBuyerIndex(field) === buyerIndex);
+  const sharedBuyerOneFields = buyerIndex === 1 ? fields.filter((field) => isMarkedBuyerSharedField(field)) : [];
+  const merged = [...sharedBuyerOneFields, ...exactBuyerFields];
+  const seen = new Set<string>();
+  return merged.filter((field) => {
+    if (seen.has(field.key)) return false;
+    seen.add(field.key);
+    return true;
+  });
+}
+
+type MarkedGender = "M" | "F" | "J";
+type MarkedFieldKind =
+  | "text"
+  | "textarea"
+  | "date"
+  | "day"
+  | "month"
+  | "year"
+  | "money"
+  | "stateCivil"
+  | "gender"
+  | "typeDocument"
+  | "decision";
+
+const MARKED_GENDER_OPTIONS = [
+  { value: "Hombre", label: "Hombre" },
+  { value: "Mujer", label: "Mujer" },
+  { value: "Persona jurídica", label: "Persona jurídica" },
+];
+
+const MARKED_GENERAL_ESTADOS_CIVILES = ESTADOS_CIVILES_GENERALES;
+
+function normalizeMarkedText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function markedFieldBlob(field: MarkedTemplateField): string {
+  return normalizeMarkedText([field.key, field.label, field.section].join(" "));
+}
+
+function isMarkedField(field: MarkedTemplateField, terms: string[]): boolean {
+  const blob = markedFieldBlob(field);
+  return terms.some((term) => blob.includes(normalizeMarkedText(term)));
+}
+
+function isMarkedStateCivilField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["estado_civil", "estado civil"]);
+}
+
+function isMarkedGenderField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, [
+    "comprador_es_hombre_o_mujer",
+    "comprador_1_es_hombre_o_mujer",
+    "comprador_1_es_hombre_0_mujer",
+    "comprador_2_es_hombre_o_mujer",
+    "genero_comprador_1",
+    "genero_comprador_2",
+    "genero",
+    "género",
+  ]);
+}
+
+function isMarkedDateField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["fecha", "dia_elaboracion", "mes_elaboracion", "ano_elaboracion", "año_elaboracion"]);
+}
+
+function isMarkedDayField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["dia_elaboracion"]);
+}
+
+function isMarkedMonthField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["mes_elaboracion"]);
+}
+
+function isMarkedYearField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["ano_elaboracion", "año_elaboracion"]);
+}
+
+function isMarkedTypeDocumentField(field: MarkedTemplateField): boolean {
+  const blob = markedFieldBlob(field);
+  return [
+    "tipo_documento",
+    "tipo documento",
+    "tipo_de_documento",
+  ].some((keyword) => blob.includes(normalizeMarkedText(keyword)));
+}
+
+function isMarkedMoneyField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, [
+    "valor",
+    "precio",
+    "cuota",
+    "derechos",
+    "iva",
+    "aporte",
+    "fondo",
+    "notariado",
+    "superintendencia",
+    "transferencia",
+    "hipoteca",
+  ]);
+}
+
+function isMarkedLettersField(field: MarkedTemplateField): boolean {
+  return isMarkedField(field, ["en_letras", "letras"]);
+}
+
+function isMarkedPartnerDescriptorField(field: MarkedTemplateField): boolean {
+  const blob = [field.key, field.label, ...(field.raw_markers ?? [])].join(" ").toLowerCase();
+  return [
+    "conyuge",
+    "companero",
+    "companera",
+    "pareja",
+  ].some((keyword) => blob.includes(keyword));
+}
+
+const AMBIGUOUS_MARKED_KEYS = new Set([
+  normalizeMarkedKey("nombre"),
+  normalizeMarkedKey("documento"),
+  normalizeMarkedKey("fecha"),
+  normalizeMarkedKey("valor"),
+  normalizeMarkedKey("nit"),
+  normalizeMarkedKey("escritura"),
+  normalizeMarkedKey("numero"),
+  normalizeMarkedKey("número"),
+]);
+
+function isMarkedAmbiguousField(field: MarkedTemplateField): boolean {
+  if (isMarkedPartnerDescriptorField(field)) return false;
+  return AMBIGUOUS_MARKED_KEYS.has(markedFieldKey(field));
+}
+
+function isMarkedProtocolAutofillField(field: MarkedTemplateField): boolean {
+  const blob = markedFieldBlob(field);
+  return [
+    "protocolista",
+    "recepcion",
+    "recepcion_y_extension",
+    "recepcion_extension",
+    "extension",
+    "otorgamiento",
+  ].some((keyword) => blob.includes(normalizeMarkedText(keyword)));
+}
+
+function getMarkedBuyerGroup(field: MarkedTemplateField): "comprador_1" | "comprador_2" | null {
+  const blob = markedFieldBlob(field);
+  if (blob.includes("comprador_1") || blob.includes("comprador1")) return "comprador_1";
+  if (blob.includes("comprador_2") || blob.includes("comprador2")) return "comprador_2";
+  return null;
+}
+
+function isMarkedNationalityField(field: MarkedTemplateField): boolean {
+  const blob = markedFieldBlob(field);
+  return MARKED_NATIONALITY_KEYWORDS.some((keyword) => blob.includes(normalizeMarkedText(keyword)));
+}
+
+function isMarkedCountryField(field: MarkedTemplateField): boolean {
+  const blob = markedFieldBlob(field);
+  return ["pais", "país", "pais_expedicion", "país_expedicion"].some((keyword) => blob.includes(normalizeMarkedText(keyword)));
+}
+
+function isMarkedMunicipalityField(field: MarkedTemplateField): boolean {
+  const blob = markedFieldBlob(field);
+  return MARKED_MUNICIPALITY_KEYWORDS.some((keyword) => blob.includes(normalizeMarkedText(keyword)));
+}
+
+function getMarkedNationalityGenderKeys(field: MarkedTemplateField): string[] {
+  const key = markedFieldKey(field);
+
+  if (key === "nacionalidad_comprador_2") {
+    return ["comprador_2_es_hombre_o_mujer", "genero_comprador_2"];
+  }
+
+  if (key === "nacionalidad_comprador_1" || key === "nacionalidad_comprador") {
+    return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "genero_comprador_1", "genero"];
+  }
+
+  const buyerGroup = getMarkedBuyerGroup(field);
+  if (buyerGroup === "comprador_2") return ["comprador_2_es_hombre_o_mujer", "genero_comprador_2"];
+  if (buyerGroup === "comprador_1") return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "genero_comprador_1", "genero"];
+
+  return ["genero"];
+}
+
+function getMarkedNationalityRelatedGender(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): MarkedGender | null {
+  const candidateKeys = new Set(getMarkedNationalityGenderKeys(field).map((key) => normalizeMarkedKey(key)));
+  for (const candidate of fields) {
+    if (!isMarkedGenderField(candidate)) continue;
+    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
+    const gender = normalizeMarkedGender(values[candidate.key]);
+    if (gender) return gender;
+  }
+  return null;
+}
+
+function getMarkedNationalityRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
+  const candidateKeys = new Set(getMarkedNationalityGenderKeys(field).map((key) => normalizeMarkedKey(key)));
+  for (const candidate of fields) {
+    if (!isMarkedGenderField(candidate)) continue;
+    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
+    if (normalizeMarkedGender(values[candidate.key])) return candidate.key;
+  }
+  return null;
+}
+
+function getMarkedNationalityOptions(gender: MarkedGender | null) {
+  return getNacionalidadesPorGenero(gender ?? "");
+}
+
+function getMarkedStateCivilGenderKeys(field: MarkedTemplateField): string[] {
+  const key = markedFieldKey(field);
+
+  if (key === "estado_civil_comprador_2") {
+    return ["comprador_2_es_hombre_o_mujer", "comprador_2_es_hombre_0_mujer", "genero_comprador_2"];
+  }
+
+  if (key === "estado_civil_comprador_1" || key === "estado_civil_comprador") {
+    return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "comprador_1_es_hombre_0_mujer", "genero_comprador_1", "genero"];
+  }
+
+  const buyerGroup = getMarkedBuyerGroup(field);
+  if (buyerGroup === "comprador_2") return ["comprador_2_es_hombre_o_mujer", "comprador_2_es_hombre_0_mujer", "genero_comprador_2"];
+  if (buyerGroup === "comprador_1") return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "comprador_1_es_hombre_0_mujer", "genero_comprador_1", "genero"];
+
+  return ["genero"];
+}
+
+function getMarkedStateCivilRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
+  const candidateKeys = new Set(getMarkedStateCivilGenderKeys(field).map((key) => normalizeMarkedKey(key)));
+
+  for (const candidate of fields) {
+    if (!isMarkedGenderField(candidate)) continue;
+    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
+    if (normalizeMarkedGender(values[candidate.key])) return candidate.key;
+  }
+
+  return null;
+}
+
+function getMarkedRelatedGender(
+  field: MarkedTemplateField,
+  fields: MarkedTemplateField[],
+  values: Record<string, string>,
+): MarkedGender | null {
+  const candidateKeys = new Set(getMarkedStateCivilGenderKeys(field).map((key) => normalizeMarkedKey(key)));
+
+  for (const candidate of fields) {
+    if (!isMarkedGenderField(candidate)) continue;
+    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
+    const gender = normalizeMarkedGender(values[candidate.key]);
+    if (gender) return gender;
+  }
+
+  return null;
+}
+
+function normalizeMarkedGender(value: string | null | undefined): MarkedGender | null {
+  const normalized = normalizeMarkedText(String(value ?? ""));
+  if (!normalized) return null;
+  if (
+    normalized.startsWith("hombre") ||
+    normalized === "h" ||
+    normalized === "masculino" ||
+    normalized === "m"
+  ) {
+    return "M";
+  }
+  if (
+    normalized.startsWith("mujer") ||
+    normalized === "f" ||
+    normalized === "femenino" ||
+    normalized === "fem"
+  ) {
+    return "F";
+  }
+  if (
+    normalized.includes("persona_juridica") ||
+    normalized.includes("juridica") ||
+    normalized.includes("persona_moral") ||
+    normalized === "j"
+  ) {
+    return "J";
+  }
+  return null;
+}
+
+function getMarkedGenderLabel(value: string | null | undefined): string {
+  const gender = normalizeMarkedGender(value);
+  if (gender === "M") return "Hombre";
+  if (gender === "F") return "Mujer";
+  if (gender === "J") return "Persona jurídica";
+  return "";
+}
+
+function getMarkedFieldKind(field: MarkedTemplateField): MarkedFieldKind {
+  const key = markedFieldKey(field);
+  if (MARKED_DECISION_SELECT_KEYS.has(key)) return "decision";
+  if (MARKED_DECISION_TEXT_KEYS.has(key)) return "text";
+  if (isMarkedTypeDocumentField(field)) return "typeDocument";
+  if (key === "dia_elaboracion_escritura") return "day";
+  if (key === "mes_elaboracion_escritura") return "month";
+  if (key === "fecha_celebracion_de_la_promesa_compraventa") return "date";
+  if (
+    key === "valor_apartamento_en_letras" ||
+    key === "en_letras_cuota_inicial" ||
+    key === "valor_del_acto_de_la_hipoteca_en_letras"
+  ) {
+    return "textarea";
+  }
+  if (key === "origen_cuota_inicial" || key === "protocolista" || key === "consecutivo_hojas_papel_notarial") {
+    return "text";
+  }
+  if (MARKED_BASIC_ORDER.includes(key)) {
+    if (key === "linderos") return "textarea";
+    return "text";
+  }
+  if (
+    key === "valor_de_la_venta_en_numeros" ||
+    key === "en_numeros_cuota_inicial" ||
+    key === "valor_del_acto_de_la_hipoteca" ||
+    MARKED_LIQUIDATION_ORDER.includes(key)
+  ) return "money";
+  if (isMarkedGenderField(field)) return "gender";
+  if (isMarkedStateCivilField(field)) return "stateCivil";
+  if (isMarkedLettersField(field)) return "textarea";
+  if (isMarkedDayField(field)) return "day";
+  if (isMarkedMonthField(field)) return "month";
+  if (isMarkedYearField(field)) return "year";
+  if (isMarkedMoneyField(field)) return "money";
+  if (isMarkedDateField(field)) return "date";
+  return "text";
+}
+
+function formatMarkedCOP(value: string): string {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("es-CO");
+}
+
+function parseMarkedCOP(value: string): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function getMarkedFieldTokens(field: MarkedTemplateField): string[] {
+  return markedFieldBlob(field)
+    .split("_")
+    .filter((token) => token.length > 2 && !["para", "con", "del", "las", "los", "por", "una", "uno"].includes(token));
+}
+
+function scoreMarkedFieldRelation(source: MarkedTemplateField, target: MarkedTemplateField): number {
+  if (source.key === target.key) return -1;
+  const sourceTokens = new Set(getMarkedFieldTokens(source));
+  const targetTokens = new Set(getMarkedFieldTokens(target));
+  let score = 0;
+  sourceTokens.forEach((token) => {
+    if (targetTokens.has(token)) score += 2;
+  });
+  if (source.section === target.section) score += 2;
+  if (getMarkedBuyerGroup(source) && getMarkedBuyerGroup(source) === getMarkedBuyerGroup(target)) score += 2;
+  if (isMarkedMoneyField(target)) score += 1;
+  if (isMarkedLettersField(source) && isMarkedMoneyField(target)) score += 1;
+  return score;
+}
+
+function getBestMarkedMoneyFieldForLetter(
+  letterField: MarkedTemplateField,
+  fields: MarkedTemplateField[],
+): MarkedTemplateField | null {
+  const candidates = fields.filter((candidate) => isMarkedMoneyField(candidate));
+  let best: MarkedTemplateField | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const score = scoreMarkedFieldRelation(letterField, candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  if (!best || bestScore <= 0) {
+    const sameSectionCandidates = candidates.filter((candidate) => candidate.section === letterField.section);
+    if (sameSectionCandidates.length === 1) return sameSectionCandidates[0];
+  }
+
+  return bestScore > 0 ? best : null;
+}
+
+function getMarkedStateCivilOptions(gender: MarkedGender | null) {
+  if (gender === "M" || gender === "F") {
+    return getEstadosCiviles(gender).map((value) => ({ value, label: value }));
+  }
+  if (gender === "J") {
+    return [{ value: "No aplica", label: "No aplica" }];
+  }
+  return [];
+}
+
+function getMarkedConcordanceSuggestion(
+  field: MarkedTemplateField,
+  fields: MarkedTemplateField[],
+  values: Record<string, string>,
+): string {
+  const gender = getMarkedRelatedGender(field, fields, values);
+  if (!gender) return "";
+
+  const blob = markedFieldBlob(field);
+  const terms = gender === "M"
+    ? [
+        ["identificada", "identificado"],
+        ["domiciliada", "domiciliado"],
+        ["compradora", "comprador"],
+        ["soltera", "soltero"],
+        ["casada", "casado"],
+        ["divorciada", "divorciado"],
+        ["viuda", "viudo"],
+      ]
+    : [
+        ["identificado", "identificada"],
+        ["domiciliado", "domiciliada"],
+        ["comprador", "compradora"],
+        ["soltero", "soltera"],
+        ["casado", "casada"],
+        ["divorciado", "divorciada"],
+        ["viudo", "viuda"],
+      ];
+
+  for (const [match, suggestion] of terms) {
+    if (blob.includes(match)) return suggestion;
+  }
+  return "";
+}
+
+function MarkedTemplateSummary({ result }: { result: MarkedTemplateDetectResult }) {
+  return (
+    <div className="ep-card rounded-2xl p-5 mt-5 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide bg-emerald-50 text-emerald-700">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Plantilla marcada · Sin IA
+          </span>
+        </div>
+        <span className="text-xs text-soft">
+          {result.total_fields} campos · {result.total_occurrences} ocurrencias
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {[
+          { label: "Campos", value: result.total_fields },
+          { label: "Ocurrencias", value: result.total_occurrences },
+          { label: "Tipos de marca", value: Object.values(result.marker_types).filter((v) => v > 0).length },
+        ].map(({ label, value }) => (
+          <div key={label} className="ep-card-muted rounded-xl p-3">
+            <p className="text-xl font-bold text-primary">{value}</p>
+            <p className="text-xs text-soft mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+          Marcas detectadas
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            ["bracket", "Corchetes", result.marker_types.bracket],
+            ["curly", "Llaves", result.marker_types.curly],
+            ["parenthesis", "Paréntesis", result.marker_types.parenthesis],
+            ["highlight", "Resaltado", result.marker_types.highlight],
+          ].map(([key, label, value]) => (
+            <span key={String(key)} className="ep-pill text-xs px-2.5 py-1 rounded-full">
+              {label}: {String(value)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarkedFieldsForm({
+  fields,
+  values,
+  onChange,
+  onGenerate,
+  onContinueToSummary,
+  isGenerating,
+  showPendingWarning,
+  showAmbiguousWarning,
+}: {
+  fields: MarkedTemplateField[];
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  onGenerate: () => void;
+  onContinueToSummary: () => void;
+  isGenerating: boolean;
+  showPendingWarning: boolean;
+  showAmbiguousWarning: boolean;
+}) {
+  const fieldIndexMap = new Map(fields.map((field, index) => [field.key, index]));
+  const [markedGeoDepartments, setMarkedGeoDepartments] = useState<Record<string, string>>({});
+  const [currentUserFullName, setCurrentUserFullName] = useState("");
+  const [markedManualOverrides, setMarkedManualOverrides] = useState<Record<string, boolean>>({});
+  const ambiguousFields = fields.filter((field) => isMarkedAmbiguousField(field));
+  const visibleFields = fields.filter((field) => !isMarkedAmbiguousField(field));
+
+  useEffect(() => {
+    let active = true;
+    getCurrentUser()
+      .then((user) => {
+        if (!active) return;
+        const fullName = user.full_name?.trim() ?? "";
+        if (fullName) setCurrentUserFullName(fullName);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCurrentUserFullName("");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserFullName) return;
+
+    fields.forEach((field) => {
+      if (!isMarkedProtocolAutofillField(field)) return;
+      if (markedManualOverrides[field.key]) return;
+      if ((values[field.key] ?? "").trim()) return;
+      onChange(field.key, currentUserFullName);
+    });
+  }, [currentUserFullName, fields, markedManualOverrides, onChange, values]);
+
+  function handleFieldChange(field: MarkedTemplateField, rawValue: string) {
+    const kind = getMarkedFieldKind(field);
+    let nextValue = rawValue;
+
+    if (kind === "money") {
+      nextValue = parseMarkedCOP(rawValue);
+    } else if (kind === "day") {
+      nextValue = rawValue.replace(/\D/g, "").slice(0, 2);
+    } else if (kind === "year") {
+      nextValue = rawValue.replace(/\D/g, "").slice(0, 4);
+    }
+
+    onChange(field.key, nextValue);
+
+    if (isMarkedProtocolAutofillField(field) && nextValue !== currentUserFullName) {
+      setMarkedManualOverrides((prev) => (prev[field.key] ? prev : { ...prev, [field.key]: true }));
+    }
+
+    if (kind === "gender") {
+      const validStateCivilValues = new Set(getMarkedStateCivilOptions(normalizeMarkedGender(nextValue)).map((option) => option.value));
+      const validNationalityValues = new Set(getMarkedNationalityOptions(normalizeMarkedGender(nextValue)).map((option) => option.value));
+      fields.forEach((candidate) => {
+        if (getMarkedFieldKind(candidate) !== "stateCivil") return;
+        const linkedGenderKey = getMarkedStateCivilRelatedGenderKey(candidate, fields, values);
+        if (linkedGenderKey !== field.key) return;
+
+        const currentStateCivil = values[candidate.key] ?? "";
+        if (currentStateCivil && !validStateCivilValues.has(currentStateCivil)) {
+          onChange(candidate.key, "");
+        }
+      });
+
+      fields.forEach((candidate) => {
+        if (!isMarkedNationalityField(candidate)) return;
+        const linkedGenderKey = getMarkedNationalityRelatedGenderKey(candidate, fields, values);
+        if (linkedGenderKey !== field.key) return;
+
+        const currentNationality = values[candidate.key] ?? "";
+        if (currentNationality && !validNationalityValues.has(currentNationality)) {
+          onChange(candidate.key, "");
+        }
+      });
+    }
+
+    if (kind !== "money") return;
+
+    const lettersValue = nextValue ? numeroALetras(Number(nextValue)) : "";
+    const linkedFieldKey = getMarkedLetterTargetKey(field);
+    if (linkedFieldKey && values[linkedFieldKey] != null) {
+      onChange(linkedFieldKey, lettersValue);
+      return;
+    }
+
+    fields.forEach((candidate) => {
+      if (!isMarkedLettersField(candidate)) return;
+      const linkedMoneyField = getBestMarkedMoneyFieldForLetter(candidate, fields);
+      if (linkedMoneyField?.key === field.key) {
+        onChange(candidate.key, lettersValue);
+      }
+    });
+  }
+
+  function getMarkedFieldPlaceholder(field: MarkedTemplateField, kind: string, relatedGender?: string | null, needsDepartment = false) {
+    if (kind === "stateCivil" && !relatedGender) return "Primero selecciona genero";
+    if (needsDepartment) return "Primero selecciona departamento";
+    if (kind === "money") return "Ej. 250.000.000";
+    if (kind === "textarea") return "Se genera automaticamente; puedes ajustar el texto";
+    if (kind === "date") return "Selecciona la fecha";
+    if (kind === "day" || kind === "month" || kind === "select") return "Selecciona...";
+
+    const haystack = `${field.key} ${field.label}`.toLowerCase();
+    if (haystack.includes("linderos")) return "Escribe o pega los linderos";
+    if (haystack.includes("correo") || haystack.includes("email")) return "Escribe el correo electronico";
+    if (haystack.includes("celular") || haystack.includes("telefono") || haystack.includes("teléfono")) return "Escribe el celular";
+    if (haystack.includes("documento")) return "Escribe el numero de documento";
+    if (haystack.includes("direccion") || haystack.includes("dirección") || haystack.includes("domicilio")) return "Escribe la direccion";
+    if (haystack.includes("nombre")) return "Escribe el nombre completo";
+    return "Escribe la nueva informacion";
+  }
+
+  function renderControl(field: MarkedTemplateField) {
+    const kind = getMarkedFieldKind(field);
+    const currentValue = values[field.key] ?? "";
+    const isProtocolAutofill = isMarkedProtocolAutofillField(field);
+
+    if (isMarkedCountryField(field)) {
+      return (
+        <div className="space-y-1">
+          <select
+            value={currentValue}
+            onChange={(e) => handleFieldChange(field, e.target.value)}
+            className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+          >
+            <option value="">Selecciona...</option>
+            {PAISES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-soft leading-tight">Catálogo de países centralizado.</p>
+        </div>
+      );
+    }
+
+    if (isMarkedNationalityField(field)) {
+      const relatedGender = getMarkedNationalityRelatedGender(field, fields, values);
+      const options = getMarkedNationalityOptions(relatedGender);
+      const disabled = !relatedGender;
+      return (
+        <div className="space-y-1">
+          <select
+            value={disabled ? "" : currentValue}
+            onChange={(e) => handleFieldChange(field, e.target.value)}
+            disabled={disabled}
+            className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+          >
+            {disabled ? (
+              <option value="">Primero selecciona genero</option>
+            ) : (
+              <>
+                <option value="">Selecciona...</option>
+                {options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </>
+            )}
+          </select>
+          <p className="text-[11px] text-soft leading-tight">
+            {disabled
+              ? "Primero selecciona genero"
+              : relatedGender === "J"
+              ? "Se muestran opciones congruentes con persona jurídica"
+              : "Opciones filtradas por género relacionado"}
+          </p>
+        </div>
+      );
+    }
+
+    if (kind === "typeDocument") {
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+        >
+          <option value="">Selecciona tipo de documento</option>
+          {TIPOS_DOCUMENTO.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (isMarkedMunicipalityField(field)) {
+      const storedDept = markedGeoDepartments[field.key] ?? "";
+      const inferredDept = currentValue ? getDepartamentoByMunicipio(currentValue) ?? "" : "";
+      const currentDept = storedDept || inferredDept;
+      const municipalities = currentDept ? getMunicipiosByDepartamento(currentDept) : [];
+      const normalizedCurrentMunicipality = currentValue;
+
+      return (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="grid gap-1">
+              <span className="text-[11px] font-medium text-muted">Departamento</span>
+              <select
+                value={currentDept}
+                onChange={(e) => {
+                  const nextDept = e.target.value;
+                  setMarkedGeoDepartments((prev) => ({ ...prev, [field.key]: nextDept }));
+                  onChange(field.key, "");
+                }}
+                className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+              >
+                <option value="">Selecciona...</option>
+                {DEPARTAMENTOS_COLOMBIA.map((d) => (
+                  <option key={d.codigo} value={d.nombre}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[11px] font-medium text-muted">
+                {field.label.toLowerCase().includes("ciudad") ? "Ciudad" : "Municipio"}
+              </span>
+              <select
+                value={normalizedCurrentMunicipality}
+                onChange={(e) => onChange(field.key, e.target.value)}
+                className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+                disabled={!currentDept}
+              >
+                <option value="">{currentDept ? "Selecciona..." : "Primero selecciona departamento"}</option>
+                {municipalities.map((m) => (
+                  <option key={m.codigo} value={m.nombre}>
+                    {m.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="text-[11px] text-soft leading-tight">
+            Se guardara el municipio seleccionado.
+          </p>
+        </div>
+      );
+    }
+
+    if (kind === "decision") {
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+        >
+          {MARKED_DECISION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (kind === "gender") {
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+        >
+          <option value="">Selecciona...</option>
+          {MARKED_GENDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (kind === "stateCivil") {
+      const relatedGender = getMarkedRelatedGender(field, fields, values);
+      const options = getMarkedStateCivilOptions(relatedGender);
+      const disabled = !relatedGender;
+      return (
+        <div className="space-y-1">
+          <select
+            value={disabled ? "" : currentValue}
+            onChange={(e) => handleFieldChange(field, e.target.value)}
+            disabled={disabled}
+            className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+          >
+            {disabled ? (
+              <option value="">Primero selecciona genero</option>
+            ) : (
+              <>
+                <option value="">Selecciona...</option>
+                {options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </>
+            )}
+          </select>
+          <p className="text-[11px] text-soft leading-tight">
+            {disabled
+              ? "Primero selecciona genero"
+              : relatedGender === "J"
+              ? "Solo se permite No aplica"
+              : "Opciones filtradas por género relacionado"}
+          </p>
+        </div>
+      );
+    }
+
+    if (kind === "date") {
+      return (
+        <input
+          type="date"
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
+        />
+      );
+    }
+
+    if (kind === "day") {
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+        >
+          <option value="">Día</option>
+          {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+            <option key={day} value={String(day)}>
+              {day}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (kind === "month") {
+      return (
+        <select
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
+        >
+          <option value="">Mes</option>
+          {MARKED_MONTH_LABELS.map((month) => (
+            <option key={month.value} value={month.label}>
+              {month.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (kind === "year") {
+      return (
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1000}
+          max={9999}
+          step={1}
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
+          placeholder="Ano"
+        />
+      );
+    }
+
+    if (kind === "money") {
+      return (
+        <input
+          type="text"
+          inputMode="numeric"
+          value={formatMarkedCOP(currentValue)}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
+          placeholder="Ej. 250.000.000"
+        />
+      );
+    }
+
+    if (kind === "textarea") {
+      const suggestion = getMarkedConcordanceSuggestion(field, fields, values);
+      const linkedMoneyKey = getMarkedMoneySourceKeyForLetter(field);
+      const linkedMoneyField = linkedMoneyKey
+        ? fields.find((candidate) => candidate.key === linkedMoneyKey) ?? null
+        : getBestMarkedMoneyFieldForLetter(field, fields);
+      const linkedMoneyValue = linkedMoneyField ? values[linkedMoneyField.key] ?? "" : "";
+      const autoLetterValue = linkedMoneyValue ? numeroALetras(Number(linkedMoneyValue)) : "";
+      return (
+        <div className="space-y-1">
+          <textarea
+            value={currentValue}
+            onChange={(e) => handleFieldChange(field, e.target.value)}
+            className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all min-h-[110px] resize-y"
+            placeholder="Se genera automaticamente; puedes ajustar el texto"
+            rows={3}
+          />
+          {autoLetterValue && currentValue === autoLetterValue && (
+            <p className="text-[11px] text-emerald-700">Auto-generado desde el campo numerico relacionado</p>
+          )}
+          {suggestion && (
+            <p className="text-[11px] text-soft leading-tight">
+              Sugerencia por genero: <span className="font-medium text-ink">{suggestion}</span>
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    const suggestion = getMarkedConcordanceSuggestion(field, fields, values);
+    return (
+      <div className="space-y-1">
+        <input
+          type="text"
+          value={currentValue}
+          onChange={(e) => handleFieldChange(field, e.target.value)}
+          className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
+          placeholder={isProtocolAutofill && !currentValue ? "Se autollenará con tu nombre" : getMarkedFieldPlaceholder(field, kind)}
+        />
+        {suggestion && (
+          <p className="text-[11px] text-soft leading-tight">
+            Sugerencia por genero: <span className="font-medium text-ink">{suggestion}</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  function renderField(field: MarkedTemplateField, extraClassName = "") {
+    const kind = getMarkedFieldKind(field);
+    const relatedGender = getMarkedRelatedGender(field, fields, values);
+    const note = getMarkedBuyerIndex(field) === 1 && MARKED_BUYER_NOTE_KEYS.has(markedFieldKey(field))
+      ? "Campo sin índice en plantilla; asociado visualmente a Comprador 1"
+      : "";
+    const rawMarkerPreview = field.raw_markers?.[0] ?? "";
+
+    return (
+      <label key={field.key} className={`grid gap-1.5 ${extraClassName}`}>
+        <span className="text-sm font-medium text-muted flex items-center gap-1.5 flex-wrap">
+          <span>{field.label}</span>
+          {kind === "stateCivil" && relatedGender && (
+            <span className="text-[10px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full leading-none">
+              género: {getMarkedGenderLabel(relatedGender)}
+            </span>
+          )}
+        </span>
+        {renderControl(field)}
+        {note && <p className="text-[11px] text-soft leading-tight">{note}</p>}
+        {rawMarkerPreview && isMarkedAmbiguousField(field) && (
+          <span className="inline-flex w-fit rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-mono text-amber-800">
+            {rawMarkerPreview.startsWith("{{") || rawMarkerPreview.startsWith("[[") || rawMarkerPreview.startsWith("(")
+              ? rawMarkerPreview
+              : `{{${rawMarkerPreview.toUpperCase()}}}`}
+          </span>
+        )}
+        <span className="text-[11px] text-soft leading-tight">
+          {field.key} · {field.occurrences} ocurrencia{field.occurrences !== 1 ? "s" : ""}
+        </span>
+      </label>
+    );
+  }
+
+  const basicFields = sortMarkedFieldsByOrder(
+    visibleFields.filter((field) => getMarkedSectionId(field) === "basic"),
+    MARKED_BASIC_ORDER,
+  );
+  const valueFields = sortMarkedFieldsByOrder(
+    visibleFields.filter((field) => getMarkedSectionId(field) === "values"),
+    MARKED_VALUE_ORDER,
+  );
+  const decisionFields = sortMarkedFieldsByOrder(
+    visibleFields.filter((field) => getMarkedSectionId(field) === "decisions"),
+    MARKED_DECISION_ORDER,
+  );
+  const protocolFields = sortMarkedFieldsByOrder(
+    visibleFields.filter((field) => getMarkedSectionId(field) === "protocol"),
+    MARKED_PROTOCOL_ORDER,
+  );
+  const liquidationFields = sortMarkedFieldsByOrder(
+    visibleFields.filter((field) => getMarkedSectionId(field) === "liquidation"),
+    MARKED_LIQUIDATION_ORDER,
+  );
+  const decisionSelectFields = decisionFields.filter((field) => MARKED_DECISION_SELECT_KEYS.has(markedFieldKey(field)));
+  const decisionTextFields = decisionFields.filter((field) => MARKED_DECISION_TEXT_KEYS.has(markedFieldKey(field)));
+  const otherFields = [...visibleFields]
+    .filter((field) => getMarkedSectionId(field) === "others")
+    .sort((a, b) => (fieldIndexMap.get(a.key) ?? 0) - (fieldIndexMap.get(b.key) ?? 0));
+  const buyerGroups = ([1, 2, 3] as const).filter((buyerIndex) =>
+    getMarkedBuyerFields(fields, buyerIndex).length > 0
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Datos básicos e inmueble</span>
+          <span className="text-xs text-soft">{basicFields.length} campo{basicFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {basicFields.map((field) => (
+            <div key={field.key} className={field.key === "linderos" ? "sm:col-span-2" : ""}>
+              {renderField(field, field.key === "linderos" ? "sm:col-span-2" : "")}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {buyerGroups.map((buyerIndex) => {
+          const buyerFields = sortMarkedFieldsByOrder(getMarkedBuyerFields(fields, buyerIndex), [
+            buyerIndex === 1 ? "nombre_comprador_1" : buyerIndex === 2 ? "nombre_comprador_2" : "nombre_comprador_3",
+            buyerIndex === 1 ? "tipo_documento_comprador_1" : buyerIndex === 2 ? "tipo_documento_comprador_2" : "tipo_documento_comprador_3",
+            buyerIndex === 1 ? "numero_documento_comprador_1" : buyerIndex === 2 ? "numero_documento_comprador_2" : "numero_documento_comprador_3",
+            buyerIndex === 1 ? "comprador_es_hombre_o_mujer" : buyerIndex === 2 ? "comprador_2_es_hombre_o_mujer" : "comprador_3_es_hombre_o_mujer",
+            buyerIndex === 1 ? "nacionalidad_comprador" : buyerIndex === 2 ? "nacionalidad_comprador_2" : "nacionalidad_comprador_3",
+            buyerIndex === 1 ? "municipio_domicilio_comprador" : buyerIndex === 2 ? "municipio_domicilio_comprador_2" : "municipio_domicilio_comprador_3",
+            buyerIndex === 1 ? "seleccione_si_comprador_esta_de_transito" : buyerIndex === 2 ? "seleccione_si_comprador_2_esta_de_transito" : "seleccione_si_comprador_3_esta_de_transito",
+            buyerIndex === 1 ? "estado_civil_comprador" : buyerIndex === 2 ? "estado_civil_comprador_2" : "estado_civil_comprador_3",
+            buyerIndex === 1 ? "direccion_comprador_1" : buyerIndex === 2 ? "direccion_comprador_2" : "direccion_comprador_3",
+            buyerIndex === 1 ? "celular_comprador_1" : buyerIndex === 2 ? "celular_comprador_2" : "celular_comprador_3",
+            buyerIndex === 1 ? "email_comprador_1" : buyerIndex === 2 ? "email_comprador_2" : "email_comprador_3",
+            buyerIndex === 1 ? "profesion_u_oficio" : buyerIndex === 2 ? "profesion_u_oficio_comprador_2" : "profesion_u_oficio_comprador_3",
+            buyerIndex === 1 ? "actividad_economica_comprador" : buyerIndex === 2 ? "actividad_economica_comprador_2" : "actividad_economica_comprador_3",
+          ]);
+          return (
+            <div key={buyerIndex} className="ep-card rounded-2xl overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-ink">{MARKED_BUYER_LABELS[buyerIndex]}</span>
+                <span className="text-xs text-soft">{buyerFields.length} campo{buyerFields.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                {buyerFields.map((field) => (
+                  <div key={field.key} className={field.key.includes("direccion") || field.key.includes("municipio_domicilio") || field.key.includes("nacionalidad") || field.key.includes("estado_civil") ? "sm:col-span-2 lg:col-span-2" : ""}>
+                    {renderField(field, field.key.includes("direccion") || field.key.includes("municipio_domicilio") || field.key.includes("nacionalidad") || field.key.includes("estado_civil") ? "sm:col-span-2 lg:col-span-2" : "")}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Valores y forma de pago</span>
+          <span className="text-xs text-soft">{valueFields.length} campo{valueFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {valueFields.slice(0, 2).map((field) => (
+              <div key={field.key} className={field.key.endsWith("_letras") ? "sm:col-span-2" : ""}>
+                {renderField(field, field.key.endsWith("_letras") ? "sm:col-span-2" : "")}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+            {valueFields.slice(2, 5).map((field) => (
+              <div key={field.key} className={field.key === "origen_cuota_inicial" ? "lg:col-span-1" : ""}>
+                {renderField(field)}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {valueFields.slice(5).map((field) => (
+              <div key={field.key}>
+                {renderField(field)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Decisiones notariales</span>
+          <span className="text-xs text-soft">{decisionFields.length} campo{decisionFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {decisionSelectFields.map((field) => (
+              <div key={field.key}>
+                {renderField(field)}
+              </div>
+            ))}
+          </div>
+
+          {decisionTextFields.length > 0 && (
+            <div className="rounded-xl border border-line/70 bg-surface/40 p-4 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-ink">Datos del cónyuge/compañero si aplica</p>
+                <p className="text-xs text-soft mt-0.5">Se conservan dentro de la misma sección, pero como campos de texto.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {decisionTextFields.map((field) => (
+                  <div key={field.key} className="sm:col-span-2">
+                    {renderField(field, "sm:col-span-2")}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Protocolo y otorgamiento</span>
+          <span className="text-xs text-soft">{protocolFields.length} campo{protocolFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {protocolFields.map((field) => (
+            <div key={field.key} className={field.key === "consecutivo_hojas_papel_notarial" ? "sm:col-span-2" : ""}>
+              {renderField(field, field.key === "consecutivo_hojas_papel_notarial" ? "sm:col-span-2" : "")}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Liquidación</span>
+          <span className="text-xs text-soft">{liquidationFields.length} campo{liquidationFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {liquidationFields.map((field) => (
+            <div key={field.key}>
+              {renderField(field)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Otros</span>
+          <span className="text-xs text-soft">{otherFields.length} campo{otherFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5">
+          {otherFields.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-line-strong/70 bg-panel-soft/40 px-4 py-3 text-sm text-soft">
+              Sin campos sin clasificar para esta plantilla.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {otherFields.map((field) => (
+                <div key={field.key}>
+                  {renderField(field)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="ep-card rounded-2xl overflow-hidden border border-amber-200">
+        <div className="px-5 py-3.5 border-b border-amber-200/80 bg-amber-50/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-amber-900">Campos ambiguos por corregir</span>
+          <span className="text-xs text-amber-700">{ambiguousFields.length} campo{ambiguousFields.length !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            Campo demasiado genérico. Corrige la plantilla o asígnalo manualmente antes de generar.
+          </p>
+          {ambiguousFields.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-line-strong/70 bg-panel-soft/40 px-4 py-3 text-sm text-soft">
+              No hay campos ambiguos por corregir en esta plantilla.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {ambiguousFields.map((field) => (
+                <div key={field.key} className="sm:col-span-2">
+                  {renderField(field, "sm:col-span-2")}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="sticky bottom-4 z-10 mt-6 rounded-2xl border border-line/70 bg-white/95 backdrop-blur p-4 shadow-lg space-y-3">
+        {showAmbiguousWarning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Hay campos ambiguos. Puedes generar, pero se recomienda corregir la plantilla.
+          </div>
+        )}
+        {showPendingWarning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Hay campos sin diligenciar; se conservarán sus marcadores en el documento.
+          </div>
+        )}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            onClick={onGenerate}
+            disabled={isGenerating}
+            className={[
+              "w-full h-12 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+              !isGenerating
+                ? "bg-primary text-white hover:opacity-90"
+                : "bg-panel-soft text-soft cursor-not-allowed",
+            ].join(" ")}
+          >
+            {isGenerating ? (
+              <><Loader2 size={16} className="animate-spin" /> Generando documento</>
+            ) : (
+              <><ExternalLink size={16} /> Generar documento</>
+            )}
+          </button>
+          <button
+            onClick={onContinueToSummary}
+            className="w-full h-12 rounded-2xl border border-line-strong text-sm font-semibold text-ink hover:border-primary hover:text-primary transition-all"
+          >
+            Continuar a generar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PersonaField — módulo-level para evitar desmonte/remonte en cada render ──
 
 type PersonaFieldProps = {
@@ -367,7 +1811,7 @@ function PersonaField({ label, field, value, as = "input", options, onChange }: 
           onChange={(e) => onChange(field, e.target.value)}
           className={baseClass + " ep-select"}
         >
-          <option value="">seleccionar</option>
+          <option value="">Selecciona...</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -451,8 +1895,8 @@ function PersonaCard({
         </button>
       </div>
 
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="sm:col-span-2 lg:col-span-3">
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+        <div className="sm:col-span-2 lg:col-span-2">
           <PersonaField
             label="Nombre completo"
             field="nombre_completo"
@@ -612,7 +2056,7 @@ function InmuebleCard({
               onChange={(e) => onChange("tipo", e.target.value)}
               className={cls(inmueble.tipo) + " ep-select"}
             >
-              <option value="">Seleccionar...</option>
+              <option value="">Selecciona...</option>
               {TIPO_INMUEBLE_OPTIONS.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -665,7 +2109,7 @@ function InmuebleCard({
               }}
               className={cls(inmueble.departamento) + " ep-select"}
             >
-              <option value="">Seleccionar...</option>
+              <option value="">Selecciona...</option>
               {DEPARTAMENTOS_COLOMBIA.map(d => (
                 <option key={d.codigo} value={d.nombre}>{d.nombre}</option>
               ))}
@@ -679,7 +2123,7 @@ function InmuebleCard({
               className={cls(inmueble.municipio) + " ep-select"}
               disabled={!inmueble.departamento}
             >
-              <option value="">Seleccionar...</option>
+              <option value="">Selecciona...</option>
               {getMunicipiosByDepartamento(inmueble.departamento ?? "").map(m => (
                 <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
               ))}
@@ -692,7 +2136,7 @@ function InmuebleCard({
               onChange={(e) => onChange("propiedad_horizontal", e.target.value)}
               className={cls(inmueble.propiedad_horizontal) + " ep-select"}
             >
-              <option value="">Seleccionar...</option>
+              <option value="">Selecciona...</option>
               <option value="SI">Sí</option>
               <option value="NO">No</option>
             </select>
@@ -836,7 +2280,7 @@ function NotariaCard({
             }}
             className="ep-select ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
           >
-            <option value="">Seleccionar...</option>
+            <option value="">Selecciona...</option>
             {DEPARTAMENTOS_COLOMBIA.map(d => (
               <option key={d.codigo} value={d.nombre}>{d.nombre}</option>
             ))}
@@ -850,7 +2294,7 @@ function NotariaCard({
             className="ep-select ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
             disabled={!depNotaria}
           >
-            <option value="">Seleccionar...</option>
+            <option value="">Selecciona...</option>
             {getMunicipiosByDepartamento(depNotaria).map(m => (
               <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
             ))}
@@ -927,8 +2371,8 @@ function ValorRow({
           inputMode="numeric"
           value={formatCOP(val.monto_numerico)}
           onChange={(e) => onChangeMonto(idx, String(parseCOP(e.target.value)))}
-          className="ep-input w-full rounded-xl px-3 py-2 text-sm transition-all"
-          placeholder="0"
+          className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
+          placeholder="Ej. 250.000.000"
         />
       </label>
       {letras && (
@@ -1172,8 +2616,10 @@ export function NuevaMinutaWorkspace() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDetectingMarkedTemplate, setIsDetectingMarkedTemplate] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [analisisResult, setAnalisisResult] = useState<MinutaAnalisisResult | null>(null);
+  const [markedTemplateResult, setMarkedTemplateResult] = useState<MarkedTemplateDetectResult | null>(null);
   const [personas, setPersonas] = useState<MinutaPersona[]>([]);
   const [inmuebleEdit, setInmuebleEdit] = useState<MinutaInmueble>(EMPTY_INMUEBLE);
   const [notariaEdit, setNotariaEdit] = useState<NotariaEdit>(EMPTY_NOTARIA);
@@ -1182,6 +2628,7 @@ export function NuevaMinutaWorkspace() {
     vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null,
   });
   const [adquisicionEdit, setAdquisicionEdit] = useState<MinutaAdquisicion>(EMPTY_ADQUISICION);
+  const [markedFieldValues, setMarkedFieldValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
   const [aiProgress, setAiProgress] = useState(0);
@@ -1220,16 +2667,39 @@ export function NuevaMinutaWorkspace() {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f && f.name.endsWith(".docx")) { setFile(f); setError(null); }
-    else setError("Solo se aceptan archivos .docx");
+    if (f && f.name.endsWith(".docx")) {
+      setFile(f);
+      setAnalisisResult(null);
+      setMarkedTemplateResult(null);
+      setMarkedFieldValues({});
+      setPersonas([]);
+      setInmuebleEdit(EMPTY_INMUEBLE);
+      setNotariaEdit(EMPTY_NOTARIA);
+      setValoresEdit([]);
+      setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
+      setAdquisicionEdit(EMPTY_ADQUISICION);
+      setError(null);
+    } else setError("Solo se aceptan archivos .docx");
   }
   function handleFileSelected(f: File) {
     if (!f.name.endsWith(".docx")) { setError("Solo se aceptan archivos .docx"); return; }
-    setFile(f); setError(null);
+    setFile(f);
+    setAnalisisResult(null);
+    setMarkedTemplateResult(null);
+    setMarkedFieldValues({});
+    setPersonas([]);
+    setInmuebleEdit(EMPTY_INMUEBLE);
+    setNotariaEdit(EMPTY_NOTARIA);
+    setValoresEdit([]);
+    setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
+    setAdquisicionEdit(EMPTY_ADQUISICION);
+    setError(null);
   }
   function clearFile() {
     setFile(null);
     setAnalisisResult(null);
+    setMarkedTemplateResult(null);
+    setMarkedFieldValues({});
     setPersonas([]);
     setInmuebleEdit(EMPTY_INMUEBLE);
     setNotariaEdit(EMPTY_NOTARIA);
@@ -1239,10 +2709,40 @@ export function NuevaMinutaWorkspace() {
     setError(null);
   }
 
+  async function handleDetectMarkedTemplate() {
+    if (!file) return;
+    setError(null);
+    setIsDetectingMarkedTemplate(true);
+    try {
+      const result = await detectMarkedTemplate(file);
+      setMarkedTemplateResult(result);
+      setAnalisisResult(null);
+      setPersonas([]);
+      setInmuebleEdit(EMPTY_INMUEBLE);
+      setNotariaEdit(EMPTY_NOTARIA);
+      setValoresEdit([]);
+      setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
+      setAdquisicionEdit(EMPTY_ADQUISICION);
+      setMarkedFieldValues(
+        Object.fromEntries(result.fields.map((field) => [field.key, ""]))
+      );
+      setStep(1);
+    } catch (err) {
+      const message = err instanceof Error && err.message && err.message !== "Failed to fetch"
+        ? err.message
+        : "No fue posible detectar los campos marcados. Verifica la conexion y la sesion.";
+      setError(message);
+    } finally {
+      setIsDetectingMarkedTemplate(false);
+    }
+  }
+
   async function handleAnalizar() {
     if (!file) return;
     setError(null);
     setIsAnalyzing(true);
+    setMarkedTemplateResult(null);
+    setMarkedFieldValues({});
     setAiModalTitle('Analizando documento');
     setAiModalSubtitle('Esto puede tomar hasta 30 segundos');
     setAiSteps([
@@ -1268,6 +2768,8 @@ export function NuevaMinutaWorkspace() {
       await new Promise(r => setTimeout(r, 400));
       setAiModalOpen(false);
       setAnalisisResult(result);
+      setMarkedTemplateResult(null);
+      setMarkedFieldValues({});
       setPersonas((result.datos.personas ?? []).map((p) => ({ ...p })));
       const inmuebleRaw = (result.datos.inmueble ?? {}) as Partial<MinutaInmueble>;
       const TIPOS_INMUEBLE_MAP: Record<string, string> = {
@@ -1353,8 +2855,70 @@ export function NuevaMinutaWorkspace() {
     setAdquisicionEdit((prev) => ({ ...prev, [field]: value || null }));
   }
 
+  function updateMarkedFieldValue(key: string, value: string) {
+    setMarkedFieldValues((prev) => ({ ...prev, [key]: value }));
+  }
+
   async function handleGenerar() {
-    if (!file || !analisisResult) return;
+    if (!file) return;
+
+    if (markedTemplateResult && !analisisResult) {
+      setError(null);
+      setIsGenerating(true);
+      setAiModalTitle("Generando documento sin IA");
+      setAiModalSubtitle("Aplicando reemplazos determinísticos");
+      setAiSteps([
+        {
+          id: "prepare",
+          label: "Documento recibido",
+          description: `${file.name} · ${(file.size / 1024).toFixed(0)} KB`,
+          status: "done",
+        },
+        {
+          id: "replace",
+          label: "Aplicando reemplazos sin IA",
+          description: "Reemplazando {{CAMPO}} y variantes detectadas sin IA",
+          status: "active",
+        },
+        {
+          id: "save",
+          label: "Guardando documento",
+          description: "Subiendo el DOCX resultante a storage",
+          status: "pending",
+        },
+        {
+          id: "open",
+          label: "Abriendo editor",
+          description: "Redirigiendo a OnlyOffice",
+          status: "pending",
+        },
+      ]);
+      setAiProgress(20);
+      setAiModalOpen(true);
+      try {
+        await new Promise((r) => setTimeout(r, 450));
+        setAiProgress(45);
+        const result = await generateMarkedTemplate(file, markedFieldValues, markedTemplateResult.fields);
+        updateStep("replace", "done", "Reemplazos aplicados");
+        updateStep("save", "active");
+        setAiProgress(80);
+        await new Promise((r) => setTimeout(r, 400));
+        updateStep("save", "done", "Documento guardado correctamente");
+        updateStep("open", "active");
+        setAiProgress(95);
+        await new Promise((r) => setTimeout(r, 250));
+        setAiProgress(100);
+        setAiModalOpen(false);
+        router.push(result.onlyoffice_path);
+      } catch (err) {
+        setAiModalOpen(false);
+        setError(err instanceof Error ? err.message : "Error al generar la minuta.");
+        setIsGenerating(false);
+      }
+      return;
+    }
+
+    if (!analisisResult) return;
     setError(null);
     setIsGenerating(true);
     setAiModalTitle('Generando minuta');
@@ -1407,10 +2971,15 @@ export function NuevaMinutaWorkspace() {
     }
   }
 
-  const canAnalyze = !!file && !isAnalyzing;
-  const canGenerate = personas.length > 0 && !isGenerating;
-
-  console.log("TOUR VISIBLE:", tourVisible);
+  const canAnalyze = !!file && !isAnalyzing && !isDetectingMarkedTemplate;
+  const canDetectMarkedTemplate = !!file && !isDetectingMarkedTemplate && !isAnalyzing;
+  const isMarkedTemplateMode = !!markedTemplateResult && !analisisResult;
+  const markedTemplateFields = markedTemplateResult?.fields ?? [];
+  const markedPendingCount = markedTemplateFields.filter((field) => !String(markedFieldValues[field.key] ?? "").trim()).length;
+  const markedAmbiguousCount = markedTemplateFields.filter((field) => isMarkedAmbiguousField(field)).length;
+  const canGenerate = isMarkedTemplateMode
+    ? !!file && !!markedTemplateResult && !isGenerating
+    : !!analisisResult && personas.length > 0 && !isGenerating;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -1421,7 +2990,7 @@ export function NuevaMinutaWorkspace() {
         </p>
       </div>
 
-      <StepBar current={step} />
+      <StepBar current={step} labels={isMarkedTemplateMode ? MARKED_STEPS : IA_STEPS} />
 
       {error && (
         <div className="ep-kpi-critical rounded-xl px-4 py-3 flex items-start gap-3 mb-6">
@@ -1444,7 +3013,8 @@ export function NuevaMinutaWorkspace() {
             />
           </div>
 
-          {!analisisResult && (
+          {file && (
+            <div className="grid gap-3 sm:grid-cols-2">
             <button
               id="tour-btn-analizar"
               onClick={handleAnalizar} disabled={!canAnalyze}
@@ -1461,9 +3031,27 @@ export function NuevaMinutaWorkspace() {
                 <><FileText size={16} /> Analizar con IA</>
               )}
             </button>
+            <button
+              onClick={handleDetectMarkedTemplate}
+              disabled={!canDetectMarkedTemplate}
+              className={[
+                "w-full h-12 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 transition-all",
+                canDetectMarkedTemplate
+                  ? "bg-emerald-600 text-white hover:opacity-90"
+                  : "bg-panel-soft text-soft cursor-not-allowed",
+              ].join(" ")}
+            >
+              {isDetectingMarkedTemplate ? (
+                <><Loader2 size={16} className="animate-spin" /> Detectando campos</>
+              ) : (
+                <><FileText size={16} /> Detectar campos marcados</>
+              )}
+            </button>
+          </div>
           )}
 
           {analisisResult && <AnalysisSummary result={analisisResult} />}
+          {markedTemplateResult && <MarkedTemplateSummary result={markedTemplateResult} />}
 
           {analisisResult && (
             <button
@@ -1473,6 +3061,14 @@ export function NuevaMinutaWorkspace() {
               Revisar personas detectadas <ChevronRight size={16} />
             </button>
           )}
+          {markedTemplateResult && (
+            <button
+              onClick={() => setStep(1)}
+              className="w-full h-12 rounded-2xl bg-emerald-600 text-white font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all"
+            >
+              Diligenciar campos detectados <ChevronRight size={16} />
+            </button>
+          )}
         </div>
       )}
 
@@ -1480,14 +3076,34 @@ export function NuevaMinutaWorkspace() {
       {step === 1 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted">
+            <p className={isMarkedTemplateMode ? "hidden" : "text-sm text-muted"}>
               {personas.length} persona{personas.length !== 1 ? "s" : ""} ·
               Campos en amarillo requieren completarse.
             </p>
+            {isMarkedTemplateMode && markedTemplateResult && (
+              <p className="text-sm text-muted">
+                {markedTemplateResult.total_fields} campos detectados · Plantilla marcada sin IA.
+              </p>
+            )}
             <button onClick={() => setStep(0)} className="text-xs text-soft hover:text-primary underline underline-offset-2">
               Volver
             </button>
           </div>
+
+          {isMarkedTemplateMode && markedTemplateResult && (
+            <MarkedFieldsForm
+              fields={markedTemplateResult.fields}
+              values={markedFieldValues}
+              onChange={updateMarkedFieldValue}
+              onGenerate={handleGenerar}
+              onContinueToSummary={() => setStep(2)}
+              isGenerating={isGenerating}
+              showPendingWarning={markedPendingCount > 0}
+              showAmbiguousWarning={markedAmbiguousCount > 0}
+            />
+          )}
+
+          <div className={analisisResult ? "space-y-4" : "hidden"}>
 
           {/* ── Banner de validación notarial ── */}
           {analisisResult?.validacion && !analisisResult.validacion.error && (
@@ -1588,6 +3204,8 @@ export function NuevaMinutaWorkspace() {
           >
             Continuar a generar <ChevronRight size={16} />
           </button>
+
+          </div>
         </div>
       )}
 
@@ -1603,6 +3221,11 @@ export function NuevaMinutaWorkspace() {
 
           <div className="ep-card rounded-2xl p-5 space-y-4">
             <h3 className="font-semibold text-sm text-ink">Resumen de la operacion</h3>
+            {isMarkedTemplateMode && markedTemplateResult && (
+              <p className="text-sm text-muted">
+                {markedTemplateResult.total_fields} campos detectados · plantilla marcada sin IA.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
                 ["Archivo base", file?.name ?? "-"],
@@ -1666,6 +3289,8 @@ export function NuevaMinutaWorkspace() {
           >
             {isGenerating ? (
               <><Loader2 size={18} className="animate-spin" /> Generando minuta</>
+            ) : isMarkedTemplateMode ? (
+              <><ExternalLink size={18} /> Generar documento</>
             ) : (
               <><ExternalLink size={18} /> Generar y abrir en editor</>
             )}
@@ -1704,3 +3329,4 @@ export function NuevaMinutaWorkspace() {
     </div>
   );
 }
+
