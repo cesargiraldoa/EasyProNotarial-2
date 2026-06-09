@@ -3,14 +3,23 @@ from __future__ import annotations
 import base64
 import mimetypes
 import os
+import re
 import shutil
 import tempfile
 import logging
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from fastapi import HTTPException, status
+
 from app.core.config import BASE_DIR
+
+try:
+    from storage3.exceptions import StorageApiError
+except ImportError:  # pragma: no cover - fallback for environments without storage3
+    StorageApiError = Exception
 
 STORAGE_ROOT = BASE_DIR / "storage"
 TEMPLATE_STORAGE = STORAGE_ROOT / "templates"
@@ -55,6 +64,13 @@ def _upload_to_supabase(bucket: str, path: str, content: bytes, content_type: st
                 "upsert": "true",
             },
         )
+    except StorageApiError as exc:
+        logger.exception("Supabase Storage rechazó la subida", extra={"bucket": bucket, "storage_path": path})
+        detail = (
+            f"Supabase Storage rechazó la subida en {bucket}/{path}: "
+            f"{exc.message} (code={exc.code}, status={exc.status})"
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
     except Exception:
         logger.exception("Error subiendo archivo a Supabase Storage", extra={"bucket": bucket, "storage_path": path})
         raise
@@ -73,13 +89,14 @@ def _download_from_supabase(bucket: str, path: str) -> bytes:
 
 
 def build_case_storage_key(case_id: int, category: str, version_number: int, filename: str) -> str:
-    safe_name = sanitize_filename(filename)
-    return f"cases/case-{case_id}/{sanitize_filename(category)}/v{version_number}/{safe_name}"
+    safe_name = sanitize_storage_filename(filename)
+    safe_category = sanitize_storage_filename(category)
+    return f"cases/case-{case_id}/{safe_category}/v{version_number}/{safe_name}"
 
 
 def save_case_file(content: bytes, case_id: int, category: str, version_number: int, filename: str, content_type: str) -> tuple[str, str]:
     ensure_storage_dirs()
-    safe_name = sanitize_filename(filename)
+    safe_name = sanitize_storage_filename(filename)
     storage_key = build_case_storage_key(case_id, category, version_number, safe_name)
     if _has_supabase_credentials():
         _upload_to_supabase(SUPABASE_CASE_BUCKET, storage_key, content, content_type)
@@ -129,6 +146,38 @@ def create_signed_storage_url(storage_path: str | Path, expires_in: int = 300) -
     supabase = get_supabase_client()
     result = supabase.storage.from_(bucket).create_signed_url(key, expires_in)
     return result.get("signedURL") or result.get("signedUrl")
+
+
+def sanitize_storage_filename(filename: str) -> str:
+    raw = (filename or "").strip()
+    if not raw:
+        return "archivo.docx"
+
+    path = Path(raw)
+    suffix = path.suffix.lower()
+    if suffix and not re.fullmatch(r"\.[a-z0-9]{1,10}", suffix):
+        suffix = ""
+
+    stem = path.name[: -len(suffix)] if suffix else path.name
+    normalized = unicodedata.normalize("NFKD", stem)
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    ascii_name = re.sub(r"[^a-z0-9]+", "_", ascii_name)
+    ascii_name = re.sub(r"_+", "_", ascii_name).strip("_")
+    if not ascii_name:
+        ascii_name = "archivo"
+
+    max_length = 120
+    available = max_length - len(suffix)
+    if available < 1:
+        available = max_length
+        suffix = ""
+    if len(ascii_name) > available:
+        ascii_name = ascii_name[:available].rstrip("_")
+    if not ascii_name:
+        ascii_name = "archivo"
+    return f"{ascii_name}{suffix}"
+
+
 def sanitize_filename(filename: str) -> str:
     keep = [char if char.isalnum() or char in {"-", "_", "."} else "_" for char in filename.strip()]
     sanitized = "".join(keep).strip("._") or "archivo"
@@ -139,7 +188,7 @@ def copy_template_file(source_path: str | Path, slug: str) -> tuple[str, str]:
     ensure_storage_dirs()
     source = Path(source_path)
     extension = source.suffix.lower() or ".docx"
-    filename = sanitize_filename(f"{slug}{extension}")
+    filename = sanitize_storage_filename(f"{slug}{extension}")
     destination = TEMPLATE_STORAGE / filename
     shutil.copy2(source, destination)
     return filename, str(destination)
@@ -156,9 +205,9 @@ def save_base64_file(content_base64: str, destination: str | Path) -> Path:
 
 def save_template_upload(filename: str, content_base64: str, slug: str) -> tuple[str, str]:
     ensure_storage_dirs()
-    safe_name = sanitize_filename(filename)
+    safe_name = sanitize_storage_filename(filename)
     extension = Path(safe_name).suffix.lower() or ".docx"
-    final_name = sanitize_filename(f"{slug}{extension}")
+    final_name = sanitize_storage_filename(f"{slug}{extension}")
     content = base64.b64decode(content_base64)
     if _has_supabase_credentials():
         bucket = SUPABASE_TEMPLATE_BUCKET
@@ -222,7 +271,7 @@ def resolve_template_source_path(storage_path: str | Path, temp_dir: str | Path 
 def next_case_file_path(case_id: int, category: str, version_number: int, file_format: str, filename: str | None = None) -> Path:
     ensure_storage_dirs()
     extension = f".{file_format.lower().lstrip('.')}"
-    safe_name = sanitize_filename(filename or f"{category}_v{version_number}{extension}")
+    safe_name = sanitize_storage_filename(filename or f"{category}_v{version_number}{extension}")
     if not safe_name.lower().endswith(extension):
         safe_name = f"{safe_name}{extension}"
     directory = CASE_STORAGE / f"case-{case_id}" / category

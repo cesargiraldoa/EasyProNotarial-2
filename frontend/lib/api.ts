@@ -1,7 +1,6 @@
 import { cleanNullableText, cleanText, repairText, sanitizeTextDeep } from "@/lib/text";
 import { clearToken, getToken } from "@/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
+import { buildApiUrl } from "@/lib/config";
 
 export type LoginPayload = {
   email: string;
@@ -427,7 +426,7 @@ export async function apiFetch<T>(path: string, init: JsonRequestInit = {}): Pro
   }
   const body = init.body !== undefined ? JSON.stringify(init.body) : undefined;
   try {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(buildApiUrl(path), {
       ...init,
       headers,
       body: body as BodyInit | null | undefined,
@@ -510,7 +509,7 @@ function normalizeCasePayload(payload: CasePayload) {
 
 export async function login(payload: LoginPayload) {
   try {
-    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+    const response = await fetch(buildApiUrl("/api/v1/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

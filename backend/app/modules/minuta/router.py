@@ -31,7 +31,6 @@ from app.services.storage import (
     _upload_to_supabase,
     download_storage_bytes,
     parse_supabase_storage_path,
-    sanitize_filename,
 )
 
 router = APIRouter(prefix="/minuta", tags=["minuta"])
@@ -306,7 +305,8 @@ async def generar_minuta(
         notary_id = current_user.default_notary_id or 0
         file_uuid = str(_uuid.uuid4())
         storage_filename = f"{file_uuid}_minuta.docx"
-        display_name = f"minuta_generada_{sanitize_filename(Path(archivo.filename).stem)}.docx"
+        original_stem = Path(archivo.filename).stem if archivo.filename else "minuta"
+        display_name = f"minuta_generada_{original_stem}.docx"
         storage_key = f"minutas/notary_{notary_id}/{storage_filename}"
         docx_media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 

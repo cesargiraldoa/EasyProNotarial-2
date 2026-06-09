@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,8 @@ import {
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
   type MinutaAdquisicion, type MarkedTemplateDetectResult, type MarkedTemplateField,
 } from "@/lib/minuta";
-import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, ESTADOS_CIVILES_GENERALES, PAISES, getEstadosCiviles, getNacionalidadesPorGenero } from "@/lib/listas-notariales";
+import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, ESTADOS_CIVILES_GENERALES, PAISES, getEstadosCiviles, getNacionalidadesPorGenero, isGenderField } from "@/lib/listas-notariales";
+import { isPlaceholderDropdownValue } from "@/lib/dropdown-options";
 import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
 import { getCurrentUser } from "@/lib/api";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
@@ -499,12 +500,19 @@ function isMarkedBuyerSharedField(field: MarkedTemplateField): boolean {
 
 function getMarkedSectionId(field: MarkedTemplateField): MarkedSectionId {
   if (isMarkedPartnerDescriptorField(field)) return "decisions";
+  if (isMarkedGenderField(field)) {
+    const genderRoleKey = getMarkedGenderFieldRoleKey(field.key);
+    if (genderRoleKey?.startsWith("comprador")) return "buyers";
+  }
   if (matchesMarkedKey(field, MARKED_BASIC_ORDER)) return "basic";
   if (getMarkedBuyerIndex(field) != null || isMarkedBuyerSharedField(field)) return "buyers";
   if (matchesMarkedKey(field, MARKED_VALUE_ORDER)) return "values";
   if (matchesMarkedKey(field, MARKED_DECISION_ORDER)) return "decisions";
   if (matchesMarkedKey(field, MARKED_PROTOCOL_ORDER)) return "protocol";
   if (matchesMarkedKey(field, MARKED_LIQUIDATION_ORDER)) return "liquidation";
+  if (["basic", "buyers", "values", "decisions", "protocol", "liquidation", "others"].includes(field.section)) {
+    return field.section as MarkedSectionId;
+  }
   return "others";
 }
 
@@ -565,9 +573,8 @@ type MarkedFieldKind =
   | "decision";
 
 const MARKED_GENDER_OPTIONS = [
-  { value: "Hombre", label: "Hombre" },
-  { value: "Mujer", label: "Mujer" },
-  { value: "Persona jurídica", label: "Persona jurídica" },
+  { value: "HOMBRE", label: "HOMBRE" },
+  { value: "MUJER", label: "MUJER" },
 ];
 
 const MARKED_GENERAL_ESTADOS_CIVILES = ESTADOS_CIVILES_GENERALES;
@@ -595,16 +602,7 @@ function isMarkedStateCivilField(field: MarkedTemplateField): boolean {
 }
 
 function isMarkedGenderField(field: MarkedTemplateField): boolean {
-  return isMarkedField(field, [
-    "comprador_es_hombre_o_mujer",
-    "comprador_1_es_hombre_o_mujer",
-    "comprador_1_es_hombre_0_mujer",
-    "comprador_2_es_hombre_o_mujer",
-    "genero_comprador_1",
-    "genero_comprador_2",
-    "genero",
-    "género",
-  ]);
+  return isGenderField(field.key);
 }
 
 function isMarkedDateField(field: MarkedTemplateField): boolean {
@@ -662,6 +660,147 @@ function isMarkedPartnerDescriptorField(field: MarkedTemplateField): boolean {
   ].some((keyword) => blob.includes(keyword));
 }
 
+const MARKED_GENDER_DEPENDENT_PREFIXES = [
+  "nacionalidad",
+  "estado_civil",
+] as const;
+
+function getMarkedGenderDependentRoleKey(fieldKey: string): string | null {
+  const key = normalizeMarkedKey(fieldKey);
+  if (!key) return null;
+
+  for (const prefix of MARKED_GENDER_DEPENDENT_PREFIXES) {
+    if (key.startsWith(`${prefix}_`)) {
+      return key.slice(prefix.length + 1);
+    }
+  }
+
+  return null;
+}
+
+function getMarkedGenderFieldRoleKey(fieldKey: string): string | null {
+  const key = normalizeMarkedKey(fieldKey);
+  if (!key) return null;
+
+  const matcher = key.match(/^(?:genero|sexo)_(.+)$/)
+    ?? key.match(/^(.+)_(?:genero|sexo)$/)
+    ?? key.match(/^(.+)_es_hombre_o_mujer$/)
+    ?? key.match(/^(.+)_es_hombre_0_mujer$/)
+    ?? key.match(/^es_hombre_o_mujer$/)
+    ?? key.match(/^es_hombre_0_mujer$/);
+
+  if (!matcher) return null;
+  return matcher[1] ?? null;
+}
+
+function humanizeMarkedRoleKey(roleKey: string): string {
+  return roleKey
+    .split("_")
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function getMarkedGenderFieldCandidatesForRole(roleKey: string | null): string[] {
+  const normalizedRole = normalizeMarkedKey(roleKey ?? "");
+  const variants = new Set<string>();
+
+  if (normalizedRole) {
+    variants.add(normalizedRole);
+
+    if (normalizedRole === "comprador") {
+      variants.add("comprador_1");
+    } else if (normalizedRole === "comprador_1") {
+      variants.add("comprador");
+    }
+  }
+
+  const candidates: string[] = [];
+  for (const variant of variants) {
+    candidates.push(
+      `${variant}_es_hombre_o_mujer`,
+      `${variant}_es_hombre_0_mujer`,
+      `genero_${variant}`,
+      `${variant}_genero`,
+      `${variant}_sexo`,
+    );
+  }
+
+  if (normalizedRole) {
+    candidates.push("genero", "sexo");
+  } else {
+    candidates.push("genero", "sexo");
+  }
+
+  return Array.from(new Set(candidates.map((candidate) => normalizeMarkedKey(candidate))));
+}
+
+function getMarkedGenderRelatedFieldKeys(field: MarkedTemplateField): string[] {
+  const roleKey = getMarkedGenderDependentRoleKey(field.key);
+  return getMarkedGenderFieldCandidatesForRole(roleKey);
+}
+
+function getMarkedGenderSyntheticFieldKey(roleKey: string): string {
+  return `genero_${normalizeMarkedKey(roleKey)}`;
+}
+
+function buildMarkedGenderSyntheticField(
+  roleKey: string,
+  section: string,
+): MarkedTemplateField {
+  const normalizedRole = normalizeMarkedKey(roleKey);
+  return {
+    key: getMarkedGenderSyntheticFieldKey(normalizedRole),
+    label: `${humanizeMarkedRoleKey(normalizedRole)} es hombre o mujer`,
+    section,
+    occurrences: 0,
+    marker_types: [],
+    raw_markers: [],
+  };
+}
+
+function getEffectiveMarkedTemplateFields(fields: MarkedTemplateField[]): MarkedTemplateField[] {
+  const effectiveFields = [...fields];
+  const existingGenderKeys = new Set(fields.filter((field) => isMarkedGenderField(field)).map((field) => markedFieldKey(field)));
+  const syntheticInsertions: Array<{ index: number; field: MarkedTemplateField }> = [];
+  const insertedKeys = new Set<string>();
+
+  const candidateRoles = new Map<string, { index: number; section: string }>();
+  fields.forEach((field, index) => {
+    const roleKey = getMarkedGenderDependentRoleKey(field.key);
+    if (!roleKey) return;
+
+    const dependentSection = getMarkedSectionId(field);
+    const key = normalizeMarkedKey(roleKey);
+    if (!candidateRoles.has(key)) {
+      candidateRoles.set(key, { index, section: dependentSection });
+    }
+  });
+
+  candidateRoles.forEach((info, roleKey) => {
+    const candidates = getMarkedGenderFieldCandidatesForRole(roleKey);
+    const hasRealGenderField = fields.some((field) => isMarkedGenderField(field) && candidates.includes(markedFieldKey(field)));
+    if (hasRealGenderField) return;
+
+    const syntheticKey = getMarkedGenderSyntheticFieldKey(roleKey);
+    if (existingGenderKeys.has(syntheticKey) || insertedKeys.has(syntheticKey)) return;
+
+    syntheticInsertions.push({
+      index: info.index + 1,
+      field: buildMarkedGenderSyntheticField(roleKey, info.section),
+    });
+    insertedKeys.add(syntheticKey);
+  });
+
+  syntheticInsertions
+    .sort((a, b) => a.index - b.index)
+    .forEach(({ index, field }, insertionIndex) => {
+      effectiveFields.splice(Math.min(index + insertionIndex, effectiveFields.length), 0, field);
+    });
+
+  return effectiveFields;
+}
+
 const AMBIGUOUS_MARKED_KEYS = new Set([
   normalizeMarkedKey("nombre"),
   normalizeMarkedKey("documento"),
@@ -712,73 +851,20 @@ function isMarkedMunicipalityField(field: MarkedTemplateField): boolean {
   return MARKED_MUNICIPALITY_KEYWORDS.some((keyword) => blob.includes(normalizeMarkedText(keyword)));
 }
 
-function getMarkedNationalityGenderKeys(field: MarkedTemplateField): string[] {
-  const key = markedFieldKey(field);
+function getMarkedRelatedGenderFieldKey(
+  field: MarkedTemplateField,
+  fields: MarkedTemplateField[],
+  values: Record<string, string>,
+): string | null {
+  const candidateKeys = getMarkedGenderRelatedFieldKeys(field);
 
-  if (key === "nacionalidad_comprador_2") {
-    return ["comprador_2_es_hombre_o_mujer", "genero_comprador_2"];
-  }
+  const roleSpecificKeys = candidateKeys.filter((candidateKey) => candidateKey !== "genero" && candidateKey !== "sexo");
+  const hasRoleSpecificGenderField = fields.some((item) => isMarkedGenderField(item) && roleSpecificKeys.includes(markedFieldKey(item)));
+  const searchKeys = hasRoleSpecificGenderField ? roleSpecificKeys : candidateKeys.filter((candidateKey) => candidateKey === "genero" || candidateKey === "sexo");
 
-  if (key === "nacionalidad_comprador_1" || key === "nacionalidad_comprador") {
-    return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "genero_comprador_1", "genero"];
-  }
-
-  const buyerGroup = getMarkedBuyerGroup(field);
-  if (buyerGroup === "comprador_2") return ["comprador_2_es_hombre_o_mujer", "genero_comprador_2"];
-  if (buyerGroup === "comprador_1") return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "genero_comprador_1", "genero"];
-
-  return ["genero"];
-}
-
-function getMarkedNationalityRelatedGender(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): MarkedGender | null {
-  const candidateKeys = new Set(getMarkedNationalityGenderKeys(field).map((key) => normalizeMarkedKey(key)));
-  for (const candidate of fields) {
-    if (!isMarkedGenderField(candidate)) continue;
-    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
-    const gender = normalizeMarkedGender(values[candidate.key]);
-    if (gender) return gender;
-  }
-  return null;
-}
-
-function getMarkedNationalityRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
-  const candidateKeys = new Set(getMarkedNationalityGenderKeys(field).map((key) => normalizeMarkedKey(key)));
-  for (const candidate of fields) {
-    if (!isMarkedGenderField(candidate)) continue;
-    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
-    if (normalizeMarkedGender(values[candidate.key])) return candidate.key;
-  }
-  return null;
-}
-
-function getMarkedNationalityOptions(gender: MarkedGender | null) {
-  return getNacionalidadesPorGenero(gender ?? "");
-}
-
-function getMarkedStateCivilGenderKeys(field: MarkedTemplateField): string[] {
-  const key = markedFieldKey(field);
-
-  if (key === "estado_civil_comprador_2") {
-    return ["comprador_2_es_hombre_o_mujer", "comprador_2_es_hombre_0_mujer", "genero_comprador_2"];
-  }
-
-  if (key === "estado_civil_comprador_1" || key === "estado_civil_comprador") {
-    return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "comprador_1_es_hombre_0_mujer", "genero_comprador_1", "genero"];
-  }
-
-  const buyerGroup = getMarkedBuyerGroup(field);
-  if (buyerGroup === "comprador_2") return ["comprador_2_es_hombre_o_mujer", "comprador_2_es_hombre_0_mujer", "genero_comprador_2"];
-  if (buyerGroup === "comprador_1") return ["comprador_es_hombre_o_mujer", "comprador_1_es_hombre_o_mujer", "comprador_1_es_hombre_0_mujer", "genero_comprador_1", "genero"];
-
-  return ["genero"];
-}
-
-function getMarkedStateCivilRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
-  const candidateKeys = new Set(getMarkedStateCivilGenderKeys(field).map((key) => normalizeMarkedKey(key)));
-
-  for (const candidate of fields) {
-    if (!isMarkedGenderField(candidate)) continue;
-    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
+  for (const candidateKey of searchKeys) {
+    const candidate = fields.find((item) => isMarkedGenderField(item) && markedFieldKey(item) === candidateKey);
+    if (!candidate) continue;
     if (normalizeMarkedGender(values[candidate.key])) return candidate.key;
   }
 
@@ -790,16 +876,25 @@ function getMarkedRelatedGender(
   fields: MarkedTemplateField[],
   values: Record<string, string>,
 ): MarkedGender | null {
-  const candidateKeys = new Set(getMarkedStateCivilGenderKeys(field).map((key) => normalizeMarkedKey(key)));
+  const relatedGenderKey = getMarkedRelatedGenderFieldKey(field, fields, values);
+  if (!relatedGenderKey) return null;
+  return normalizeMarkedGender(values[relatedGenderKey]);
+}
 
-  for (const candidate of fields) {
-    if (!isMarkedGenderField(candidate)) continue;
-    if (!candidateKeys.has(markedFieldKey(candidate))) continue;
-    const gender = normalizeMarkedGender(values[candidate.key]);
-    if (gender) return gender;
-  }
+function getMarkedNationalityRelatedGender(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): MarkedGender | null {
+  return getMarkedRelatedGender(field, fields, values);
+}
 
-  return null;
+function getMarkedNationalityRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
+  return getMarkedRelatedGenderFieldKey(field, fields, values);
+}
+
+function getMarkedNationalityOptions(gender: MarkedGender | null) {
+  return getNacionalidadesPorGenero(gender ?? "");
+}
+
+function getMarkedStateCivilRelatedGenderKey(field: MarkedTemplateField, fields: MarkedTemplateField[], values: Record<string, string>): string | null {
+  return getMarkedRelatedGenderFieldKey(field, fields, values);
 }
 
 function normalizeMarkedGender(value: string | null | undefined): MarkedGender | null {
@@ -877,6 +972,25 @@ function getMarkedFieldKind(field: MarkedTemplateField): MarkedFieldKind {
   if (isMarkedMoneyField(field)) return "money";
   if (isMarkedDateField(field)) return "date";
   return "text";
+}
+
+function normalizeDropdownFieldValue(value: string) {
+  return isPlaceholderDropdownValue(value) ? "" : value;
+}
+
+function isMarkedDropdownField(field: MarkedTemplateField) {
+  const kind = getMarkedFieldKind(field);
+  return (
+    isMarkedCountryField(field) ||
+    isMarkedNationalityField(field) ||
+    isMarkedMunicipalityField(field) ||
+    kind === "decision" ||
+    kind === "gender" ||
+    kind === "stateCivil" ||
+    kind === "typeDocument" ||
+    kind === "day" ||
+    kind === "month"
+  );
 }
 
 function formatMarkedCOP(value: string): string {
@@ -1085,7 +1199,7 @@ function MarkedFieldsForm({
 
   function handleFieldChange(field: MarkedTemplateField, rawValue: string) {
     const kind = getMarkedFieldKind(field);
-    let nextValue = rawValue;
+    let nextValue = normalizeDropdownFieldValue(rawValue);
 
     if (kind === "money") {
       nextValue = parseMarkedCOP(rawValue);
@@ -1166,13 +1280,14 @@ function MarkedFieldsForm({
   function renderControl(field: MarkedTemplateField) {
     const kind = getMarkedFieldKind(field);
     const currentValue = values[field.key] ?? "";
+    const displayValue = normalizeDropdownFieldValue(currentValue);
     const isProtocolAutofill = isMarkedProtocolAutofillField(field);
 
     if (isMarkedCountryField(field)) {
       return (
         <div className="space-y-1">
           <select
-            value={currentValue}
+            value={displayValue}
             onChange={(e) => handleFieldChange(field, e.target.value)}
             className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
           >
@@ -1195,7 +1310,7 @@ function MarkedFieldsForm({
       return (
         <div className="space-y-1">
           <select
-            value={disabled ? "" : currentValue}
+            value={disabled ? "" : displayValue}
             onChange={(e) => handleFieldChange(field, e.target.value)}
             disabled={disabled}
             className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
@@ -1227,7 +1342,7 @@ function MarkedFieldsForm({
     if (kind === "typeDocument") {
       return (
         <select
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
         >
@@ -1299,7 +1414,7 @@ function MarkedFieldsForm({
     if (kind === "decision") {
       return (
         <select
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
         >
@@ -1315,7 +1430,7 @@ function MarkedFieldsForm({
     if (kind === "gender") {
       return (
         <select
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
         >
@@ -1336,7 +1451,7 @@ function MarkedFieldsForm({
       return (
         <div className="space-y-1">
           <select
-            value={disabled ? "" : currentValue}
+            value={disabled ? "" : displayValue}
             onChange={(e) => handleFieldChange(field, e.target.value)}
             disabled={disabled}
             className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
@@ -1379,11 +1494,11 @@ function MarkedFieldsForm({
     if (kind === "day") {
       return (
         <select
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
         >
-          <option value="">Día</option>
+          <option value="">Selecciona día</option>
           {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
             <option key={day} value={String(day)}>
               {day}
@@ -1396,11 +1511,11 @@ function MarkedFieldsForm({
     if (kind === "month") {
       return (
         <select
-          value={currentValue}
+          value={displayValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
         >
-          <option value="">Mes</option>
+          <option value="">Selecciona...</option>
           {MARKED_MONTH_LABELS.map((month) => (
             <option key={month.value} value={month.label}>
               {month.label}
@@ -2723,8 +2838,9 @@ export function NuevaMinutaWorkspace() {
       setValoresEdit([]);
       setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
       setAdquisicionEdit(EMPTY_ADQUISICION);
+      const effectiveFields = getEffectiveMarkedTemplateFields(result.fields);
       setMarkedFieldValues(
-        Object.fromEntries(result.fields.map((field) => [field.key, ""]))
+        Object.fromEntries(effectiveFields.map((field) => [field.key, ""]))
       );
       setStep(1);
     } catch (err) {
@@ -2856,7 +2972,16 @@ export function NuevaMinutaWorkspace() {
   }
 
   function updateMarkedFieldValue(key: string, value: string) {
-    setMarkedFieldValues((prev) => ({ ...prev, [key]: value }));
+    setMarkedFieldValues((prev) => ({ ...prev, [key]: normalizeDropdownFieldValue(value) }));
+  }
+
+  function getSanitizedMarkedFieldValues(fields: MarkedTemplateField[]) {
+    return Object.fromEntries(
+      fields.map((field) => {
+        const value = markedFieldValues[field.key] ?? "";
+        return [field.key, isMarkedDropdownField(field) ? normalizeDropdownFieldValue(value) : value];
+      })
+    );
   }
 
   async function handleGenerar() {
@@ -2898,7 +3023,7 @@ export function NuevaMinutaWorkspace() {
       try {
         await new Promise((r) => setTimeout(r, 450));
         setAiProgress(45);
-        const result = await generateMarkedTemplate(file, markedFieldValues, markedTemplateResult.fields);
+        const result = await generateMarkedTemplate(file, getSanitizedMarkedFieldValues(markedTemplateFields), markedTemplateFields);
         updateStep("replace", "done", "Reemplazos aplicados");
         updateStep("save", "active");
         setAiProgress(80);
@@ -2974,7 +3099,7 @@ export function NuevaMinutaWorkspace() {
   const canAnalyze = !!file && !isAnalyzing && !isDetectingMarkedTemplate;
   const canDetectMarkedTemplate = !!file && !isDetectingMarkedTemplate && !isAnalyzing;
   const isMarkedTemplateMode = !!markedTemplateResult && !analisisResult;
-  const markedTemplateFields = markedTemplateResult?.fields ?? [];
+  const markedTemplateFields = getEffectiveMarkedTemplateFields(markedTemplateResult?.fields ?? []);
   const markedPendingCount = markedTemplateFields.filter((field) => !String(markedFieldValues[field.key] ?? "").trim()).length;
   const markedAmbiguousCount = markedTemplateFields.filter((field) => isMarkedAmbiguousField(field)).length;
   const canGenerate = isMarkedTemplateMode
@@ -3092,7 +3217,7 @@ export function NuevaMinutaWorkspace() {
 
           {isMarkedTemplateMode && markedTemplateResult && (
             <MarkedFieldsForm
-              fields={markedTemplateResult.fields}
+              fields={markedTemplateFields}
               values={markedFieldValues}
               onChange={updateMarkedFieldValue}
               onGenerate={handleGenerar}

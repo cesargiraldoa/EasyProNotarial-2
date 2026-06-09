@@ -1,23 +1,87 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import tempfile
 import traceback
 from pathlib import Path
 
-import uuid as _uuid
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_db, get_manageable_notary_ids
+from app.models.case import Case
+from app.models.notary import Notary
 from app.models.user import User
 from app.schemas.minuta import MarkedTemplateDetectionResponse
+from app.services.case_numbering import (
+    build_case_number_conflict_detail,
+    build_internal_case_number,
+    is_case_number_integrity_error,
+    resolve_next_sequence,
+)
+from app.services.document_persistence import persist_case_document_version
 from app.services.minuta.marked_template_detector import detect_marked_template
 from app.services.minuta.marked_template_generator import apply_marked_template_replacements
-from app.services.storage import SUPABASE_CASE_BUCKET, _has_supabase_credentials, _upload_to_supabase, sanitize_filename
 from app.modules.minuta.router import _make_file_token, _resolve_public_api_base
 
 router = APIRouter(prefix="/minutas", tags=["minutas"])
+
+
+def _resolve_marked_template_notary_id(db: Session, current_user: User) -> int:
+    notary_ids = sorted(get_manageable_notary_ids(current_user))
+    if notary_ids:
+        chosen_notary_id = current_user.default_notary_id or notary_ids[0]
+        if db.query(Notary.id).filter(Notary.id == chosen_notary_id).first() is not None:
+            return chosen_notary_id
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="No fue posible determinar la notaría para persistir la minuta.",
+    )
+
+
+def _create_marked_template_case(db: Session, current_user: User, filename: str) -> Case:
+    notary_id = _resolve_marked_template_notary_id(db, current_user)
+    notary = db.query(Notary).filter(Notary.id == notary_id).first()
+    if notary is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La notaría asociada al usuario no existe.",
+        )
+
+    year = datetime.utcnow().year
+    for attempt in range(3):
+        consecutive = resolve_next_sequence(db, "internal_case", notary_id, year)
+        case = Case(
+            notary_id=notary_id,
+            created_by_user_id=current_user.id,
+            case_type="minuta",
+            act_type="minuta_marcada",
+            consecutive=consecutive,
+            year=year,
+            internal_case_number=build_internal_case_number(notary, year, consecutive),
+            current_state="generado",
+            current_owner_user_id=current_user.id,
+            metadata_json=json.dumps({"source": "marked_template", "filename": filename}, ensure_ascii=False),
+        )
+        db.add(case)
+        try:
+            db.flush()
+            return case
+        except IntegrityError as exc:
+            db.rollback()
+            if is_case_number_integrity_error(exc) and attempt < 2:
+                continue
+            if is_case_number_integrity_error(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=build_case_number_conflict_detail(notary, year, consecutive),
+                ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No fue posible crear la minuta persistente.",
+            ) from exc
 
 
 @router.post("/marked-template/detect", response_model=MarkedTemplateDetectionResponse)
@@ -68,7 +132,9 @@ async def generate_marked_template_endpoint(
     archivo: UploadFile = File(..., description="Archivo .docx de minuta marcada por humano"),
     values: str = Form(..., description="JSON con los valores del formulario marcado"),
     fields: str | None = Form(None, description="JSON opcional con metadata de campos detectados"),
+    case_id: int | None = Form(None, description="ID opcional del caso existente"),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if not archivo.filename or not archivo.filename.lower().endswith(".docx"):
         raise HTTPException(
@@ -137,34 +203,50 @@ async def generate_marked_template_endpoint(
         Path(path_entrada).unlink(missing_ok=True)
         Path(path_salida).unlink(missing_ok=True)
 
-    notary_id = current_user.default_notary_id or 0
-    file_uuid = str(_uuid.uuid4())
-    storage_filename = f"{file_uuid}_minuta.docx"
-    display_name = f"minuta_generada_{sanitize_filename(Path(archivo.filename).stem)}.docx"
-    storage_key = f"minutas/notary_{notary_id}/{storage_filename}"
-    docx_media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-    if _has_supabase_credentials():
-        _upload_to_supabase(SUPABASE_CASE_BUCKET, storage_key, content_out, docx_media)
-        storage_path = f"supabase://{SUPABASE_CASE_BUCKET}/{storage_key}"
+    original_stem = Path(archivo.filename).stem if archivo.filename else "minuta"
+    display_name = f"minuta_generada_{original_stem}.docx"
+    if case_id is not None:
+        case = db.query(Case).filter(Case.id == case_id).first()
+        if case is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La minuta indicada no existe.")
+        manageable_notary_ids = get_manageable_notary_ids(current_user)
+        if case.notary_id not in manageable_notary_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para usar esta minuta.")
     else:
-        from app.services.storage import CASE_STORAGE
+        case = _create_marked_template_case(db, current_user, archivo.filename or "minuta.docx")
 
-        local_dir = CASE_STORAGE / "minutas" / f"notary_{notary_id}"
-        local_dir.mkdir(parents=True, exist_ok=True)
-        local_file = local_dir / storage_filename
-        local_file.write_bytes(content_out)
-        storage_path = str(local_file)
+    version = persist_case_document_version(
+        db,
+        case,
+        "marked_template",
+        "Minuta marcada",
+        "docx",
+        content_out,
+        display_name,
+        current_user.id,
+        template_id=None,
+        placeholder_snapshot_json=json.dumps(
+            {
+                "source": "marked_template",
+                "fields": fields_data,
+                "values": values_data,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.commit()
 
-    file_token = _make_file_token(storage_path, storage_filename, display_name, notary_id)
+    storage_path = version.storage_path
+    notary_id = case.notary_id
+    file_token = _make_file_token(storage_path, version.original_filename, display_name, notary_id)
     onlyoffice_path = f"/dashboard/minutas/editor/{file_token}"
     base_url = _resolve_public_api_base(request)
     download_url = f"{base_url}/api/v1/minuta/onlyoffice/file?token={file_token}"
 
     return {
-        "case_id": None,
-        "document_id": None,
-        "version_id": None,
+        "case_id": case.id,
+        "document_id": version.case_document_id,
+        "version_id": version.id,
         "filename": display_name,
         "onlyoffice_path": onlyoffice_path,
         "download_url": download_url,

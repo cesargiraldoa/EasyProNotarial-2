@@ -12,8 +12,6 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from jose import jwt
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_role_codes, get_db, require_roles
@@ -67,6 +65,13 @@ from app.services.gari_document_service import (
     resolver_escritura_desde_template,
     save_gari_document_as_docx,
 )
+from app.services.case_numbering import (
+    build_case_number_conflict_detail,
+    build_internal_case_number,
+    is_case_number_integrity_error,
+    resolve_next_sequence,
+)
+from app.services.document_persistence import persist_case_document_version
 from app.services.storage import download_storage_bytes, guess_media_type as storage_guess_media_type, next_case_file_path, resolve_template_source_path, save_base64_file, save_case_file
 from app.modules.act_catalog.router import LEGACY_CASE_ACTS_BY_VARIANT
 
@@ -340,83 +345,6 @@ def resolve_actor_role_code(actor_roles: set[str], preferred_roles: tuple[str, .
     return None
 
 
-def resolve_existing_max_sequence(db: Session, sequence_type: str, notary_id: int, year: int) -> int:
-    if sequence_type == "internal_case":
-        return int(
-            db.query(func.max(Case.consecutive))
-            .filter(Case.notary_id == notary_id, Case.year == year)
-            .scalar()
-            or 0
-        )
-    if sequence_type == "official_deed":
-        values = (
-            db.query(Case.official_deed_number)
-            .filter(Case.notary_id == notary_id, Case.official_deed_year == year, Case.official_deed_number.isnot(None))
-            .all()
-        )
-        max_value = 0
-        for (official_number,) in values:
-            if not official_number:
-                continue
-            prefix = str(official_number).split("-", 1)[0]
-            if prefix.isdigit():
-                max_value = max(max_value, int(prefix))
-        return max_value
-    return 0
-
-
-def resolve_next_sequence(db: Session, sequence_type: str, notary_id: int, year: int) -> int:
-    sequence = db.query(NumberingSequence).filter(NumberingSequence.sequence_type == sequence_type, NumberingSequence.notary_id == notary_id, NumberingSequence.year == year).first()
-    existing_max = resolve_existing_max_sequence(db, sequence_type, notary_id, year)
-    if sequence is None:
-        sequence = NumberingSequence(sequence_type=sequence_type, notary_id=notary_id, year=year, current_value=existing_max)
-        db.add(sequence)
-        db.flush()
-    elif sequence.current_value < existing_max:
-        sequence.current_value = existing_max
-        db.flush()
-    sequence.current_value += 1
-    db.flush()
-    return sequence.current_value
-
-
-def resolve_case_internal_number_prefix(notary: Notary) -> str:
-    slug = (notary.slug or "").strip().lower()
-    if slug and len(slug) <= 26 and all(char.isalnum() or char == "-" for char in slug):
-        return slug
-    return str(notary.id)
-
-
-def build_internal_case_number(notary: Notary, year: int, consecutive: int) -> str:
-    return f"CAS-{resolve_case_internal_number_prefix(notary)}-{year}-{consecutive:04d}"
-
-
-def is_case_number_integrity_error(error: IntegrityError) -> bool:
-    message = str(error.orig).lower()
-    return any(
-        marker in message
-        for marker in (
-            "uq_cases_internal_case_number",
-            "uq_cases_notary_year_consecutive",
-            "cases.internal_case_number",
-            "cases.notary_id",
-            "cases.year",
-            "cases.consecutive",
-            "unique constraint failed: cases.internal_case_number",
-            "unique constraint failed: cases.notary_id, cases.year, cases.consecutive",
-            "duplicate key value violates unique constraint",
-        )
-    )
-
-
-def build_case_number_conflict_detail(notary: Notary, year: int, consecutive: int) -> str:
-    return (
-        "No fue posible crear la minuta porque el identificador interno ya existe. "
-        f"Se intentó {build_internal_case_number(notary, year, consecutive)}. "
-        "Intenta de nuevo; el sistema recalculará el consecutivo."
-    )
-
-
 def resolve_or_create_person(db: Session, payload: PersonCreate) -> Person:
     person = db.query(Person).filter(Person.document_type == payload.document_type.strip().upper(), Person.document_number == payload.document_number.strip()).first()
     if person is None:
@@ -480,17 +408,6 @@ def build_placeholder_replacements(case: Case) -> dict[str, str]:
     return replacements
 
 
-def get_or_create_document(db: Session, case: Case, category: str, title: str) -> CaseDocument:
-    document = db.query(CaseDocument).filter(CaseDocument.case_id == case.id, CaseDocument.category == category).first()
-    if document is None:
-        document = CaseDocument(case_id=case.id, category=category, title=title, current_version_number=0)
-        db.add(document)
-        db.flush()
-    else:
-        document.title = title
-    return document
-
-
 def latest_document_version(case: Case, category: str, file_format: str | None = None) -> CaseDocumentVersion | None:
     for document in case.documents:
         if document.category != category:
@@ -502,33 +419,18 @@ def latest_document_version(case: Case, category: str, file_format: str | None =
 
 
 def add_document_version(db: Session, case: Case, category: str, title: str, file_format: str, source_path: str | Path, original_filename: str, created_by_user_id: int | None, template_id: int | None = None, placeholder_snapshot_json: str = "{}") -> CaseDocumentVersion:
-    document = get_or_create_document(db, case, category, title)
-    version_number = document.current_version_number + 1
-
-    source_raw = str(source_path).strip()
-    source_bytes = download_storage_bytes(source_raw)
-    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if file_format.lower() == "docx" else storage_guess_media_type(original_filename)
-    stored_filename, storage_path = save_case_file(source_bytes, case.id, category, version_number, original_filename, media_type)
-
-    document.current_version_number = version_number
-    version = CaseDocumentVersion(case_document_id=document.id, version_number=version_number, file_format=file_format, storage_path=storage_path, original_filename=stored_filename, generated_from_template_id=template_id, placeholder_snapshot_json=placeholder_snapshot_json, created_by_user_id=created_by_user_id)
-    db.add(version)
-    db.flush()
-    storage_backend = "supabase" if str(storage_path).startswith("supabase://") else "local"
-    bucket = str(storage_path).split("/")[2] if str(storage_path).startswith("supabase://") else None
-    logger.info(
-        "Versión documental persistida",
-        extra={
-            "case_id": case.id,
-            "document_id": document.id,
-            "version_id": version.id,
-            "storage_path": storage_path,
-            "bucket": bucket,
-            "storage_backend": storage_backend,
-            "file_format": file_format,
-        },
+    return persist_case_document_version(
+        db,
+        case,
+        category,
+        title,
+        file_format,
+        source_path,
+        original_filename,
+        created_by_user_id,
+        template_id,
+        placeholder_snapshot_json,
     )
-    return version
 
 
 def generate_draft_for_case(db: Session, case: Case, current_user: User, comment: str | None = None) -> CaseDocumentVersion:

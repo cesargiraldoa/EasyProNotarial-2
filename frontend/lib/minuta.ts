@@ -1,6 +1,5 @@
 import { getToken } from "@/lib/auth";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
+import { buildApiUrl } from "@/lib/config";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -221,7 +220,7 @@ function sanitizeDatos(datos: MinutaDatos): MinutaDatos {
 export async function analyzeMinuta(file: File): Promise<MinutaAnalisisResult> {
   const form = new FormData();
   form.append("archivo", file);
-  const response = await fetch(`${API_URL}/api/v1/minuta/analizar`, {
+  const response = await fetch(buildApiUrl("/api/v1/minuta/analizar"), {
     method: "POST",
     headers: authHeaders(),
     body: form,
@@ -241,7 +240,7 @@ export async function generateMinuta(
   form.append("archivo", file);
   form.append("datos_anteriores", JSON.stringify(sanitizeDatos(datosAnteriores)));
   form.append("datos_nuevos", JSON.stringify(sanitizeDatos(datosNuevos)));
-  const response = await fetch(`${API_URL}/api/v1/minuta/generar`, {
+  const response = await fetch(buildApiUrl("/api/v1/minuta/generar"), {
     method: "POST",
     headers: authHeaders(),
     body: form,
@@ -255,7 +254,7 @@ export async function generateMinuta(
 export async function detectMarkedTemplate(file: File): Promise<MarkedTemplateDetectResult> {
   const form = new FormData();
   form.append("archivo", file);
-  const response = await fetch(`${API_URL}/api/v1/minutas/marked-template/detect`, {
+  const response = await fetch(buildApiUrl("/api/v1/minutas/marked-template/detect"), {
     method: "POST",
     headers: authHeaders(),
     body: form,
@@ -275,7 +274,7 @@ export async function generateMarkedTemplate(
   form.append("archivo", file);
   form.append("values", JSON.stringify(values ?? {}));
   form.append("fields", JSON.stringify(fields ?? []));
-  const response = await fetch(`${API_URL}/api/v1/minutas/marked-template/generate`, {
+  const response = await fetch(buildApiUrl("/api/v1/minutas/marked-template/generate"), {
     method: "POST",
     headers: authHeaders(),
     body: form,
@@ -288,7 +287,7 @@ export async function generateMarkedTemplate(
 
 export async function getMinutaOnlyOfficeConfig(token: string): Promise<Record<string, unknown>> {
   const response = await fetch(
-    `${API_URL}/api/v1/minuta/onlyoffice-config?token=${encodeURIComponent(token)}`,
+    buildApiUrl(`/api/v1/minuta/onlyoffice-config?token=${encodeURIComponent(token)}`),
     {
       method: "GET",
       headers: authHeaders(),

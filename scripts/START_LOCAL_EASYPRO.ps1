@@ -1,9 +1,10 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $backendPath = Join-Path $root 'backend'
 $frontendPath = Join-Path $root 'frontend'
-$backendHealthUrl = 'http://127.0.0.1:8001/health'
+$frontendLauncher = Join-Path $root 'scripts\dev\start-frontend-local.ps1'
+$backendHealthUrl = 'http://127.0.0.1:8000/health'
 
 function Stop-NodeProcesses {
     $nodeProcesses = Get-Process node -ErrorAction SilentlyContinue
@@ -72,8 +73,7 @@ function Remove-PathIfExists {
 
 function Assert-RequiredPaths {
     $required = @(
-        (Join-Path $backendPath '.venv'),
-        (Join-Path $frontendPath 'node_modules')
+        (Join-Path $backendPath '.venv')
     )
 
     foreach ($path in $required) {
@@ -127,17 +127,15 @@ if (-not (Test-Path -LiteralPath $frontendPath)) {
 Write-Host "Stopping node processes..."
 Stop-NodeProcesses
 
-Write-Host "Freeing ports 5179 and 8001..."
-Stop-ProcessesOnPort -Ports @(5179, 8001)
+Write-Host "Freeing ports 5179 and 8000..."
+Stop-ProcessesOnPort -Ports @(5179, 8000)
 
 Write-Host "Cleaning frontend cache..."
 Remove-PathIfExists -Path (Join-Path $frontendPath '.next')
-Remove-PathIfExists -Path (Join-Path $frontendPath 'node_modules/.cache')
 
 Assert-RequiredPaths
 
-$backendWindowCommand = "Set-Location -LiteralPath `"$backendPath`"; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --host 127.0.0.1 --port 8001"
-$frontendStartCommand = "Set-Location -LiteralPath `"$frontendPath`"; npm run start"
+$backendWindowCommand = "Set-Location -LiteralPath `"$backendPath`"; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 
 Write-Host "Starting backend in a new PowerShell window..."
 Start-Process -FilePath powershell.exe -ArgumentList @(
@@ -151,25 +149,16 @@ Start-Process -FilePath powershell.exe -ArgumentList @(
 Write-Host 'Waiting for backend health...'
 Wait-For-BackendHealth -TimeoutSeconds 60
 
-Write-Host "Building frontend..."
-Push-Location $frontendPath
-try {
-    npm run build
-}
-finally {
-    Pop-Location
-}
-
 Write-Host "Starting frontend in a new PowerShell window..."
 Start-Process -FilePath powershell.exe -ArgumentList @(
     '-NoExit',
     '-ExecutionPolicy',
     'Bypass',
-    '-Command',
-    $frontendStartCommand
-)
+    '-File',
+    $frontendLauncher
+) -WorkingDirectory $root
 
 Write-Host ''
 Write-Host "Backend: $backendHealthUrl"
 Write-Host 'Frontend: http://127.0.0.1:5179/dashboard'
-Write-Host 'Crear Minuta: http://127.0.0.1:5179/dashboard/casos/crear'
+Write-Host 'Crear Minuta: http://127.0.0.1:5179/dashboard/minutas/nueva'

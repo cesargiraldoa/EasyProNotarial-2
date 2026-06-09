@@ -17,7 +17,9 @@ import {
   type TemplateRecord,
 } from "@/lib/document-flow";
 import { getEasyPro1CatalogOptions } from "@/lib/easypro1-notarial-catalogs";
+import { sanitizeDropdownOptions } from "@/lib/dropdown-options";
 import { getCurrentUser, getNotaries, getUserOptions, type CurrentUser, type UserOption } from "@/lib/api";
+import { buildApiUrl } from "@/lib/config";
 import { formatNotaryOptionLabel } from "@/lib/notaries";
 
 const steps = [
@@ -214,7 +216,7 @@ function inferEasyPro1CatalogName(field: TemplateField): string | null {
 function resolveCatalogOptions(field: TemplateField): SelectOption[] {
   const explicitOptions = parseTemplateFieldOptions(field.options_json);
   if (explicitOptions.length > 0) {
-    return explicitOptions;
+    return sanitizeDropdownOptions(explicitOptions);
   }
 
   const inferredCatalogName = field.table_master || inferEasyPro1CatalogName(field);
@@ -222,7 +224,7 @@ function resolveCatalogOptions(field: TemplateField): SelectOption[] {
     return [];
   }
 
-  return getEasyPro1CatalogOptions(inferredCatalogName);
+  return sanitizeDropdownOptions(getEasyPro1CatalogOptions(inferredCatalogName));
 }
 
 function normalizeSelectValue(value: string) {
@@ -1066,9 +1068,8 @@ export function CreateCaseWizard() {
         updateStep('intervinientes', 'done', 'Datos guardados');
         updateStep('redactar', 'active');
         setAiProgress(40);
-        const base = process.env.NEXT_PUBLIC_API_URL ?? "";
         const token = typeof window !== "undefined" ? localStorage.getItem("easypro2_session") : null;
-        const response = await fetch(`${base}/api/v1/document-flow/cases/${caseDetail.id}/generate-from-template`, {
+        const response = await fetch(buildApiUrl(`/api/v1/document-flow/cases/${caseDetail.id}/generate-from-template`), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

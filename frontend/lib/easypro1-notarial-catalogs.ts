@@ -5,6 +5,8 @@ export type NotarialCatalogOption = {
   label: string;
 };
 
+import { sanitizeDropdownOptions } from "./dropdown-options";
+
 export const EASYPRO1_NOTARIAL_CATALOGS: Record<string, NotarialCatalogOption[]> = {
   "TIPO DE DOCUMENTO": [
     { value: "C.C", label: "C.C" },
@@ -1013,7 +1015,37 @@ export const EASYPRO1_NOTARIAL_CATALOGS: Record<string, NotarialCatalogOption[]>
     { value: "de su compañero permanente,", label: "de su compañero permanente," },
   ],
   "DIAS": [
-    { value: "XXX", label: "XXX" },
+    { value: "1", label: "UNO" },
+    { value: "2", label: "DOS" },
+    { value: "3", label: "TRES" },
+    { value: "4", label: "CUATRO" },
+    { value: "5", label: "CINCO" },
+    { value: "6", label: "SEIS" },
+    { value: "7", label: "SIETE" },
+    { value: "8", label: "OCHO" },
+    { value: "9", label: "NUEVE" },
+    { value: "10", label: "DIEZ" },
+    { value: "11", label: "ONCE" },
+    { value: "12", label: "DOCE" },
+    { value: "13", label: "TRECE" },
+    { value: "14", label: "CATORCE" },
+    { value: "15", label: "QUINCE" },
+    { value: "16", label: "DIECISEIS" },
+    { value: "17", label: "DIECISIETE" },
+    { value: "18", label: "DIECIOCHO" },
+    { value: "19", label: "DIECINUEVE" },
+    { value: "20", label: "VEINTE" },
+    { value: "21", label: "VEINTIUNO" },
+    { value: "22", label: "VEINTIDOS" },
+    { value: "23", label: "VEINTITRES" },
+    { value: "24", label: "VEINTICUATRO" },
+    { value: "25", label: "VEINTICINCO" },
+    { value: "26", label: "VEINTISEIS" },
+    { value: "27", label: "VEINTISIETE" },
+    { value: "28", label: "VEINTIOCHO" },
+    { value: "29", label: "VEINTINUEVE" },
+    { value: "30", label: "TREINTA" },
+    { value: "31", label: "TREINTA Y UNO" },
   ],
   "PADRES": [
     { value: "Padre", label: "Padre" },
@@ -1064,7 +1096,7 @@ export function getEasyPro1CatalogOptions(catalogName: string): NotarialCatalogO
 
   const exact = EASYPRO1_NOTARIAL_CATALOGS[catalogName];
   if (exact) {
-    return exact;
+    return sanitizeDropdownOptions(exact);
   }
 
   const normalized = normalizeCatalogName(catalogName);
@@ -1074,7 +1106,7 @@ export function getEasyPro1CatalogOptions(catalogName: string): NotarialCatalogO
 
   const directMatch = Object.keys(EASYPRO1_NOTARIAL_CATALOGS).find((key) => normalizeCatalogName(key) === normalized);
   if (directMatch) {
-    return EASYPRO1_NOTARIAL_CATALOGS[directMatch];
+    return sanitizeDropdownOptions(EASYPRO1_NOTARIAL_CATALOGS[directMatch]);
   }
 
   const catalogNames = EASYPRO1_NOTARIAL_CATALOG_INDEX[normalized];
@@ -1093,5 +1125,5 @@ export function getEasyPro1CatalogOptions(catalogName: string): NotarialCatalogO
       options.push(option);
     }
   }
-  return options;
+  return sanitizeDropdownOptions(options);
 }

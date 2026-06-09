@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $frontendScript)) {
 }
 
 Write-Host "Opening EasyPro backend and frontend in separate PowerShell windows..."
-Write-Host "Backend: http://127.0.0.1:8001/health"
+Write-Host "Backend: http://127.0.0.1:8000/health"
 Write-Host "Frontend: http://127.0.0.1:5179/dashboard/minutas/nueva"
 
 Start-Process -FilePath powershell.exe -ArgumentList @(

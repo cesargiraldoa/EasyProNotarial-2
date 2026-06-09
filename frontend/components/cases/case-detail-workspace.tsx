@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Download, ReceiptText, Upload } from "lucide-react";
-import { addInternalNote, approveDocumentCase, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
+import { addInternalNote, approveDocumentCase, buildCaseOnlyOfficeEditorPath, downloadDocumentPreviewPdf, extractHttpErrorMessage, getDocumentCase, returnCaseReview, sendCaseToReview, uploadFinalSigned, type DocumentFlowCase } from "@/lib/document-flow";
 import { getCurrentUser, type CurrentUser } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/config";
 import { formatDateTime } from "@/lib/datetime";
 import { CaseBillingPanel } from "@/components/cases/case-billing-panel";
 
@@ -67,6 +68,78 @@ function safeJson(value: string | null | undefined) {
   }
 }
 
+type MarkedTemplateField = {
+  key?: unknown;
+  label?: unknown;
+  section?: unknown;
+};
+
+type MarkedTemplateSnapshot = {
+  source?: unknown;
+  fields?: unknown;
+  values?: unknown;
+};
+
+type MarkedTemplateSection = {
+  section: string;
+  items: Array<{
+    key: string;
+    label: string;
+    value: unknown;
+  }>;
+};
+
+function parseMarkedTemplateSnapshot(raw: string | null | undefined): MarkedTemplateSnapshot | null {
+  const parsed = safeJson(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  return parsed as MarkedTemplateSnapshot;
+}
+
+function buildMarkedTemplateSections(snapshot: MarkedTemplateSnapshot | null): MarkedTemplateSection[] {
+  if (!snapshot) {
+    return [];
+  }
+
+  const values = snapshot.values && typeof snapshot.values === "object" && !Array.isArray(snapshot.values)
+    ? (snapshot.values as Record<string, unknown>)
+    : {};
+  const fields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+  const groups = new Map<string, MarkedTemplateSection>();
+
+  for (const field of fields) {
+    if (!field || typeof field !== "object" || Array.isArray(field)) {
+      continue;
+    }
+    const item = field as MarkedTemplateField & Record<string, unknown>;
+    const key = String(item.key ?? "").trim();
+    if (!key) {
+      continue;
+    }
+    const sectionName = String(item.section ?? "Otros").trim() || "Otros";
+    const label = String(item.label ?? key).trim() || key;
+    const section = groups.get(sectionName) ?? { section: sectionName, items: [] };
+    section.items.push({ key, label, value: values[key] ?? "" });
+    groups.set(sectionName, section);
+  }
+
+  if (groups.size === 0) {
+    const fallbackEntries = Object.entries(values);
+    if (fallbackEntries.length === 0) {
+      return [];
+    }
+    return [
+      {
+        section: "Valores",
+        items: fallbackEntries.map(([key, value]) => ({ key, label: key, value })),
+      },
+    ];
+  }
+
+  return Array.from(groups.values());
+}
+
 function stringifyTechnicalValue(value: unknown) {
   if (value == null) {
     return "";
@@ -97,8 +170,7 @@ function parseActData(caseDetail: DocumentFlowCase | null) {
 
 async function generateFromTemplate(caseId: number, actData: Record<string, string>) {
   const token = getToken();
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
-  const response = await fetch(`${baseUrl}/api/v1/document-flow/cases/${caseId}/generate-from-template`, {
+  const response = await fetch(buildApiUrl(`/api/v1/document-flow/cases/${caseId}/generate-from-template`), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -190,8 +262,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const canSeeTechnicalHistory = isSuperAdmin;
   const tabs = useMemo(() => (canSeeTechnicalHistory ? superAdminTabs : baseTabs), [canSeeTechnicalHistory]);
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
-  const latestWordVersion = draftDocument?.versions?.[0] ?? null;
+  const markedTemplateDocument = documents.find((item) => item.category === "marked_template") ?? null;
+  const primaryDocument = draftDocument ?? markedTemplateDocument ?? documents.find((item) => Array.isArray(item.versions) && item.versions.length > 0) ?? null;
+  const latestWordVersion = primaryDocument?.versions?.[0] ?? null;
+  const hasEditableDocumentVersion = Boolean(primaryDocument?.id && latestWordVersion?.id && latestWordVersion.file_format.toLowerCase() === "docx");
   const hasWordVersion = Boolean(draftDocument?.versions?.[0]);
+  const isMarkedTemplateCase = (primaryDocument?.category ?? "") === "marked_template";
+  const markedTemplateSnapshot = useMemo(
+    () => (isMarkedTemplateCase ? parseMarkedTemplateSnapshot(latestWordVersion?.placeholder_snapshot_json) : null),
+    [isMarkedTemplateCase, latestWordVersion?.placeholder_snapshot_json],
+  );
+  const markedTemplateSections = useMemo(() => buildMarkedTemplateSections(markedTemplateSnapshot), [markedTemplateSnapshot]);
   const billingDocumentType = (() => {
     const raw = (caseDetail?.template?.document_type || caseDetail?.case_type || "").toLowerCase();
     if (raw.includes("escrit")) return "escritura" as const;
@@ -199,7 +280,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     return "otro" as const;
   })();
   const canEditCaseData = tab !== "Diligenciamiento";
-  const canGenerateWord = isProtocolist || isAdminNotary || isSuperAdmin;
+  const canGenerateWord = Boolean(caseDetail?.template_id) && !isMarkedTemplateCase && (isProtocolist || isAdminNotary || isSuperAdmin);
   const generateWordLabel = hasWordVersion ? "Regenerar Word" : "Generar Word";
   const canSendToReview = Boolean(caseDetail) && (isProtocolist || isAdminNotary || isSuperAdmin) && ["borrador", "en_diligenciamiento", "generado"].includes(caseDetail?.current_state ?? "");
   const canReviewRevision = Boolean(caseDetail) && (isApprover || isAdminNotary || isSuperAdmin || caseDetail?.approver_user_id === currentUser?.id) && caseDetail?.current_state === "revision_aprobador";
@@ -260,16 +341,17 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const flowChips = [
     { label: "Responsable", value: caseDetail?.current_owner_user_name || "Sin asignar" },
     { label: "Aprobador", value: caseDetail?.approver_user_name || "Sin asignar" },
-    { label: "Borrador", value: latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin generar" },
-    { label: "Plantilla", value: caseDetail?.template_name || "Sin plantilla" },
+    { label: isMarkedTemplateCase ? "Documento" : "Borrador", value: latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin generar" },
+    { label: "Plantilla", value: isMarkedTemplateCase ? "Minuta marcada sin IA" : caseDetail?.template_name || "Sin plantilla" },
     { label: "Última actualización", value: caseDetail?.updated_at ? pretty(caseDetail.updated_at) : "Sin actualización" },
   ];
+  const caseDisplayTitle = isMarkedTemplateCase ? "Minuta marcada sin IA" : (caseDetail?.act_type || "Minuta");
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
 
-    if (!draftDocument?.id || !latestWordVersion?.id || latestWordVersion.file_format.toLowerCase() !== "docx") {
+    if (!primaryDocument?.id || !latestWordVersion?.id || latestWordVersion.file_format.toLowerCase() !== "docx") {
       setPdfPreviewUrl(null);
       setPdfPreviewError(null);
       setPdfPreviewLoading(false);
@@ -284,7 +366,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
     void (async () => {
       try {
-        const blob = await downloadDocumentPreviewPdf(caseId, draftDocument.id, latestWordVersion.id);
+        const blob = await downloadDocumentPreviewPdf(caseId, primaryDocument.id, latestWordVersion.id);
         if (cancelled) {
           return;
         }
@@ -307,7 +389,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [caseId, draftDocument?.id, latestWordVersion?.file_format, latestWordVersion?.id]);
+  }, [caseId, primaryDocument?.id, latestWordVersion?.file_format, latestWordVersion?.id]);
 
   useEffect(() => {
     if (!(tabs as readonly string[]).includes(tab)) {
@@ -325,6 +407,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   }
 
   async function handleGenerateDocument() {
+    if (!caseDetail?.template_id || isMarkedTemplateCase) {
+      setError("Este caso fue generado desde minuta marcada sin IA. Abre el documento existente en OnlyOffice.");
+      return;
+    }
     setError(null);
     setFeedback(null);
     setIsGenerating(true);
@@ -371,9 +457,8 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         return;
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8001";
       const token = getToken();
-      const res = await fetch(`${API_URL}${downloadUrl}`, {
+      const res = await fetch(buildApiUrl(downloadUrl), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("No fue posible descargar el archivo.");
@@ -391,8 +476,8 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     }
   }
   async function handleOpenOnlyOffice() {
-    if (!draftDocument?.id || !latestWordVersion?.id) return;
-    const editorPath = `/dashboard/onlyoffice-editor/${caseId}/${draftDocument.id}/${latestWordVersion.id}`;
+    if (!primaryDocument?.id || !latestWordVersion?.id) return;
+    const editorPath = buildCaseOnlyOfficeEditorPath(caseId, primaryDocument.id, latestWordVersion.id);
     const editorUrl = new URL(editorPath, window.location.origin).toString();
 
     const opened = window.open(editorUrl, "_blank", "noopener,noreferrer");
@@ -603,7 +688,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
               Volver a la bandeja
             </Link>
             <p className="mt-3 text-sm font-semibold uppercase tracking-[0.22em] text-accent">Detalle de la minuta</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDetail.act_type || "Minuta"}</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{caseDisplayTitle}</h1>
             <p className="mt-2 text-sm text-secondary">
               {caseDetail.internal_case_number || "Sin número interno"} · {caseDetail.notary_label || "Sin notaría"}
             </p>
@@ -618,14 +703,25 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Acciones rápidas</p>
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setTab("Diligenciamiento")}
-              disabled={!canEditCaseData}
-              className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
-            >
-              Editar datos
-            </button>
+            {isMarkedTemplateCase ? (
+              <button
+                type="button"
+                onClick={() => void handleOpenOnlyOffice()}
+                disabled={!hasEditableDocumentVersion}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Abrir editor
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTab("Diligenciamiento")}
+                disabled={!canEditCaseData}
+                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+              >
+                Editar datos
+              </button>
+            )}
             {canGenerateWord ? (
               <button
                 type="button"
@@ -647,20 +743,19 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 Crear factura en Gari Billing
               </button>
             ) : null}
-            {hasWordVersion ? (
+            {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
               <button
                 type="button"
                 onClick={() => void handleOpenOnlyOffice()}
-                title="Abrir editor OnlyOffice v2"
                 className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
               >
                 Abrir / Editar Word
               </button>
             ) : null}
-            {hasWordVersion ? (
+            {hasEditableDocumentVersion ? (
               <button
                 type="button"
-                onClick={() => void handleDownload(draftDocument?.versions?.[0]?.download_url || "", `v${draftDocument?.versions?.[0]?.version_number}.${draftDocument?.versions?.[0]?.file_format || "docx"}`)}
+                onClick={() => void handleDownload(latestWordVersion?.download_url || "", `v${latestWordVersion?.version_number}.${latestWordVersion?.file_format || "docx"}`)}
                 className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
               >
                 <Download className="h-4 w-4" />
@@ -922,37 +1017,36 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     {isGenerating ? "Generando..." : generateWordLabel}
                   </button>
                 ) : null}
-                {draftDocument?.versions?.[0] ? (
+                {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
                   <button
                     type="button"
                     onClick={() => void handleOpenOnlyOffice()}
-                    title="Abrir editor OnlyOffice v2"
                     className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
                   >
                     Abrir / Editar Word
                   </button>
                 ) : null}
-                {draftDocument?.versions?.[0] ? (
+                {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
                   <button
                     type="button"
-                    onClick={() => void handleDownload(draftDocument.versions[0].download_url || "", `v${draftDocument.versions[0].version_number}.${draftDocument.versions[0].file_format || "docx"}`)}
+                    onClick={() => void handleDownload(latestWordVersion?.download_url || "", `v${latestWordVersion?.version_number}.${latestWordVersion?.file_format || "docx"}`)}
                     className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary"
                   >
                   <Download className="h-4 w-4" />
                   Descargar Word
                 </button>
               ) : null}
-              {draftDocument?.id && latestWordVersion?.id ? (
-                <button type="button" onClick={() => void handleDownload(`/api/v1/document-flow/cases/${caseId}/documents/${draftDocument.id}/download-pdf`, `v${latestWordVersion.version_number}.pdf`)} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Generar / Descargar PDF</button>
+              {primaryDocument?.id && latestWordVersion?.id ? (
+                <button type="button" onClick={() => void handleDownload(`/api/v1/document-flow/cases/${caseId}/documents/${primaryDocument.id}/download-pdf`, `v${latestWordVersion.version_number}.pdf`)} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Generar / Descargar PDF</button>
               ) : null}
               <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">Refrescar versión</button>
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-primary">Versiones del borrador</p>
-                {draftDocument && Array.isArray(draftDocument.versions) && draftDocument.versions.length > 0 ? (
+                <p className="text-sm font-semibold text-primary">{isMarkedTemplateCase ? "Versiones del documento" : "Versiones del borrador"}</p>
+                {primaryDocument && Array.isArray(primaryDocument.versions) && primaryDocument.versions.length > 0 ? (
                   <div className="space-y-2">
-                    {draftDocument.versions.map((version) => (
+                    {primaryDocument.versions.map((version) => (
                       <button
                         key={version.id}
                         type="button"
@@ -1127,19 +1221,44 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
 
           {tab === "Diligenciamiento" ? (
             <div className="space-y-6">
-              <div className="grid gap-4 lg:grid-cols-2">
-                {Object.entries(actData).length > 0 ? (
-                  Object.entries(actData).map(([key, value]) => (
-                    <div key={key} className="ep-card-soft rounded-[1.5rem] p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-secondary">{key}</p>
-                      <p className="mt-2 text-sm font-semibold text-primary">{value || "Sin dato"}</p>
-                    </div>
-                  ))
+              {isMarkedTemplateCase ? (
+                <section className="space-y-2 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                  <p className="text-sm font-semibold text-primary">Documento generado desde minuta marcada sin IA.</p>
+                  <p className="text-sm text-secondary">Los datos guardados en esta versión se muestran por sección y se pueden revisar sin volver a generar el Word.</p>
+                </section>
+              ) : null}
+              <div className="space-y-4">
+                {isMarkedTemplateCase ? (
+                  markedTemplateSections.length > 0 ? (
+                    markedTemplateSections.map((group) => (
+                      <section key={group.section} className="space-y-3 rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                        <p className="text-sm font-semibold text-primary">{group.section}</p>
+                        <div className="grid gap-4 lg:grid-cols-2">
+                          {group.items.map((item) => (
+                            <div key={`${group.section}-${item.key}`} className="ep-card-soft rounded-[1.5rem] p-4">
+                              <p className="text-xs uppercase tracking-[0.18em] text-secondary">{item.label}</p>
+                              <p className="mt-2 text-sm font-semibold text-primary">{stringifyTechnicalValue(item.value) || "Sin dato"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    ))
+                  ) : (
+                    <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin datos del diligenciamiento todavía.</div>
+                  )
+                ) : Object.entries(actData).length > 0 ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {Object.entries(actData).map(([key, value]) => (
+                      <div key={key} className="ep-card-soft rounded-[1.5rem] p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-secondary">{key}</p>
+                        <p className="mt-2 text-sm font-semibold text-primary">{value || "Sin dato"}</p>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin datos del diligenciamiento todavía.</div>
                 )}
               </div>
-
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-primary">Intervinientes</p>
                 {participants.length > 0 ? (
@@ -1161,7 +1280,9 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     })}
                   </div>
                 ) : (
-                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">Sin intervinientes todavía.</div>
+                  <div className="ep-card-muted rounded-[1.5rem] px-4 py-6 text-sm text-secondary">
+                    {isMarkedTemplateCase ? "Los intervinientes no se estructuraron automáticamente todavía." : "Sin intervinientes todavía."}
+                  </div>
                 )}
               </div>
             </div>
@@ -1201,7 +1322,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         caseId={caseId}
         caseLabel={caseDetail?.internal_case_number || `Caso ${caseId}`}
         documentType={billingDocumentType}
-        documentId={draftDocument?.id ?? null}
+        documentId={primaryDocument?.id ?? null}
         versionId={latestWordVersion?.id ?? null}
       />
     </div>
