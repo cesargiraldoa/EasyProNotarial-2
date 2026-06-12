@@ -171,9 +171,6 @@ export function CasesWorkspace() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard/casos/crear" className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary">
-              Crear minuta
-            </Link>
             <button onClick={() => void loadCases(filters)} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-panel">
               <RefreshCw className="h-4 w-4" />
               Actualizar bandeja

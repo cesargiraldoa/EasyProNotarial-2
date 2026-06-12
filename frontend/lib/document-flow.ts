@@ -5,6 +5,12 @@ import { buildApiUrl } from "@/lib/config";
 async function apiFetch<T = unknown>(path: string, options: { method?: string; body?: unknown; headers?: HeadersInit } = {}): Promise<T> {
   const token = getToken();
   const url = buildApiUrl(path);
+  const body =
+    options.body === undefined
+      ? undefined
+      : typeof options.body === "string"
+        ? options.body
+        : JSON.stringify(options.body);
   
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -20,7 +26,7 @@ async function apiFetch<T = unknown>(path: string, options: { method?: string; b
   const response = await fetch(url, {
     method: options.method ?? "GET",
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body,
   });
 
   if (!response.ok) {
@@ -531,7 +537,38 @@ export async function getOnlyOfficeConfig(caseId: number, documentId: number, ve
 export function buildCaseOnlyOfficeEditorPath(caseId: number, documentId: number, versionId: number) {
   return `/dashboard/casos/${caseId}/editor/${documentId}/${versionId}`;
 }
-export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}/final-upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: { filename, content_base64, comment: comment || null } })); }
+export async function uploadFinalSigned(caseId: number, filename: string, content_base64: string, comment = "") {
+  const token = getToken();
+  const payload = {
+    filename,
+    content_base64,
+    comment: comment || null,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[final-upload] payload type", typeof payload, {
+      ...payload,
+      content_base64: `<base64:${content_base64.length} chars>`,
+    });
+  }
+
+  const response = await fetch(buildApiUrl(`/api/v1/document-flow/cases/${caseId}/final-upload`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+
+  return normalizeCase(await response.json());
+}
 export async function lookupPersons(params: { document_type?: string; document_number?: string; q?: string }) { const query = new URLSearchParams(); if (params.document_type) query.set("document_type", params.document_type); if (params.document_number) query.set("document_number", params.document_number); if (params.q) query.set("q", params.q); return asArray(await apiFetch<unknown>(`/api/v1/document-flow/persons/lookup?${query.toString()}`), normalizePerson); }
 export async function createTemplate(payload: unknown) {
   const token = getToken();
