@@ -263,11 +263,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
   const tabs = useMemo(() => (canSeeTechnicalHistory ? superAdminTabs : baseTabs), [canSeeTechnicalHistory]);
   const draftDocument = documents.find((item) => item.category === "draft") ?? null;
   const markedTemplateDocument = documents.find((item) => item.category === "marked_template") ?? null;
-  const primaryDocument = draftDocument ?? markedTemplateDocument ?? documents.find((item) => Array.isArray(item.versions) && item.versions.length > 0) ?? null;
-  const latestWordVersion = primaryDocument?.versions?.[0] ?? null;
+  const primaryDocument = draftDocument ?? markedTemplateDocument ?? null;
+  const latestWordVersion = primaryDocument?.versions?.find((item) => item.file_format.toLowerCase() === "docx") ?? null;
   const hasEditableDocumentVersion = Boolean(primaryDocument?.id && latestWordVersion?.id && latestWordVersion.file_format.toLowerCase() === "docx");
-  const hasWordVersion = Boolean(draftDocument?.versions?.[0]);
-  const isMarkedTemplateCase = (primaryDocument?.category ?? "") === "marked_template";
+  const isMarkedTemplateCase = caseDetail?.act_type === "minuta_marcada" || (primaryDocument?.category ?? "") === "marked_template";
   const markedTemplateSnapshot = useMemo(
     () => (isMarkedTemplateCase ? parseMarkedTemplateSnapshot(latestWordVersion?.placeholder_snapshot_json) : null),
     [isMarkedTemplateCase, latestWordVersion?.placeholder_snapshot_json],
@@ -280,8 +279,8 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     return "otro" as const;
   })();
   const canEditCaseData = tab !== "Diligenciamiento";
-  const canGenerateWord = Boolean(caseDetail?.template_id) && !isMarkedTemplateCase && (isProtocolist || isAdminNotary || isSuperAdmin);
-  const generateWordLabel = hasWordVersion ? "Regenerar Word" : "Generar Word";
+  const canManageWordGeneration = Boolean(caseDetail?.template_id) && !isMarkedTemplateCase && (isProtocolist || isAdminNotary || isSuperAdmin);
+  const generateWordLabel = canManageWordGeneration && hasEditableDocumentVersion ? "Regenerar Word" : "Generar Word";
   const canSendToReview = Boolean(caseDetail) && (isProtocolist || isAdminNotary || isSuperAdmin) && ["borrador", "en_diligenciamiento", "generado"].includes(caseDetail?.current_state ?? "");
   const canReviewRevision = Boolean(caseDetail) && (isApprover || isAdminNotary || isSuperAdmin || caseDetail?.approver_user_id === currentUser?.id) && caseDetail?.current_state === "revision_aprobador";
   const canApprove = canReviewRevision;
@@ -342,10 +341,10 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
     { label: "Responsable", value: caseDetail?.current_owner_user_name || "Sin asignar" },
     { label: "Aprobador", value: caseDetail?.approver_user_name || "Sin asignar" },
     { label: isMarkedTemplateCase ? "Documento" : "Borrador", value: latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin generar" },
-    { label: "Plantilla", value: isMarkedTemplateCase ? "Minuta marcada sin IA" : caseDetail?.template_name || "Sin plantilla" },
+    { label: "Plantilla", value: isMarkedTemplateCase ? "Minuta marcada" : caseDetail?.template_name || "Sin plantilla" },
     { label: "Última actualización", value: caseDetail?.updated_at ? pretty(caseDetail.updated_at) : "Sin actualización" },
   ];
-  const caseDisplayTitle = isMarkedTemplateCase ? "Minuta marcada sin IA" : (caseDetail?.act_type || "Minuta");
+  const caseDisplayTitle = isMarkedTemplateCase ? (primaryDocument?.title || "Minuta marcada") : (caseDetail?.act_type || "Minuta");
 
   useEffect(() => {
     let cancelled = false;
@@ -703,26 +702,15 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">Acciones rápidas</p>
           <div className="flex flex-wrap items-center gap-3">
-            {isMarkedTemplateCase ? (
-              <button
-                type="button"
-                onClick={() => void handleOpenOnlyOffice()}
-                disabled={!hasEditableDocumentVersion}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                Abrir editor
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setTab("Diligenciamiento")}
-                disabled={!canEditCaseData}
-                className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
-              >
-                Editar datos
-              </button>
-            )}
-            {canGenerateWord ? (
+            <button
+              type="button"
+              onClick={() => setTab("Diligenciamiento")}
+              disabled={!canEditCaseData}
+              className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] px-5 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+            >
+              Editar datos
+            </button>
+            {canManageWordGeneration ? (
               <button
                 type="button"
                 onClick={() => void handleGenerateDocument()}
@@ -743,7 +731,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 Crear factura en Gari Billing
               </button>
             ) : null}
-            {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
+            {hasEditableDocumentVersion ? (
               <button
                 type="button"
                 onClick={() => void handleOpenOnlyOffice()}
@@ -1006,7 +994,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                 ) : null}
               </section>
               <div className="flex flex-wrap items-center gap-3">
-                {isProtocolist || isAdminNotary ? (
+                {canManageWordGeneration ? (
                   <button
                     type="button"
                     onClick={() => void handleGenerateDocument()}
@@ -1017,7 +1005,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     {isGenerating ? "Generando..." : generateWordLabel}
                   </button>
                 ) : null}
-                {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
+                {hasEditableDocumentVersion ? (
                   <button
                     type="button"
                     onClick={() => void handleOpenOnlyOffice()}
@@ -1026,7 +1014,7 @@ export function CaseDetailWorkspace({ caseId, initialTab }: { caseId: number; in
                     Abrir / Editar Word
                   </button>
                 ) : null}
-                {!isMarkedTemplateCase && hasEditableDocumentVersion ? (
+                {hasEditableDocumentVersion ? (
                   <button
                     type="button"
                     onClick={() => void handleDownload(latestWordVersion?.download_url || "", `v${latestWordVersion?.version_number}.${latestWordVersion?.file_format || "docx"}`)}
