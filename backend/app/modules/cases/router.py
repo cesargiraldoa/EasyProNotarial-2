@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.deps import get_current_user, get_db, get_role_codes, require_roles
 from app.models.case import Case
+from app.models.case_document import CaseDocument
 from app.models.case_state_definition import CaseStateDefinition
 from app.models.case_timeline_event import CaseTimelineEvent
 from app.models.notary import Notary
@@ -91,6 +92,29 @@ def serialize_timeline_event(event: CaseTimelineEvent) -> CaseTimelineEventSumma
     )
 
 
+def resolve_case_display_name(case: Case) -> str | None:
+    documents = list(case.documents or [])
+    if not documents:
+        return None
+
+    preferred_categories = ("marked_template", "draft", "final_signed", "export_word", "export_pdf")
+    documents.sort(
+        key=lambda item: (
+            preferred_categories.index(item.category) if item.category in preferred_categories else len(preferred_categories),
+            item.id,
+        )
+    )
+
+    for document in documents:
+        if (document.title or "").strip():
+            return document.title.strip()
+        latest_version = document.versions[0] if document.versions else None
+        if latest_version and (latest_version.original_filename or "").strip():
+            return latest_version.original_filename.strip()
+
+    return None
+
+
 def serialize_case_summary(case: Case) -> CaseSummary:
     return CaseSummary(
         id=case.id,
@@ -115,6 +139,7 @@ def serialize_case_summary(case: Case) -> CaseSummary:
         substitute_notary_user_name=case.substitute_notary_user.full_name if case.substitute_notary_user else None,
         requires_client_review=case.requires_client_review,
         final_signed_uploaded=case.final_signed_uploaded,
+        display_name=resolve_case_display_name(case),
         metadata_json=case.metadata_json,
         created_at=case.created_at,
         updated_at=case.updated_at,
@@ -215,6 +240,7 @@ def list_cases(
             joinedload(Case.approver_user),
             joinedload(Case.titular_notary_user),
             joinedload(Case.substitute_notary_user),
+            joinedload(Case.documents).joinedload(CaseDocument.versions),
         )
         .outerjoin(owner_alias, owner_alias.id == Case.current_owner_user_id)
         .order_by(Case.updated_at.desc(), Case.id.desc())

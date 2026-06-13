@@ -10,7 +10,7 @@ import {
   analyzeMinuta, detectMarkedTemplate, generateMinuta, generateMarkedTemplate, emptyPersona,
   type MinutaAnalisisResult, type MinutaPersona,
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
-  type MinutaAdquisicion, type MarkedTemplateDetectResult, type MarkedTemplateField,
+  type MinutaAdquisicion, type MarkedTemplateDetectResult, type MarkedTemplateField, type MinutaGenerarResult,
 } from "@/lib/minuta";
 import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, ESTADOS_CIVILES_GENERALES, PAISES, getEstadosCiviles, getNacionalidadesPorGenero, isGenderField } from "@/lib/listas-notariales";
 import { isPlaceholderDropdownValue } from "@/lib/dropdown-options";
@@ -108,7 +108,11 @@ function centenas(n: number): string {
 }
 
 function numeroALetras(n: number): string {
-  if (n === 0) return "CERO PESOS MONEDA CORRIENTE";
+  return numeroALetrasConSufijo(n, "PESOS MONEDA CORRIENTE");
+}
+
+function numeroALetrasConSufijo(n: number, suffix: string): string {
+  if (n === 0) return `CERO ${suffix}`;
   const partes: string[] = [];
   const miles_millones = Math.floor(n / 1_000_000_000);
   const millones = Math.floor((n % 1_000_000_000) / 1_000_000);
@@ -130,7 +134,7 @@ function numeroALetras(n: number): string {
   if (resto > 0) {
     partes.push(centenas(resto));
   }
-  return partes.join(" ") + " PESOS MONEDA CORRIENTE";
+  return partes.join(" ") + ` ${suffix}`;
 }
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
@@ -436,6 +440,88 @@ const MARKED_DECISION_OPTIONS = [
   { value: "Pendiente", label: "Pendiente" },
 ];
 
+const JAGGUA_BANCO_BOGOTA_QA_VALUES: Record<string, string> = {
+  numero_escritura: "000",
+  numero_apartamento: "804",
+  numero_matricula: "001-1528731",
+  matricula_inmobiliaria: "001-1528731",
+  numero_matricula_inmobiliaria: "001-1528731",
+  nombre_comprador: "JUAN CAMILO VASQUEZ MIRA",
+  nombre_comprador_1: "JUAN CAMILO VASQUEZ MIRA",
+  comprador_1_nombre: "JUAN CAMILO VASQUEZ MIRA",
+  nombre_del_comprador_1: "JUAN CAMILO VASQUEZ MIRA",
+  tipo_documento_comprador: "C.C",
+  tipo_documento_comprador_1: "C.C",
+  numero_documento_comprador: "1.037.657.164",
+  numero_documento_comprador_1: "1.037.657.164",
+  comprador_es_hombre_o_mujer: "HOMBRE",
+  comprador_1_es_hombre_o_mujer: "HOMBRE",
+  nombre_comprador_2: "",
+  tipo_documento_comprador_2: "",
+  numero_documento_comprador_2: "",
+  comprador_2_es_hombre_o_mujer: "",
+  nacionalidad_comprador: "colombiano",
+  nacionalidad_comprador_1: "colombiano",
+  nacionalidad_comprador_2: "",
+  municipio_domicilio_comprador: "Envigado Antioquia",
+  municipio_domicilio_comprador_1: "Envigado Antioquia",
+  municipio_domicilio_comprador_2: "",
+  seleccione_si_comprador_esta_de_transito: "de tránsito por este municipio de Caldas, Antioquia,",
+  seleccione_si_comprador_1_esta_de_transito: "de tránsito por este municipio de Caldas, Antioquia,",
+  seleccione_si_comprador_2_esta_de_transito: "",
+  estado_civil_comprador: "soltero sin unión marital de hecho",
+  estado_civil_comprador_1: "soltero sin unión marital de hecho",
+  estado_civil_comprador_2: "",
+  profesion_u_oficio: "empleado",
+  profesion_u_oficio_comprador_2: "",
+  actividad_economica_comprador: "empleado",
+  actividad_economica_comprador_2: "",
+  numero_de_piso: "octavo",
+  dia_elaboracion_escritura: "nueve (9)",
+  mes_elaboracion_escritura: "marzo",
+  valor_de_la_venta_en_numeros: "212.600.000",
+  valor_venta_numeros: "212.600.000",
+  valor_de_la_venta: "212.600.000",
+  valor_venta: "212.600.000",
+  valor_apartamento_en_letras: "",
+  en_numeros_cuota_inicial: "63.040.480",
+  en_letras_cuota_inicial: "",
+  valor_del_acto_de_la_hipoteca: "149.559.520",
+  valor_del_acto_de_la_hipoteca_en_letras: "",
+  origen_cuota_inicial: "recursos propios",
+  fecha_celebracion_de_la_promesa_compraventa: "19 de noviembre de 2024",
+  direccion_comprador: "CARRERA 25 #39 SUR 15, URBANIZACIÓN VITTA APTO 1203 ENVIGADO",
+  direccion_comprador_1: "CARRERA 25 #39 SUR 15, URBANIZACIÓN VITTA APTO 1203 ENVIGADO",
+  direccion_comprador_2: "",
+  celular_comprador: "3003575071",
+  celular_comprador_1: "3003575071",
+  celular_comprador_2: "",
+  email_comprador: "JCAMILOVASQUEZM@GMAIL.COM",
+  email_comprador_1: "JCAMILOVASQUEZM@GMAIL.COM",
+  email_comprador_2: "",
+  inmueble_sera_su_casa: "No",
+  tiene_inmueble_afectado: "No",
+  afectacion_cumple_ley_258: "No",
+  queda_afectado: "No",
+  constitucion_patrimonio_de_familia: "Sí",
+  acepta_notificacion_electronica: "Sí",
+  coeficiente_copropiedad: "0,0000",
+  derechos_notariales: "0",
+  iva: "0",
+  aporte_superintendencia: "0",
+  fondo_nacional_notariado: "0",
+  consecutivo_hojas_papel_notarial: "000000",
+  pareja_o_conyuge: "",
+  nombre_pareja_o_conyuge: "",
+  numero_documento_pareja_o_conyuge: "",
+  linderos:
+    "con un área privada construida de 44,76 metros cuadrados, un área total de 49,24 metros cuadrados, una altura de 2,30 metros, cuyo perímetro se encuentra comprendido entre los puntos 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 y 1 punto de partida, puntos tomados del Plano Nro. A-001, que linda por el nadir, Con el Séptimo piso, por el cenit, Con el Noveno piso. Nomenclatura Carrera 054 No. 153 S - 061 0804.",
+};
+
+const JAGGUA_BANCO_BOGOTA_QA_VALUES_NORMALIZED = Object.fromEntries(
+  Object.entries(JAGGUA_BANCO_BOGOTA_QA_VALUES).map(([key, value]) => [normalizeMarkedKey(key), value])
+);
+
 const MARKED_DECISION_SELECT_KEYS = new Set([
   "inmueble_sera_su_casa",
   "tiene_inmueble_afectado",
@@ -546,6 +632,33 @@ function getMarkedMoneySourceKeyForLetter(field: MarkedTemplateField): string | 
   return null;
 }
 
+function extractMarkedMoneyDigits(value: string | number | null | undefined): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function getMarkedLettersSuffix(moneyFieldKey: string, letterFieldKey: string): string {
+  const normalizedMoneyKey = normalizeMarkedKey(moneyFieldKey);
+  const normalizedLetterKey = normalizeMarkedKey(letterFieldKey);
+  if (
+    normalizedMoneyKey === "valor_de_la_venta_en_numeros" ||
+    normalizedMoneyKey === "valor_de_la_venta" ||
+    normalizedMoneyKey === "valor_venta_numeros" ||
+    normalizedMoneyKey === "valor_venta" ||
+    normalizedLetterKey === "valor_apartamento_en_letras"
+  ) {
+    return "PESOS MONEDA LEGAL";
+  }
+  return "PESOS";
+}
+
+function getMarkedLettersFromMoneyValue(value: string | number | null | undefined, moneyFieldKey: string, letterFieldKey: string): string {
+  const digits = extractMarkedMoneyDigits(value);
+  if (!digits) return "";
+  const amount = Number(digits);
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  return numeroALetrasConSufijo(amount, getMarkedLettersSuffix(moneyFieldKey, letterFieldKey));
+}
+
 function getMarkedBuyerFields(fields: MarkedTemplateField[], buyerIndex: 1 | 2 | 3) {
   const exactBuyerFields = fields.filter((field) => getMarkedBuyerIndex(field) === buyerIndex);
   const sharedBuyerOneFields = buyerIndex === 1 ? fields.filter((field) => isMarkedBuyerSharedField(field)) : [];
@@ -634,11 +747,18 @@ function isMarkedMoneyField(field: MarkedTemplateField): boolean {
   return isMarkedField(field, [
     "valor",
     "precio",
+    "cuantia",
+    "cuantía",
     "cuota",
+    "avaluo",
+    "avalúo",
+    "retencion",
+    "retención",
     "derechos",
     "iva",
     "aporte",
     "fondo",
+    "impuesto",
     "notariado",
     "superintendencia",
     "transferencia",
@@ -994,13 +1114,13 @@ function isMarkedDropdownField(field: MarkedTemplateField) {
 }
 
 function formatMarkedCOP(value: string): string {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  const digits = extractMarkedMoneyDigits(value);
   if (!digits) return "";
   return Number(digits).toLocaleString("es-CO");
 }
 
 function parseMarkedCOP(value: string): string {
-  return String(value ?? "").replace(/\D/g, "");
+  return extractMarkedMoneyDigits(value);
 }
 
 function getMarkedFieldTokens(field: MarkedTemplateField): string[] {
@@ -1048,6 +1168,110 @@ function getBestMarkedMoneyFieldForLetter(
   return bestScore > 0 ? best : null;
 }
 
+function getLinkedMarkedMoneyFieldForLetter(
+  letterField: MarkedTemplateField,
+  fields: MarkedTemplateField[],
+): MarkedTemplateField | null {
+  const linkedMoneyKey = getMarkedMoneySourceKeyForLetter(letterField);
+  if (linkedMoneyKey) {
+    const normalizedLinkedMoneyKey = normalizeMarkedKey(linkedMoneyKey);
+    return (
+      fields.find((candidate) => markedFieldKey(candidate) === normalizedLinkedMoneyKey) ??
+      getBestMarkedMoneyFieldForLetter(letterField, fields)
+    );
+  }
+  return getBestMarkedMoneyFieldForLetter(letterField, fields);
+}
+
+function withDerivedMarkedLetterValues(
+  fields: MarkedTemplateField[],
+  values: Record<string, string>,
+): Record<string, string> {
+  const next = { ...values };
+  fields.forEach((field) => {
+    if (!isMarkedLettersField(field)) return;
+    if (String(next[field.key] ?? "").trim()) return;
+    const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
+    if (!linkedMoneyField) return;
+    const derivedValue = getMarkedLettersFromMoneyValue(next[linkedMoneyField.key] ?? "", linkedMoneyField.key, field.key);
+    if (derivedValue) {
+      next[field.key] = derivedValue;
+    }
+  });
+  return next;
+}
+
+type DerivedMarkedMoneyLetterRule = {
+  moneyKey: string;
+  letterKey: string;
+  fallbackValue?: string;
+};
+
+const DERIVED_MARKED_MONEY_LETTER_RULES: DerivedMarkedMoneyLetterRule[] = [
+  {
+    moneyKey: "valor_de_la_venta_en_numeros",
+    letterKey: "valor_apartamento_en_letras",
+  },
+  {
+    moneyKey: "en_numeros_cuota_inicial",
+    letterKey: "en_letras_cuota_inicial",
+  },
+  {
+    moneyKey: "valor_del_acto_de_la_hipoteca",
+    letterKey: "valor_del_acto_de_la_hipoteca_en_letras",
+  },
+];
+
+function getMarkedFieldByNormalizedKey(fields: MarkedTemplateField[], normalizedKey: string): MarkedTemplateField | null {
+  return fields.find((field) => markedFieldKey(field) === normalizedKey) ?? null;
+}
+
+function applyDerivedMarkedMoneyLettersToValues(
+  baseValues: Record<string, string>,
+  fields: MarkedTemplateField[],
+): Record<string, string> {
+  const result = { ...baseValues };
+
+  DERIVED_MARKED_MONEY_LETTER_RULES.forEach(({ moneyKey, letterKey }) => {
+    const moneyField = getMarkedFieldByNormalizedKey(fields, normalizeMarkedKey(moneyKey));
+    const letterField = getMarkedFieldByNormalizedKey(fields, normalizeMarkedKey(letterKey));
+    if (!moneyField || !letterField) return;
+
+    const moneyValue = result[moneyField.key] ?? "";
+    const letterValue = getMarkedLettersFromMoneyValue(moneyValue, moneyField.key, letterField.key);
+    if (letterValue) {
+      result[letterField.key] = letterValue;
+    }
+  });
+
+  const originField = getMarkedFieldByNormalizedKey(fields, normalizeMarkedKey("origen_cuota_inicial"));
+  if (
+    originField &&
+    !String(result[originField.key] ?? "").trim() &&
+    process.env.NODE_ENV !== "production"
+  ) {
+    result[originField.key] = "recursos propios";
+  }
+
+  return result;
+}
+
+function getDerivedMarkedMoneyLetterDebugRows(
+  payload: Record<string, string>,
+  fields: MarkedTemplateField[],
+) {
+  return DERIVED_MARKED_MONEY_LETTER_RULES.map(({ moneyKey, letterKey }) => {
+    const moneyField = getMarkedFieldByNormalizedKey(fields, normalizeMarkedKey(moneyKey));
+    const letterField = getMarkedFieldByNormalizedKey(fields, normalizeMarkedKey(letterKey));
+    return {
+      moneyKey: moneyField?.key ?? moneyKey,
+      moneyValue: moneyField ? payload[moneyField.key] ?? "" : "",
+      letterKey: letterField?.key ?? letterKey,
+      letterValue: letterField ? payload[letterField.key] ?? "" : "",
+    };
+  });
+}
+
 function getMarkedStateCivilOptions(gender: MarkedGender | null) {
   if (gender === "M" || gender === "F") {
     return getEstadosCiviles(gender).map((value) => ({ value, label: value }));
@@ -1055,7 +1279,7 @@ function getMarkedStateCivilOptions(gender: MarkedGender | null) {
   if (gender === "J") {
     return [{ value: "No aplica", label: "No aplica" }];
   }
-  return [];
+  return [...MARKED_GENERAL_ESTADOS_CIVILES];
 }
 
 function getMarkedConcordanceSuggestion(
@@ -1145,18 +1369,34 @@ function MarkedTemplateSummary({ result }: { result: MarkedTemplateDetectResult 
 function MarkedFieldsForm({
   fields,
   values,
+  documentName,
+  onDocumentNameChange,
   onChange,
   onGenerate,
   onContinueToSummary,
+  onApplyQaPreset,
+  onCopyEmptyFields,
+  onCopyCurrentPayload,
+  onDownloadGeneratedQaDocx,
+  showQaPresetButton,
+  showGeneratedQaDownloadButton,
   isGenerating,
   showPendingWarning,
   showAmbiguousWarning,
 }: {
   fields: MarkedTemplateField[];
   values: Record<string, string>;
+  documentName: string;
+  onDocumentNameChange: (value: string) => void;
   onChange: (key: string, value: string) => void;
   onGenerate: () => void;
   onContinueToSummary: () => void;
+  onApplyQaPreset?: () => void;
+  onCopyEmptyFields?: () => void;
+  onCopyCurrentPayload?: () => void;
+  onDownloadGeneratedQaDocx?: () => void;
+  showQaPresetButton?: boolean;
+  showGeneratedQaDownloadButton?: boolean;
   isGenerating: boolean;
   showPendingWarning: boolean;
   showAmbiguousWarning: boolean;
@@ -1165,6 +1405,7 @@ function MarkedFieldsForm({
   const [markedGeoDepartments, setMarkedGeoDepartments] = useState<Record<string, string>>({});
   const [currentUserFullName, setCurrentUserFullName] = useState("");
   const [markedManualOverrides, setMarkedManualOverrides] = useState<Record<string, boolean>>({});
+  const [markedLetterManualOverrides, setMarkedLetterManualOverrides] = useState<Record<string, boolean>>({});
   const ambiguousFields = fields.filter((field) => isMarkedAmbiguousField(field));
   const visibleFields = fields.filter((field) => !isMarkedAmbiguousField(field));
 
@@ -1200,6 +1441,7 @@ function MarkedFieldsForm({
   function handleFieldChange(field: MarkedTemplateField, rawValue: string) {
     const kind = getMarkedFieldKind(field);
     let nextValue = normalizeDropdownFieldValue(rawValue);
+    const previousValue = values[field.key] ?? "";
 
     if (kind === "money") {
       nextValue = parseMarkedCOP(rawValue);
@@ -1216,8 +1458,10 @@ function MarkedFieldsForm({
     }
 
     if (kind === "gender") {
-      const validStateCivilValues = new Set(getMarkedStateCivilOptions(normalizeMarkedGender(nextValue)).map((option) => option.value));
-      const validNationalityValues = new Set(getMarkedNationalityOptions(normalizeMarkedGender(nextValue)).map((option) => option.value));
+      const normalizedGender = normalizeMarkedGender(nextValue);
+      if (!normalizedGender) return;
+      const validStateCivilValues = new Set(getMarkedStateCivilOptions(normalizedGender).map((option) => option.value));
+      const validNationalityValues = new Set(getMarkedNationalityOptions(normalizedGender).map((option) => option.value));
       fields.forEach((candidate) => {
         if (getMarkedFieldKind(candidate) !== "stateCivil") return;
         const linkedGenderKey = getMarkedStateCivilRelatedGenderKey(candidate, fields, values);
@@ -1241,26 +1485,36 @@ function MarkedFieldsForm({
       });
     }
 
-    if (kind !== "money") return;
-
-    const lettersValue = nextValue ? numeroALetras(Number(nextValue)) : "";
-    const linkedFieldKey = getMarkedLetterTargetKey(field);
-    if (linkedFieldKey && values[linkedFieldKey] != null) {
-      onChange(linkedFieldKey, lettersValue);
+    if (kind === "textarea" && isMarkedLettersField(field)) {
+      const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
+      const autoLetterValue = linkedMoneyField
+        ? getMarkedLettersFromMoneyValue(values[linkedMoneyField.key] ?? "", linkedMoneyField.key, field.key)
+        : "";
+      const isManualOverride = nextValue.trim() !== "" && nextValue.trim() !== autoLetterValue;
+      setMarkedLetterManualOverrides((prev) => ({ ...prev, [field.key]: isManualOverride }));
       return;
     }
 
+    if (kind !== "money") return;
+
     fields.forEach((candidate) => {
       if (!isMarkedLettersField(candidate)) return;
-      const linkedMoneyField = getBestMarkedMoneyFieldForLetter(candidate, fields);
-      if (linkedMoneyField?.key === field.key) {
-        onChange(candidate.key, lettersValue);
-      }
+      const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(candidate, fields);
+      if (linkedMoneyField?.key !== field.key) return;
+
+      const currentLetterValue = values[candidate.key] ?? "";
+      const previousAutoValue = getMarkedLettersFromMoneyValue(previousValue, field.key, candidate.key);
+      const nextAutoValue = getMarkedLettersFromMoneyValue(nextValue, field.key, candidate.key);
+      const hasManualOverride = Boolean(markedLetterManualOverrides[candidate.key] && currentLetterValue.trim());
+      const canAutofill = !currentLetterValue.trim() || currentLetterValue === previousAutoValue || !hasManualOverride;
+
+      if (!canAutofill) return;
+      onChange(candidate.key, nextAutoValue);
+      setMarkedLetterManualOverrides((prev) => ({ ...prev, [candidate.key]: false }));
     });
   }
 
   function getMarkedFieldPlaceholder(field: MarkedTemplateField, kind: string, relatedGender?: string | null, needsDepartment = false) {
-    if (kind === "stateCivil" && !relatedGender) return "Primero selecciona genero";
     if (needsDepartment) return "Primero selecciona departamento";
     if (kind === "money") return "Ej. 250.000.000";
     if (kind === "textarea") return "Se genera automaticamente; puedes ajustar el texto";
@@ -1306,33 +1560,25 @@ function MarkedFieldsForm({
     if (isMarkedNationalityField(field)) {
       const relatedGender = getMarkedNationalityRelatedGender(field, fields, values);
       const options = getMarkedNationalityOptions(relatedGender);
-      const disabled = !relatedGender;
       return (
         <div className="space-y-1">
           <select
-            value={disabled ? "" : displayValue}
+            value={displayValue}
             onChange={(e) => handleFieldChange(field, e.target.value)}
-            disabled={disabled}
             className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
           >
-            {disabled ? (
-              <option value="">Primero selecciona genero</option>
-            ) : (
-              <>
-                <option value="">Selecciona...</option>
-                {options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </>
-            )}
+            <option value="">Selecciona...</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <p className="text-[11px] text-soft leading-tight">
-            {disabled
-              ? "Primero selecciona genero"
-              : relatedGender === "J"
+            {relatedGender === "J"
               ? "Se muestran opciones congruentes con persona jurídica"
+              : relatedGender == null
+              ? "Puedes diligenciar la nacionalidad aunque el género no esté definido."
               : "Opciones filtradas por género relacionado"}
           </p>
         </div>
@@ -1396,8 +1642,8 @@ function MarkedFieldsForm({
                 disabled={!currentDept}
               >
                 <option value="">{currentDept ? "Selecciona..." : "Primero selecciona departamento"}</option>
-                {municipalities.map((m) => (
-                  <option key={m.codigo} value={m.nombre}>
+                {municipalities.map((m, index) => (
+                  <option key={`${m.codigo}-${m.nombre}-${index}`} value={m.nombre}>
                     {m.nombre}
                   </option>
                 ))}
@@ -1447,33 +1693,25 @@ function MarkedFieldsForm({
     if (kind === "stateCivil") {
       const relatedGender = getMarkedRelatedGender(field, fields, values);
       const options = getMarkedStateCivilOptions(relatedGender);
-      const disabled = !relatedGender;
       return (
         <div className="space-y-1">
           <select
-            value={disabled ? "" : displayValue}
+            value={displayValue}
             onChange={(e) => handleFieldChange(field, e.target.value)}
-            disabled={disabled}
             className="ep-input ep-select w-full min-w-0 rounded-2xl px-4 py-3 text-sm transition-all h-11 md:h-12"
           >
-            {disabled ? (
-              <option value="">Primero selecciona genero</option>
-            ) : (
-              <>
-                <option value="">Selecciona...</option>
-                {options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </>
-            )}
+            <option value="">Selecciona...</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <p className="text-[11px] text-soft leading-tight">
-            {disabled
-              ? "Primero selecciona genero"
-              : relatedGender === "J"
+            {relatedGender === "J"
               ? "Solo se permite No aplica"
+              : relatedGender == null
+              ? "Puedes diligenciar el estado civil aunque el género no esté definido."
               : "Opciones filtradas por género relacionado"}
           </p>
         </div>
@@ -1556,12 +1794,11 @@ function MarkedFieldsForm({
 
     if (kind === "textarea") {
       const suggestion = getMarkedConcordanceSuggestion(field, fields, values);
-      const linkedMoneyKey = getMarkedMoneySourceKeyForLetter(field);
-      const linkedMoneyField = linkedMoneyKey
-        ? fields.find((candidate) => candidate.key === linkedMoneyKey) ?? null
-        : getBestMarkedMoneyFieldForLetter(field, fields);
+      const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
       const linkedMoneyValue = linkedMoneyField ? values[linkedMoneyField.key] ?? "" : "";
-      const autoLetterValue = linkedMoneyValue ? numeroALetras(Number(linkedMoneyValue)) : "";
+      const autoLetterValue = linkedMoneyField
+        ? getMarkedLettersFromMoneyValue(linkedMoneyValue, linkedMoneyField.key, field.key)
+        : "";
       return (
         <div className="space-y-1">
           <textarea
@@ -1667,6 +1904,70 @@ function MarkedFieldsForm({
 
   return (
     <div className="space-y-4">
+      <div className="ep-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-ink">Generación</span>
+        </div>
+        <div className="p-5">
+          <label className="grid gap-1.5">
+            <span className="text-sm font-medium text-ink">Nombre de la minuta</span>
+            <input
+              type="text"
+              value={documentName}
+              onChange={(e) => onDocumentNameChange(e.target.value)}
+              placeholder="Ej: Compraventa Jaggua - Juan Camilo Vásquez - Apto 804"
+              className="ep-input w-full rounded-2xl px-4 py-3 text-sm transition-all"
+            />
+            <p className="text-[11px] text-soft leading-tight">
+              Si lo dejas vacío, EasyPro usará el nombre actual por defecto.
+            </p>
+          </label>
+        </div>
+      </div>
+
+      {showQaPresetButton ? (
+        <div className="rounded-2xl border border-dashed border-line-strong/70 bg-panel-soft/40 px-4 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink">Preset local de QA</p>
+              <p className="text-xs text-soft mt-0.5">Autollena los campos detectados para la prueba JAGGUA Banco Bogotá.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onApplyQaPreset}
+                className="inline-flex h-10 items-center justify-center rounded-2xl border border-[var(--line)] bg-white px-4 text-sm font-semibold text-primary transition-all hover:border-primary"
+              >
+                Autollenar prueba JAGGUA Banco Bogotá
+              </button>
+              <button
+                type="button"
+                onClick={onCopyEmptyFields}
+                className="inline-flex h-10 items-center justify-center rounded-2xl border border-[var(--line)] bg-white px-4 text-sm font-semibold text-primary transition-all hover:border-primary"
+              >
+                Copiar campos vacíos
+              </button>
+              <button
+                type="button"
+                onClick={onCopyCurrentPayload}
+                className="inline-flex h-10 items-center justify-center rounded-2xl border border-[var(--line)] bg-white px-4 text-sm font-semibold text-primary transition-all hover:border-primary"
+              >
+                Copiar payload actual
+              </button>
+              {showGeneratedQaDownloadButton ? (
+                <button
+                  type="button"
+                  onClick={onDownloadGeneratedQaDocx}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl border border-[var(--line)] bg-white px-4 text-sm font-semibold text-primary transition-all hover:border-primary"
+                >
+                  Descargar DOCX generado (QA)
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="ep-card rounded-2xl overflow-hidden">
         <div className="px-5 py-3.5 border-b border-line/70 flex items-center justify-between gap-3">
           <span className="text-sm font-semibold text-ink">Datos básicos e inmueble</span>
@@ -1866,6 +2167,7 @@ function MarkedFieldsForm({
         )}
         <div className="flex flex-col gap-3 sm:flex-row">
           <button
+            type="button"
             onClick={onGenerate}
             disabled={isGenerating}
             className={[
@@ -1882,6 +2184,7 @@ function MarkedFieldsForm({
             )}
           </button>
           <button
+            type="button"
             onClick={onContinueToSummary}
             className="w-full h-12 rounded-2xl border border-line-strong text-sm font-semibold text-ink hover:border-primary hover:text-primary transition-all"
           >
@@ -2239,8 +2542,8 @@ function InmuebleCard({
               disabled={!inmueble.departamento}
             >
               <option value="">Selecciona...</option>
-              {getMunicipiosByDepartamento(inmueble.departamento ?? "").map(m => (
-                <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
+              {getMunicipiosByDepartamento(inmueble.departamento ?? "").map((m, index) => (
+                <option key={`${m.codigo}-${m.nombre}-${index}`} value={m.nombre}>{m.nombre}</option>
               ))}
             </select>
           </label>
@@ -2410,8 +2713,8 @@ function NotariaCard({
             disabled={!depNotaria}
           >
             <option value="">Selecciona...</option>
-            {getMunicipiosByDepartamento(depNotaria).map(m => (
-              <option key={m.codigo} value={m.nombre}>{m.nombre}</option>
+            {getMunicipiosByDepartamento(depNotaria).map((m, index) => (
+              <option key={`${m.codigo}-${m.nombre}-${index}`} value={m.nombre}>{m.nombre}</option>
             ))}
           </select>
         </label>
@@ -2682,6 +2985,7 @@ function AdquisicionCard({
 // ─── Tour ─────────────────────────────────────────────────────────────────────
 
 const TOUR_KEY = "easypro_minutas_tour_done";
+const MARKED_QA_GENERATED_RESULT_KEY = "easypro_marked_template_qa_generated_result";
 
 // ─── Tour steps ───────────────────────────────────────────────────────────────
 
@@ -2744,7 +3048,10 @@ export function NuevaMinutaWorkspace() {
   });
   const [adquisicionEdit, setAdquisicionEdit] = useState<MinutaAdquisicion>(EMPTY_ADQUISICION);
   const [markedFieldValues, setMarkedFieldValues] = useState<Record<string, string>>({});
+  const [markedDocumentName, setMarkedDocumentName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [qaFeedback, setQaFeedback] = useState<string | null>(null);
+  const [lastMarkedGeneratedResult, setLastMarkedGeneratedResult] = useState<MinutaGenerarResult | null>(null);
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -2757,6 +3064,20 @@ export function NuevaMinutaWorkspace() {
 
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) setTourVisible(true);
+  }, []);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" || typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem(MARKED_QA_GENERATED_RESULT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as MinutaGenerarResult;
+      if (parsed && parsed.download_url) {
+        setLastMarkedGeneratedResult(parsed);
+      }
+    } catch {
+      // Ignorar estado inválido en entorno local.
+    }
   }, []);
 
   function handleTourNext() {
@@ -2787,6 +3108,7 @@ export function NuevaMinutaWorkspace() {
       setAnalisisResult(null);
       setMarkedTemplateResult(null);
       setMarkedFieldValues({});
+      setMarkedDocumentName("");
       setPersonas([]);
       setInmuebleEdit(EMPTY_INMUEBLE);
       setNotariaEdit(EMPTY_NOTARIA);
@@ -2802,6 +3124,7 @@ export function NuevaMinutaWorkspace() {
     setAnalisisResult(null);
     setMarkedTemplateResult(null);
     setMarkedFieldValues({});
+    setMarkedDocumentName("");
     setPersonas([]);
     setInmuebleEdit(EMPTY_INMUEBLE);
     setNotariaEdit(EMPTY_NOTARIA);
@@ -2815,6 +3138,7 @@ export function NuevaMinutaWorkspace() {
     setAnalisisResult(null);
     setMarkedTemplateResult(null);
     setMarkedFieldValues({});
+    setMarkedDocumentName("");
     setPersonas([]);
     setInmuebleEdit(EMPTY_INMUEBLE);
     setNotariaEdit(EMPTY_NOTARIA);
@@ -2842,6 +3166,7 @@ export function NuevaMinutaWorkspace() {
       setMarkedFieldValues(
         Object.fromEntries(effectiveFields.map((field) => [field.key, ""]))
       );
+      setMarkedDocumentName("");
       setStep(1);
     } catch (err) {
       const message = err instanceof Error && err.message && err.message !== "Failed to fetch"
@@ -2975,20 +3300,132 @@ export function NuevaMinutaWorkspace() {
     setMarkedFieldValues((prev) => ({ ...prev, [key]: normalizeDropdownFieldValue(value) }));
   }
 
+  async function copyTextToClipboard(text: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+  }
+
+  function applyJagguaBancoBogotaQaPreset() {
+    setMarkedFieldValues((prev) => {
+      const next = { ...prev };
+      markedTemplateFields.forEach((field) => {
+        const presetValue = JAGGUA_BANCO_BOGOTA_QA_VALUES_NORMALIZED[markedFieldKey(field)];
+        if (presetValue == null) return;
+        next[field.key] = isMarkedMoneyField(field) ? parseMarkedCOP(presetValue) : normalizeDropdownFieldValue(presetValue);
+      });
+      return withDerivedMarkedLetterValues(markedTemplateFields, next);
+    });
+  }
+
+  async function handleCopyMarkedEmptyFields() {
+    const emptyFields = markedTemplateFields
+      .filter((field) => !String(markedFieldValues[field.key] ?? "").trim())
+      .map((field) => ({
+        key: field.key,
+        label: field.label,
+        section: field.section,
+      }));
+
+    const output = emptyFields.length > 0
+      ? emptyFields.map((field) => `${field.key} | ${field.label} | ${field.section}`).join("\n")
+      : "Sin campos vacíos detectados.";
+
+    try {
+      await copyTextToClipboard(output);
+      if (process.env.NODE_ENV !== "production") {
+        console.table(emptyFields);
+      }
+      setQaFeedback(
+        emptyFields.length > 0
+          ? `Se copiaron ${emptyFields.length} campos vacíos al portapapeles.`
+          : "No hay campos vacíos en la plantilla detectada."
+      );
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible copiar la lista de campos vacíos.");
+    }
+  }
+
+  async function handleCopyMarkedCurrentPayload() {
+    const payload = getSanitizedMarkedFieldValues(markedTemplateFields);
+    try {
+      await copyTextToClipboard(JSON.stringify(payload, null, 2));
+      if (process.env.NODE_ENV !== "production") {
+        console.table(payload);
+        console.table(getDerivedMarkedMoneyLetterDebugRows(payload, markedTemplateFields));
+      }
+      setQaFeedback("Payload actual copiado al portapapeles.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible copiar el payload actual.");
+    }
+  }
+
+  async function handleDownloadGeneratedQaDocx() {
+    if (!lastMarkedGeneratedResult?.download_url) {
+      setError("Todavía no hay un DOCX generado disponible para descargar.");
+      return;
+    }
+
+    try {
+      const response = await fetch(lastMarkedGeneratedResult.download_url, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("No fue posible descargar el DOCX generado.");
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = lastMarkedGeneratedResult.filename || "minuta_generada.docx";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      setQaFeedback("DOCX generado descargado para QA.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible descargar el DOCX generado.");
+    }
+  }
+
   function getSanitizedMarkedFieldValues(fields: MarkedTemplateField[]) {
-    return Object.fromEntries(
+    const valuesWithDerivedLetters = withDerivedMarkedLetterValues(fields, markedFieldValues);
+    const baseValues = Object.fromEntries(
       fields.map((field) => {
-        const value = markedFieldValues[field.key] ?? "";
-        return [field.key, isMarkedDropdownField(field) ? normalizeDropdownFieldValue(value) : value];
+        const value = valuesWithDerivedLetters[field.key] ?? "";
+        if (isMarkedDropdownField(field)) {
+          return [field.key, normalizeDropdownFieldValue(value)];
+        }
+        if (isMarkedMoneyField(field)) {
+          return [field.key, value ? formatMarkedCOP(value) : ""];
+        }
+        return [field.key, value];
       })
     );
+    return applyDerivedMarkedMoneyLettersToValues(baseValues, fields);
   }
 
   async function handleGenerar() {
     if (!file) return;
 
     if (markedTemplateResult && !analisisResult) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("### MARKED GENERATE CLICK ###");
+      }
       setError(null);
+      setQaFeedback(null);
       setIsGenerating(true);
       setAiModalTitle("Generando documento sin IA");
       setAiModalSubtitle("Aplicando reemplazos determinísticos");
@@ -3023,7 +3460,26 @@ export function NuevaMinutaWorkspace() {
       try {
         await new Promise((r) => setTimeout(r, 450));
         setAiProgress(45);
-        const result = await generateMarkedTemplate(file, getSanitizedMarkedFieldValues(markedTemplateFields), markedTemplateFields);
+        const sanitizedValues = getSanitizedMarkedFieldValues(markedTemplateFields);
+        if (process.env.NODE_ENV !== "production") {
+          console.table({
+            valor_de_la_venta_en_numeros: sanitizedValues.valor_de_la_venta_en_numeros ?? "",
+            valor_apartamento_en_letras: sanitizedValues.valor_apartamento_en_letras ?? "",
+            en_numeros_cuota_inicial: sanitizedValues.en_numeros_cuota_inicial ?? "",
+            en_letras_cuota_inicial: sanitizedValues.en_letras_cuota_inicial ?? "",
+            valor_del_acto_de_la_hipoteca: sanitizedValues.valor_del_acto_de_la_hipoteca ?? "",
+            valor_del_acto_de_la_hipoteca_en_letras: sanitizedValues.valor_del_acto_de_la_hipoteca_en_letras ?? "",
+            origen_cuota_inicial: sanitizedValues.origen_cuota_inicial ?? "",
+          });
+        }
+        const result = await generateMarkedTemplate(file, sanitizedValues, markedTemplateFields, markedDocumentName);
+        if (process.env.NODE_ENV !== "production") {
+          console.log("### MARKED GENERATE RESPONSE ###", result);
+        }
+        setLastMarkedGeneratedResult(result);
+        if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+          window.sessionStorage.setItem(MARKED_QA_GENERATED_RESULT_KEY, JSON.stringify(result));
+        }
         updateStep("replace", "done", "Reemplazos aplicados");
         updateStep("save", "active");
         setAiProgress(80);
@@ -3127,6 +3583,16 @@ export function NuevaMinutaWorkspace() {
         </div>
       )}
 
+      {qaFeedback && process.env.NODE_ENV !== "production" && (
+        <div className="ep-kpi-success rounded-xl px-4 py-3 flex items-start gap-3 mb-6">
+          <CheckCircle2 size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+          <p className="text-sm">{qaFeedback}</p>
+          <button onClick={() => setQaFeedback(null)} className="ml-auto text-emerald-500 hover:text-emerald-700">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* ── PASO 1 ── */}
       {step === 0 && (
         <div className="space-y-5">
@@ -3219,9 +3685,17 @@ export function NuevaMinutaWorkspace() {
             <MarkedFieldsForm
               fields={markedTemplateFields}
               values={markedFieldValues}
+              documentName={markedDocumentName}
+              onDocumentNameChange={setMarkedDocumentName}
               onChange={updateMarkedFieldValue}
               onGenerate={handleGenerar}
               onContinueToSummary={() => setStep(2)}
+              onApplyQaPreset={applyJagguaBancoBogotaQaPreset}
+              onCopyEmptyFields={() => void handleCopyMarkedEmptyFields()}
+              onCopyCurrentPayload={() => void handleCopyMarkedCurrentPayload()}
+              onDownloadGeneratedQaDocx={() => void handleDownloadGeneratedQaDocx()}
+              showQaPresetButton={process.env.NODE_ENV !== "production"}
+              showGeneratedQaDownloadButton={process.env.NODE_ENV !== "production" && Boolean(lastMarkedGeneratedResult?.download_url)}
               isGenerating={isGenerating}
               showPendingWarning={markedPendingCount > 0}
               showAmbiguousWarning={markedAmbiguousCount > 0}
@@ -3404,6 +3878,7 @@ export function NuevaMinutaWorkspace() {
 
           <button
             id="tour-btn-generar"
+            type="button"
             onClick={handleGenerar} disabled={!canGenerate || isGenerating}
             className={[
               "w-full h-14 rounded-2xl font-bold text-base flex items-center justify-center gap-3 transition-all",

@@ -45,6 +45,12 @@ function normalizeActTypeLabel(value: string): string {
   return value;
 }
 
+function resolveCaseCardTitle(item: CaseRecord): string {
+  const displayName = item.display_name?.trim();
+  if (displayName) return displayName;
+  return item.act_type;
+}
+
 function suggestedAction(item: CaseRecord, roleCodes: string[]) {
   const roles = new Set(roleCodes);
   if (roles.has("super_admin")) {
@@ -274,7 +280,7 @@ export function CasesWorkspace() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Minuta</span>
-                      <h3 className="truncate text-lg font-semibold text-primary">{item.act_type}</h3>
+                      <h3 className="truncate text-lg font-semibold text-primary">{resolveCaseCardTitle(item)}</h3>
                     </div>
                     <p className="mt-2 text-sm text-secondary">Plantilla dinámica · Minuta {item.year}-{String(item.consecutive).padStart(4, "0")} · {formatNotaryOptionLabel(notaries.find((notary) => notary.id === item.notary_id) ?? { notary_label: item.notary_label, municipality: "", commercial_name: "" })}</p>
                     <p className="mt-2 text-sm leading-6 text-secondary">Responsable: {item.current_owner_user_name || "Sin asignar"}</p>

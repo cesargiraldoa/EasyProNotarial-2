@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 import tempfile
 import traceback
@@ -27,6 +28,35 @@ from app.services.minuta.marked_template_generator import apply_marked_template_
 from app.modules.minuta.router import _make_file_token, _resolve_public_api_base
 
 router = APIRouter(prefix="/minutas", tags=["minutas"])
+
+
+def _sanitize_marked_document_name(raw_name: str | None, fallback_filename: str) -> tuple[str, str]:
+    fallback_stem = Path(fallback_filename or "minuta").stem or "minuta"
+    candidate = (raw_name or "").strip()
+    if not candidate:
+        return f"minuta_generada_{fallback_stem}.docx", f"minuta_generada_{fallback_stem}"
+
+    candidate = re.sub(r'[\x00-\x1f<>:"/\\\\|?*]+', " ", candidate)
+    candidate = re.sub(r"\s+", " ", candidate).strip(" .")
+    if not candidate:
+        return f"minuta_generada_{fallback_stem}.docx", f"minuta_generada_{fallback_stem}"
+
+    suffix = Path(candidate).suffix.lower()
+    if suffix == ".docx":
+        stem = candidate[: -len(suffix)].strip()
+    else:
+        stem = candidate
+        suffix = ".docx"
+
+    stem = re.sub(r"\s+", " ", stem).strip(" .")
+    if not stem:
+        stem = f"minuta_generada_{fallback_stem}"
+
+    stem = stem[:180].rstrip(" .")
+    if not stem:
+        stem = f"minuta_generada_{fallback_stem}"
+
+    return f"{stem}{suffix}", stem
 
 
 def _resolve_marked_template_notary_id(db: Session, current_user: User) -> int:
@@ -132,6 +162,7 @@ async def generate_marked_template_endpoint(
     archivo: UploadFile = File(..., description="Archivo .docx de minuta marcada por humano"),
     values: str = Form(..., description="JSON con los valores del formulario marcado"),
     fields: str | None = Form(None, description="JSON opcional con metadata de campos detectados"),
+    document_name: str | None = Form(None, description="Nombre opcional de salida para la minuta"),
     case_id: int | None = Form(None, description="ID opcional del caso existente"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -203,8 +234,7 @@ async def generate_marked_template_endpoint(
         Path(path_entrada).unlink(missing_ok=True)
         Path(path_salida).unlink(missing_ok=True)
 
-    original_stem = Path(archivo.filename).stem if archivo.filename else "minuta"
-    display_name = f"minuta_generada_{original_stem}.docx"
+    display_name, document_title = _sanitize_marked_document_name(document_name, archivo.filename or "minuta.docx")
     if case_id is not None:
         case = db.query(Case).filter(Case.id == case_id).first()
         if case is None:
@@ -213,13 +243,13 @@ async def generate_marked_template_endpoint(
         if case.notary_id not in manageable_notary_ids:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para usar esta minuta.")
     else:
-        case = _create_marked_template_case(db, current_user, archivo.filename or "minuta.docx")
+        case = _create_marked_template_case(db, current_user, display_name)
 
     version = persist_case_document_version(
         db,
         case,
         "marked_template",
-        "Minuta marcada",
+        document_title,
         "docx",
         content_out,
         display_name,
@@ -230,6 +260,7 @@ async def generate_marked_template_endpoint(
                 "source": "marked_template",
                 "fields": fields_data,
                 "values": values_data,
+                "document_name": document_title,
             },
             ensure_ascii=False,
         ),

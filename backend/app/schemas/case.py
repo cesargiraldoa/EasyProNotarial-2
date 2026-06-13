@@ -278,6 +278,7 @@ class CaseSummary(BaseModel):
     substitute_notary_user_name: str | None = None
     requires_client_review: bool
     final_signed_uploaded: bool
+    display_name: str | None = None
     approved_at: datetime | None = None
     approved_by_user_id: int | None = None
     approved_by_user_name: str | None = None

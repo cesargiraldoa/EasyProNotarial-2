@@ -269,11 +269,16 @@ export async function generateMarkedTemplate(
   file: File,
   values: Record<string, string>,
   fields: MarkedTemplateField[],
+  documentName?: string,
 ): Promise<MinutaGenerarResult> {
   const form = new FormData();
   form.append("archivo", file);
   form.append("values", JSON.stringify(values ?? {}));
   form.append("fields", JSON.stringify(fields ?? []));
+  const normalizedDocumentName = (documentName ?? "").trim();
+  if (normalizedDocumentName) {
+    form.append("document_name", normalizedDocumentName);
+  }
   const response = await fetch(buildApiUrl("/api/v1/minutas/marked-template/generate"), {
     method: "POST",
     headers: authHeaders(),

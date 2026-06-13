@@ -215,6 +215,7 @@ export type CasePayload = {
 export type CaseRecord = CasePayload & {
   id: number;
   notary_label: string;
+  display_name?: string | null;
   current_owner_user_name?: string | null;
   client_user_name?: string | null;
   protocolist_user_name?: string | null;
