@@ -15,6 +15,7 @@ from app.services.minuta.marked_template_generator import (
     is_second_buyer_empty,
     validate_gender_concordance,
 )
+from app.services.minuta.engine.notarial_document_engine import NotarialDocumentEngine, NotarialRenderBlockedError
 
 
 class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
@@ -180,6 +181,147 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             self.assertEqual(red_runs[0].font.color.rgb, RGBColor(0xFF, 0x00, 0x00))
             self.assertTrue(red_runs[0].bold)
             self.assertTrue(generated_paragraph.runs[0].bold)
+
+    def test_notarial_dashes_are_preserved_and_technical_token_becomes_tab(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+
+            doc = Document()
+            paragraph = doc.add_paragraph()
+            paragraph.add_run("CLASES DE ACTOS: - - - - - - ")
+            paragraph.add_run("{{acto}}")
+            paragraph.add_run(" - - - - ")
+            paragraph.add_run("[[--]]")
+            paragraph.add_run(" FINAL")
+            doc.save(source)
+
+            stats = apply_marked_template_replacements(
+                source,
+                target,
+                {"acto": "COMPRAVENTA"},
+                [{"key": "acto", "label": "Acto", "section": "actos", "raw_markers": ["{{acto}}"]}],
+            )
+
+            generated_paragraph = Document(str(target)).paragraphs[0]
+            text = generated_paragraph.text
+
+            self.assertIn("CLASES DE ACTOS: - - - - - - COMPRAVENTA - - - - \t FINAL", text)
+            self.assertNotIn("[[--]]", text)
+            self.assertEqual(stats["technical_tabs_resolved"], 1)
+            self.assertGreaterEqual(stats["notarial_dash_sequences_preserved"], 2)
+
+            red_runs = [run for run in generated_paragraph.runs if run.text == "COMPRAVENTA"]
+            self.assertEqual(len(red_runs), 1)
+            self.assertEqual(red_runs[0].font.color.rgb, RGBColor(0xFF, 0x00, 0x00))
+            self.assertIn("<w:tab", generated_paragraph._p.xml)
+            self.assertEqual(generated_paragraph.runs[0].text, "CLASES DE ACTOS: - - - - - - ")
+            self.assertEqual(generated_paragraph.runs[-1].text, " FINAL")
+
+    def test_engine_generates_with_two_complete_buyers(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("Compradores: {{NOMBRE_COMPRADOR_1}} y {{NOMBRE_COMPRADOR_2}}")
+            doc.save(source)
+
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {
+                    "nombre_comprador_1": "JUAN CAMILO",
+                    "nombre_comprador_2": "MARIA PEREZ",
+                    "numero_documento_comprador_2": "123",
+                },
+                [
+                    {"key": "nombre_comprador_1", "label": "Comprador 1", "raw_markers": ["{{NOMBRE_COMPRADOR_1}}"]},
+                    {"key": "nombre_comprador_2", "label": "Comprador 2", "raw_markers": ["{{NOMBRE_COMPRADOR_2}}"]},
+                ],
+            )
+
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertIn("JUAN CAMILO y MARIA PEREZ", Document(str(target)).paragraphs[0].text)
+
+    def test_engine_blocks_two_buyer_template_with_one_buyer_data(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("Compradores: {{NOMBRE_COMPRADOR_1}} y {{NOMBRE_COMPRADOR_2}}")
+            doc.save(source)
+
+            with self.assertRaises(NotarialRenderBlockedError):
+                NotarialDocumentEngine().render_marked_template(
+                    source,
+                    target,
+                    {"nombre_comprador_1": "JUAN CAMILO"},
+                    [
+                        {"key": "nombre_comprador_1", "label": "Comprador 1", "raw_markers": ["{{NOMBRE_COMPRADOR_1}}"]},
+                        {"key": "nombre_comprador_2", "label": "Comprador 2", "raw_markers": ["{{NOMBRE_COMPRADOR_2}}"]},
+                    ],
+                )
+
+    def test_engine_formats_money_letters_date_residuals_and_conditional_block(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("Precio {{VALOR_VENTA}} letras {{VALOR_LETRAS}} fecha {{FECHA_OTORGAMIENTO}} [[--]] [Número]")
+            doc.add_paragraph("[SI APLICA] Afectación a vivienda familiar {{QUEDA_AFECTADO}}")
+            doc.save(source)
+
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {
+                    "valor_de_la_venta_en_numeros": "212600000",
+                    "fecha_otorgamiento": "2025-06-12",
+                    "queda_afectado": "NO",
+                },
+                [
+                    {"key": "valor_de_la_venta_en_numeros", "label": "Valor de la venta", "section": "values", "raw_markers": ["{{VALOR_VENTA}}"]},
+                    {"key": "valor_apartamento_en_letras", "label": "Valor apartamento en letras", "section": "values", "raw_markers": ["{{VALOR_LETRAS}}"]},
+                    {"key": "fecha_otorgamiento", "label": "Fecha otorgamiento", "section": "protocol", "raw_markers": ["{{FECHA_OTORGAMIENTO}}"]},
+                    {"key": "queda_afectado", "label": "Queda afectado", "section": "decisions", "raw_markers": ["{{QUEDA_AFECTADO}}"]},
+                ],
+            )
+
+            text = "\n".join(paragraph.text for paragraph in Document(str(target)).paragraphs)
+            self.assertIn("212.600.000", text)
+            self.assertIn("DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA LEGAL", text)
+            self.assertIn("doce (12) días del mes de junio del año DOS MIL VEINTICINCO (2025)".lower(), text.lower())
+            self.assertNotIn("[[--]]", text)
+            self.assertIn("\t", text)
+            self.assertNotIn("[Número]", text)
+            self.assertNotIn("[SI APLICA]", text)
+            self.assertGreaterEqual(result.statistics["total_replacements"], 4)
+            self.assertEqual(result.statistics["technical_tabs_resolved"], 1)
+            self.assertEqual(result.audit.residual_tokens, [])
+
+    def test_engine_reports_replaced_empty_missing_and_unresolved_placeholders(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("A {{A}} B {{B}} vivo {{C}}")
+            doc.save(source)
+
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"a": "uno", "b": ""},
+                [
+                    {"key": "a", "label": "A", "raw_markers": ["{{A}}"]},
+                    {"key": "b", "label": "B", "raw_markers": ["{{B}}"]},
+                    {"key": "d", "label": "D", "raw_markers": ["{{D}}"]},
+                ],
+            )
+
+            self.assertTrue(result.audit.replaced)
+            self.assertTrue(result.audit.empty)
+            self.assertTrue(result.audit.missing)
+            self.assertIn("{{C}}", result.audit.unresolved_placeholders)
 
 
 if __name__ == "__main__":

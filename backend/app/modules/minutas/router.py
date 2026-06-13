@@ -24,7 +24,7 @@ from app.services.case_numbering import (
 )
 from app.services.document_persistence import persist_case_document_version
 from app.services.minuta.marked_template_detector import detect_marked_template
-from app.services.minuta.marked_template_generator import apply_marked_template_replacements
+from app.services.minuta.marked_template_generator import NotarialRenderBlockedError, apply_marked_template_replacements
 from app.modules.minuta.router import _make_file_token, _resolve_public_api_base
 
 router = APIRouter(prefix="/minutas", tags=["minutas"])
@@ -220,6 +220,23 @@ async def generate_marked_template_endpoint(
     try:
         stats_raw = apply_marked_template_replacements(path_entrada, path_salida, values_data, fields_data)
         content_out = Path(path_salida).read_bytes()
+    except NotarialRenderBlockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "La plantilla no es compatible con los datos diligenciados.",
+                "blockers": [
+                    {**issue.__dict__, "severity": issue.severity.value}
+                    for issue in exc.issues
+                    if issue.severity.value == "blocker"
+                ],
+                "warnings": [
+                    {**issue.__dict__, "severity": issue.severity.value}
+                    for issue in exc.issues
+                    if issue.severity.value == "warning"
+                ],
+            },
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -281,6 +298,21 @@ async def generate_marked_template_endpoint(
         "filename": display_name,
         "onlyoffice_path": onlyoffice_path,
         "download_url": download_url,
+        "audit": stats_raw.get("audit", {}),
+        "warnings": stats_raw.get("warnings", []),
+        "blockers": stats_raw.get("blockers", []),
+        "statistics": {
+            "total_replacements": int(stats_raw.get("total_replacements", 0) or 0),
+            "empty_count": int(stats_raw.get("empty_count", 0) or 0),
+            "missing_count": int(stats_raw.get("missing_count", 0) or 0),
+            "unresolved_placeholders_count": int(stats_raw.get("unresolved_placeholders_count", 0) or 0),
+            "residual_tokens_count": int(stats_raw.get("residual_tokens_count", 0) or 0),
+            "warnings_count": int(stats_raw.get("warnings_count", 0) or 0),
+            "blockers_count": int(stats_raw.get("blockers_count", 0) or 0),
+            "technical_tabs_resolved": int(stats_raw.get("technical_tabs_resolved", 0) or 0),
+            "notarial_dash_sequences_preserved": int(stats_raw.get("notarial_dash_sequences_preserved", 0) or 0),
+            "red_runs_detected": int(stats_raw.get("red_runs_detected", 0) or 0),
+        },
         "estadisticas": {
             "total_reemplazos": int(stats_raw.get("total_replacements", 0) or 0),
             "por_etiqueta": stats_raw.get("by_key", {}) or {},
