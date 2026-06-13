@@ -50,6 +50,8 @@ class RenderAudit:
     red_runs_detected: int = 0
     empty_signature_blocks_detected: int = 0
     empty_signature_blocks_removed: int = 0
+    optional_segments_omitted: int = 0
+    optional_segments_omitted_keys: list[str] = field(default_factory=list)
 
     @property
     def warnings(self) -> list[RenderIssue]:
@@ -77,6 +79,8 @@ class RenderAudit:
             "red_runs_detected": self.red_runs_detected,
             "empty_signature_blocks_detected": self.empty_signature_blocks_detected,
             "empty_signature_blocks_removed": self.empty_signature_blocks_removed,
+            "optional_segments_omitted": self.optional_segments_omitted,
+            "optional_segments_omitted_keys": self.optional_segments_omitted_keys,
         }
 
 

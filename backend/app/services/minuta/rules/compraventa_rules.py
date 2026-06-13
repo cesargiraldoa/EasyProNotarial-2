@@ -34,13 +34,14 @@ def validate_required_actors(required_roles: set[str], values: dict[str, str]) -
 
 
 REQUIRED_FIELD_MESSAGES = {
-    "origen_cuota_inicial": "El campo origen_cuota_inicial es requerido para completar la cláusula de forma de pago.",
     "valor_de_la_venta_en_numeros": "El valor de la venta es requerido para completar la cláusula cuarta.",
     "valor_apartamento_en_letras": "El valor de la venta en letras es requerido para completar la cláusula cuarta.",
     "en_numeros_cuota_inicial": "El valor numérico de la cuota inicial es requerido para completar la cláusula cuarta.",
     "en_letras_cuota_inicial": "El valor de la cuota inicial en letras es requerido para completar la cláusula cuarta.",
     "valor_del_acto_de_la_hipoteca": "El valor del acto de la hipoteca es requerido para completar el saldo con crédito hipotecario.",
     "valor_del_acto_de_la_hipoteca_en_letras": "El valor de la hipoteca en letras es requerido para completar el saldo con crédito hipotecario.",
+    "numero_apartamento": "El apartamento o unidad privada es requerido para identificar el inmueble.",
+    "numero_matricula": "La matrícula inmobiliaria es requerida para identificar el inmueble.",
     "nombre_comprador_1": "El nombre del comprador 1 es requerido.",
     "tipo_documento_comprador_1": "El tipo de documento del comprador 1 es requerido.",
     "numero_documento_comprador_1": "El número de documento del comprador 1 es requerido.",

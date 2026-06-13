@@ -97,6 +97,8 @@ class NotarialDocumentEngine:
             "red_runs_detected": audit.red_runs_detected,
             "empty_signature_blocks_detected": audit.empty_signature_blocks_detected,
             "empty_signature_blocks_removed": audit.empty_signature_blocks_removed,
+            "optional_segments_omitted": audit.optional_segments_omitted,
+            "optional_segments_omitted_keys": audit.optional_segments_omitted_keys,
         }
 
     def _by_key(self, audit: RenderAudit) -> dict[str, int]:

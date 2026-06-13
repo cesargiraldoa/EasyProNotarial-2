@@ -314,6 +314,8 @@ async def generate_marked_template_endpoint(
             "red_runs_detected": int(stats_raw.get("red_runs_detected", 0) or 0),
             "empty_signature_blocks_detected": int(stats_raw.get("empty_signature_blocks_detected", 0) or 0),
             "empty_signature_blocks_removed": int(stats_raw.get("empty_signature_blocks_removed", 0) or 0),
+            "optional_segments_omitted": int(stats_raw.get("optional_segments_omitted", 0) or 0),
+            "optional_segments_omitted_keys": stats_raw.get("optional_segments_omitted_keys", []) or [],
         },
         "estadisticas": {
             "total_reemplazos": int(stats_raw.get("total_replacements", 0) or 0),

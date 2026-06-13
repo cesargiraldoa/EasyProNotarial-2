@@ -74,8 +74,6 @@ def _derive_missing_marked_values(normalized_values: dict[str, str], normalized_
     fields = [{"key": key, "label": key, "section": "values", "raw_markers": []} for key in normalized_field_keys]
     context = ContextBuilder().build(normalized_values, fields)
     derived = context.normalized_values
-    if "origen_cuota_inicial" in normalized_field_keys and not derived.get("origen_cuota_inicial", "").strip():
-        derived["origen_cuota_inicial"] = "recursos propios"
     return derived
 
 

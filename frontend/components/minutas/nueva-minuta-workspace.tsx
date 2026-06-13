@@ -3029,6 +3029,18 @@ const TOUR_STEPS: TourStep[] = [
 
 // ─── Main workspace ───────────────────────────────────────────────────────────
 
+function getMarkedGenerationWarningMessage(warnings: MinutaGenerarResult["warnings"]): string | null {
+  const firstWarning = (warnings ?? []).find((warning) => warning?.severity === "warning" || !warning?.severity);
+  if (!firstWarning) return null;
+  if (firstWarning.code === "optional_field_omitted" && firstWarning.field_key === "origen_cuota_inicial") {
+    return "Sugerencia: puedes diligenciar Origen cuota inicial para mayor precisión de la cláusula de pago.";
+  }
+  if (firstWarning.code === "optional_field_omitted") {
+    return "Sugerencia: puedes diligenciar los campos descriptivos de forma de pago para mayor precisión documental.";
+  }
+  return firstWarning.message ? `Sugerencia: ${firstWarning.message}` : null;
+}
+
 export function NuevaMinutaWorkspace() {
   const router = useRouter();
   const [step, setStep] = useState<0 | 1 | 2>(0);
@@ -3051,6 +3063,7 @@ export function NuevaMinutaWorkspace() {
   const [markedDocumentName, setMarkedDocumentName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [qaFeedback, setQaFeedback] = useState<string | null>(null);
+  const [markedGenerationWarning, setMarkedGenerationWarning] = useState<string | null>(null);
   const [lastMarkedGeneratedResult, setLastMarkedGeneratedResult] = useState<MinutaGenerarResult | null>(null);
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
   const [aiProgress, setAiProgress] = useState(0);
@@ -3116,6 +3129,7 @@ export function NuevaMinutaWorkspace() {
       setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
       setAdquisicionEdit(EMPTY_ADQUISICION);
       setError(null);
+      setMarkedGenerationWarning(null);
     } else setError("Solo se aceptan archivos .docx");
   }
   function handleFileSelected(f: File) {
@@ -3132,6 +3146,7 @@ export function NuevaMinutaWorkspace() {
     setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
     setAdquisicionEdit(EMPTY_ADQUISICION);
     setError(null);
+    setMarkedGenerationWarning(null);
   }
   function clearFile() {
     setFile(null);
@@ -3146,11 +3161,13 @@ export function NuevaMinutaWorkspace() {
     setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
     setAdquisicionEdit(EMPTY_ADQUISICION);
     setError(null);
+    setMarkedGenerationWarning(null);
   }
 
   async function handleDetectMarkedTemplate() {
     if (!file) return;
     setError(null);
+    setMarkedGenerationWarning(null);
     setIsDetectingMarkedTemplate(true);
     try {
       const result = await detectMarkedTemplate(file);
@@ -3426,6 +3443,7 @@ export function NuevaMinutaWorkspace() {
       }
       setError(null);
       setQaFeedback(null);
+      setMarkedGenerationWarning(null);
       setIsGenerating(true);
       setAiModalTitle("Generando documento sin IA");
       setAiModalSubtitle("Aplicando reemplazos determinísticos");
@@ -3473,6 +3491,10 @@ export function NuevaMinutaWorkspace() {
           });
         }
         const result = await generateMarkedTemplate(file, sanitizedValues, markedTemplateFields, markedDocumentName);
+        const warningMessage = getMarkedGenerationWarningMessage(result.warnings);
+        if (warningMessage) {
+          setMarkedGenerationWarning(warningMessage);
+        }
         if (process.env.NODE_ENV !== "production") {
           console.log("### MARKED GENERATE RESPONSE ###", result);
         }
@@ -3484,10 +3506,10 @@ export function NuevaMinutaWorkspace() {
         updateStep("save", "active");
         setAiProgress(80);
         await new Promise((r) => setTimeout(r, 400));
-        updateStep("save", "done", "Documento guardado correctamente");
+        updateStep("save", "done", warningMessage ? "Documento guardado con sugerencias" : "Documento guardado correctamente");
         updateStep("open", "active");
         setAiProgress(95);
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, warningMessage ? 1200 : 250));
         setAiProgress(100);
         setAiModalOpen(false);
         router.push(result.onlyoffice_path);
@@ -3578,6 +3600,16 @@ export function NuevaMinutaWorkspace() {
           <AlertCircle size={16} className="text-rose-500 mt-0.5 shrink-0" />
           <p className="text-sm text-rose-700">{error}</p>
           <button onClick={() => setError(null)} className="ml-auto text-rose-400 hover:text-rose-600">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {markedGenerationWarning && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3 mb-6">
+          <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-sm text-amber-800">{markedGenerationWarning}</p>
+          <button onClick={() => setMarkedGenerationWarning(null)} className="ml-auto text-amber-500 hover:text-amber-700">
             <X size={14} />
           </button>
         </div>

@@ -76,7 +76,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
         self.assertEqual(cleanup_empty_second_buyer_text("Actividad Económica:"), "")
         self.assertEqual(cleanup_empty_second_buyer_text("Estado Civil:"), "")
 
-    def test_derive_missing_marked_values_fills_letters_and_origin(self):
+    def test_derive_missing_marked_values_fills_letters_without_forcing_origin(self):
         values = {
             "valor_de_la_venta_en_numeros": "212.600.000",
             "en_numeros_cuota_inicial": "63.040.480",
@@ -107,7 +107,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             derived["valor_del_acto_de_la_hipoteca_en_letras"],
             "CIENTO CUARENTA Y NUEVE MILLONES QUINIENTOS CINCUENTA Y NUEVE MIL QUINIENTOS VEINTE PESOS",
         )
-        self.assertEqual(derived["origen_cuota_inicial"], "recursos propios")
+        self.assertEqual(derived["origen_cuota_inicial"], "")
 
     def test_money_normalization_formats_general_monetary_fields_without_touching_non_monetary_numbers(self):
         fields = [
@@ -336,7 +336,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             self.assertEqual(result.statistics["technical_tabs_resolved"], 1)
             self.assertEqual(result.audit.residual_tokens, [])
 
-    def test_required_origin_blocks_incomplete_payment_clause_when_empty(self):
+    def test_optional_origin_empty_generates_warning_and_cleans_payment_clause(self):
         with TemporaryDirectory() as tmp_dir:
             source = Path(tmp_dir) / "source.docx"
             target = Path(tmp_dir) / "target.docx"
@@ -344,15 +344,19 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("A) CUOTA INICIAL: proveniente de {{ORIGEN_CUOTA_INICIAL}}.")
             doc.save(source)
 
-            with self.assertRaises(NotarialRenderBlockedError) as exc:
-                NotarialDocumentEngine().render_marked_template(
-                    source,
-                    target,
-                    {"origen_cuota_inicial": ""},
-                    [{"key": "origen_cuota_inicial", "label": "Origen cuota inicial", "raw_markers": ["{{ORIGEN_CUOTA_INICIAL}}"]}],
-                )
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"origen_cuota_inicial": ""},
+                [{"key": "origen_cuota_inicial", "label": "Origen cuota inicial", "raw_markers": ["{{ORIGEN_CUOTA_INICIAL}}"]}],
+            )
 
-            self.assertTrue(any(issue.field_key == "origen_cuota_inicial" for issue in exc.exception.issues))
+            text = Document(str(target)).paragraphs[0].text
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertEqual(result.statistics["optional_segments_omitted"], 1)
+            self.assertTrue(any(issue.code == "optional_field_omitted" and issue.field_key == "origen_cuota_inicial" for issue in result.warnings))
+            self.assertNotIn("proveniente de .", text)
+            self.assertNotIn("recursos propios", text)
 
     def test_required_origin_fills_payment_clause_when_present(self):
         with TemporaryDirectory() as tmp_dir:
@@ -362,7 +366,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("A) CUOTA INICIAL: proveniente de {{ORIGEN_CUOTA_INICIAL}}.")
             doc.save(source)
 
-            NotarialDocumentEngine().render_marked_template(
+            result = NotarialDocumentEngine().render_marked_template(
                 source,
                 target,
                 {"origen_cuota_inicial": "recursos propios"},
@@ -372,8 +376,9 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             text = Document(str(target)).paragraphs[0].text
             self.assertIn("proveniente de recursos propios.", text)
             self.assertNotIn("proveniente de .", text)
+            self.assertFalse(any(issue.field_key == "origen_cuota_inicial" for issue in result.warnings))
 
-    def test_post_audit_blocks_incomplete_phrases(self):
+    def test_optional_saldo_detail_empty_generates_warning_and_cleans_phrase(self):
         with TemporaryDirectory() as tmp_dir:
             source = Path(tmp_dir) / "source.docx"
             target = Path(tmp_dir) / "target.docx"
@@ -381,15 +386,35 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("El saldo será pagado con {{FUENTE_SALDO}}.")
             doc.save(source)
 
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"fuente_saldo": ""},
+                [{"key": "fuente_saldo", "label": "Fuente saldo", "raw_markers": ["{{FUENTE_SALDO}}"]}],
+            )
+
+            text = Document(str(target)).paragraphs[0].text
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertTrue(any(issue.code == "optional_field_omitted" for issue in result.warnings))
+            self.assertNotIn("con .", text)
+
+    def test_critical_field_empty_still_blocks_generation(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("Matrícula {{NUMERO_MATRICULA}}.")
+            doc.save(source)
+
             with self.assertRaises(NotarialRenderBlockedError) as exc:
                 NotarialDocumentEngine().render_marked_template(
                     source,
                     target,
-                    {"fuente_saldo": ""},
-                    [{"key": "fuente_saldo", "label": "Fuente saldo", "raw_markers": ["{{FUENTE_SALDO}}"]}],
+                    {"numero_matricula": ""},
+                    [{"key": "numero_matricula", "label": "Matrícula", "raw_markers": ["{{NUMERO_MATRICULA}}"]}],
                 )
 
-            self.assertTrue(any(issue.code == "incomplete_required_phrase" for issue in exc.exception.issues))
+            self.assertTrue(any(issue.code == "required_field_missing" and issue.field_key == "numero_matricula" for issue in exc.exception.issues))
 
     def test_person_concordance_literals_are_resolved_for_mixed_buyers(self):
         with TemporaryDirectory() as tmp_dir:

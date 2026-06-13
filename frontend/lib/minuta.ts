@@ -133,6 +133,36 @@ export type MinutaGenerarResult = {
   filename: string;
   onlyoffice_path: string;
   download_url?: string;
+  warnings?: {
+    code?: string;
+    message?: string;
+    severity?: string;
+    field_key?: string | null;
+    placeholder?: string | null;
+  }[];
+  blockers?: {
+    code?: string;
+    message?: string;
+    severity?: string;
+    field_key?: string | null;
+    placeholder?: string | null;
+  }[];
+  statistics?: {
+    total_replacements?: number;
+    empty_count?: number;
+    missing_count?: number;
+    unresolved_placeholders_count?: number;
+    residual_tokens_count?: number;
+    warnings_count?: number;
+    blockers_count?: number;
+    technical_tabs_resolved?: number;
+    notarial_dash_sequences_preserved?: number;
+    red_runs_detected?: number;
+    empty_signature_blocks_detected?: number;
+    empty_signature_blocks_removed?: number;
+    optional_segments_omitted?: number;
+    optional_segments_omitted_keys?: string[];
+  };
   estadisticas?: {
     total_reemplazos: number;
     por_etiqueta: Record<string, number>;
@@ -177,7 +207,21 @@ async function handleError(response: Response): Promise<never> {
   let detail = text;
   try {
     const parsed = JSON.parse(text) as { detail?: unknown };
-    if (parsed.detail) detail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+    if (parsed.detail) {
+      if (typeof parsed.detail === "string") {
+        detail = parsed.detail;
+      } else if (typeof parsed.detail === "object" && parsed.detail !== null) {
+        const payload = parsed.detail as { message?: unknown; blockers?: unknown };
+        const messages = Array.isArray(payload.blockers)
+          ? payload.blockers
+              .map((item) => (typeof item === "object" && item !== null && "message" in item ? String((item as { message?: unknown }).message ?? "") : ""))
+              .filter(Boolean)
+          : [];
+        detail = [typeof payload.message === "string" ? payload.message : "", ...messages].filter(Boolean).join(" ");
+      } else {
+        detail = String(parsed.detail);
+      }
+    }
   } catch { /* plain text error */ }
   throw new Error(detail || "No fue posible completar la solicitud.");
 }

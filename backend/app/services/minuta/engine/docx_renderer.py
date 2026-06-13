@@ -9,7 +9,7 @@ from docx.oxml import OxmlElement
 from docx.shared import RGBColor
 from docx.text.run import Run
 
-from app.services.minuta.engine.models import PlaceholderAudit, RenderAudit
+from app.services.minuta.engine.models import PlaceholderAudit, RenderAudit, RenderIssue, RenderSeverity
 from app.services.minuta.engine.template_analyzer import iter_document_paragraphs
 from app.services.minuta.rules.common_rules import normalize_key
 from app.services.minuta.rules.conditional_blocks import should_remove_si_aplica_block
@@ -24,6 +24,26 @@ SIGNATURE_LINE_PATTERN = re.compile(r"^[\s._-]{6,}$")
 EMPTY_SIGNATURE_LABEL_PATTERN = re.compile(
     r"^(?:C\.?C\.?|CELULAR\.?|DIRECCI[ÓO]N:?\s*|CORREO:?\s*|PROFESI[ÓO]N\s+U\s+OFICIO:?\s*|ACTIVIDAD\s+ECON[ÓO]MICA:?\s*|ESTADO\s+CIVIL:?\s*)\.?$",
     re.IGNORECASE,
+)
+OPTIONAL_EMPTY_SEGMENTS = (
+    {
+        "field_key": "origen_cuota_inicial",
+        "message": "Se omitió el segmento asociado a Origen cuota inicial porque no fue diligenciado.",
+        "patterns": (
+            re.compile(r",\s*proveniente de\s*\.", re.IGNORECASE),
+            re.compile(r"\s+proveniente de\s*\.", re.IGNORECASE),
+        ),
+        "replacement": ".",
+    },
+    {
+        "field_key": "optional_payment_detail",
+        "message": "Se omitió un segmento descriptivo de forma de pago porque no fue diligenciado.",
+        "forbidden_prefix": re.compile(r"(identificad|c[eé]dula|ciudadan[ií]a|documento|c\.?c\.?)", re.IGNORECASE),
+        "patterns": (
+            re.compile(r"\s+con\s*\.", re.IGNORECASE),
+        ),
+        "replacement": ".",
+    },
 )
 
 
@@ -100,6 +120,7 @@ class DocxRenderer:
         self._remove_conditional_blocks(document, normalized_values)
         audit.technical_tabs_resolved = self._resolve_technical_tabs(document)
         self._remove_auxiliary_tokens(document)
+        self._cleanup_optional_empty_segments(document, audit)
         self._normalize_known_gender_literals(document, normalized_values)
         audit.empty_signature_blocks_removed = self._remove_empty_signature_blocks(document)
         audit.structure_after = self._structure(document)
@@ -208,6 +229,49 @@ class DocxRenderer:
             tokens = sorted(set(AUXILIARY_TOKEN_PATTERN.findall(paragraph.text or "")), key=len, reverse=True)
             for token in tokens:
                 self._replace_marker_in_paragraph(paragraph, token, "", None, "cleanup", color=None)
+
+    def _cleanup_optional_empty_segments(self, document: Document, audit: RenderAudit) -> None:
+        omitted_keys: set[str] = set()
+        for paragraph, _location in iter_document_paragraphs(document):
+            for config in OPTIONAL_EMPTY_SEGMENTS:
+                for pattern in config["patterns"]:
+                    if self._replace_optional_empty_pattern(
+                        paragraph,
+                        pattern,
+                        str(config["replacement"]),
+                        config.get("forbidden_prefix"),
+                    ):
+                        omitted_keys.add(str(config["field_key"]))
+        for config in OPTIONAL_EMPTY_SEGMENTS:
+            field_key = str(config["field_key"])
+            if field_key not in omitted_keys:
+                continue
+            audit.optional_segments_omitted += 1
+            audit.optional_segments_omitted_keys.append(field_key)
+            audit.issues.append(
+                RenderIssue(
+                    code="optional_field_omitted",
+                    message=str(config["message"]),
+                    severity=RenderSeverity.WARNING,
+                    field_key=field_key,
+                )
+            )
+
+    def _replace_optional_empty_pattern(self, paragraph, pattern: re.Pattern, replacement: str, forbidden_prefix: object = None) -> bool:
+        text = paragraph.text or ""
+        if not text:
+            return False
+        forbidden = forbidden_prefix if isinstance(forbidden_prefix, re.Pattern) else None
+        replaced = False
+        for match in reversed(list(pattern.finditer(text))):
+            if forbidden and forbidden.search(text[max(0, match.start() - 40) : match.start()]):
+                continue
+            affected = self._affected_runs(paragraph, match.start(), match.end())
+            if not affected:
+                continue
+            self._replace_affected_runs(paragraph, affected, match.start(), match.end(), replacement, color=None)
+            replaced = True
+        return replaced
 
     def _normalize_known_gender_literals(self, document: Document, normalized_values: dict[str, str]) -> None:
         buyer_1 = bool(normalized_values.get("nombre_comprador_1") or normalized_values.get("nombre_comprador"))
