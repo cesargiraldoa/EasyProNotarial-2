@@ -83,7 +83,7 @@ UNIDADES = [
     "TRECE",
     "CATORCE",
     "QUINCE",
-    "DIECISEIS",
+    "DIECISÉIS",
     "DIECISIETE",
     "DIECIOCHO",
     "DIECINUEVE",
@@ -118,7 +118,18 @@ def hundreds_to_words(number: int) -> str:
             parts.append(UNIDADES[remainder])
         elif remainder < 30:
             unit = remainder % 10
-            parts.append("VEINTE" if unit == 0 else f"VEINTI{UNIDADES[unit].lower()}".upper())
+            if unit == 0:
+                parts.append("VEINTE")
+            elif unit == 1:
+                parts.append("VEINTE Y UN")
+            elif unit == 2:
+                parts.append("VEINTIDÓS")
+            elif unit == 3:
+                parts.append("VEINTITRÉS")
+            elif unit == 6:
+                parts.append("VEINTISÉIS")
+            else:
+                parts.append(f"VEINTI{UNIDADES[unit].lower()}".upper())
         else:
             tens = remainder // 10
             unit = remainder % 10
@@ -139,7 +150,7 @@ def number_to_words(number: int, suffix: str = "") -> str:
         parts.append("MIL MILLONES" if billions == 1 else f"{text} MIL MILLONES")
     if millions:
         text = hundreds_to_words(millions)
-        parts.append("UN MILLON" if millions == 1 else f"{text} MILLONES")
+        parts.append("UN MILLÓN" if millions == 1 else f"{text} MILLONES")
     if thousands:
         text = hundreds_to_words(thousands)
         parts.append("MIL" if thousands == 1 else f"{text} MIL")

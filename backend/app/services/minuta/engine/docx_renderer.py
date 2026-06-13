@@ -11,12 +11,20 @@ from docx.text.run import Run
 
 from app.services.minuta.engine.models import PlaceholderAudit, RenderAudit
 from app.services.minuta.engine.template_analyzer import iter_document_paragraphs
+from app.services.minuta.rules.common_rules import normalize_key
 from app.services.minuta.rules.conditional_blocks import should_remove_si_aplica_block
+from app.services.minuta.rules.gender_rules import normalize_gender
+from app.services.minuta.rules.person_rules import collective_adjective, collective_label, grammar_for_gender
 
 RED_COLOR = RGBColor(0xFF, 0x00, 0x00)
 TECHNICAL_TAB_TOKEN = "[[--]]"
 AUXILIARY_TOKEN_PATTERN = re.compile(r"\[SI APLICA[^\]]*\]|\[NO APLICA[^\]]*\]|\[N[úu]mero\]|\[Informaci[óo]n\]", re.IGNORECASE)
 DASH_SEQUENCE_PATTERN = re.compile(r"(?:-\s*){3,}|-{3,}")
+SIGNATURE_LINE_PATTERN = re.compile(r"^[\s._-]{6,}$")
+EMPTY_SIGNATURE_LABEL_PATTERN = re.compile(
+    r"^(?:C\.?C\.?|CELULAR\.?|DIRECCI[ÓO]N:?\s*|CORREO:?\s*|PROFESI[ÓO]N\s+U\s+OFICIO:?\s*|ACTIVIDAD\s+ECON[ÓO]MICA:?\s*|ESTADO\s+CIVIL:?\s*)\.?$",
+    re.IGNORECASE,
+)
 
 
 def copy_run_format(source_run, target_run) -> None:
@@ -93,6 +101,7 @@ class DocxRenderer:
         audit.technical_tabs_resolved = self._resolve_technical_tabs(document)
         self._remove_auxiliary_tokens(document)
         self._normalize_known_gender_literals(document, normalized_values)
+        audit.empty_signature_blocks_removed = self._remove_empty_signature_blocks(document)
         audit.structure_after = self._structure(document)
         audit.notarial_dash_sequences_preserved = min(
             audit.structure_before.get("dash_sequences", 0),
@@ -132,6 +141,17 @@ class DocxRenderer:
                 )
             )
         return audits
+
+    def _replace_first_marker_in_paragraph(self, paragraph, marker: str, value: str) -> bool:
+        text = paragraph.text or ""
+        match = re.search(re.escape(marker), text)
+        if not match:
+            return False
+        affected = self._affected_runs(paragraph, match.start(), match.end())
+        if not affected:
+            return False
+        self._replace_affected_runs(paragraph, affected, match.start(), match.end(), value, None)
+        return True
 
     def _affected_runs(self, paragraph, start: int, end: int) -> list[dict]:
         runs_info: list[dict] = []
@@ -192,12 +212,63 @@ class DocxRenderer:
     def _normalize_known_gender_literals(self, document: Document, normalized_values: dict[str, str]) -> None:
         buyer_1 = bool(normalized_values.get("nombre_comprador_1") or normalized_values.get("nombre_comprador"))
         buyer_2 = bool(normalized_values.get("nombre_comprador_2"))
-        replacement = "identificados" if buyer_1 and buyer_2 else "identificado"
-        if buyer_1 and not buyer_2 and normalized_values.get("comprador_es_hombre_o_mujer", "").lower() == "mujer":
-            replacement = "identificada"
+        gender_1 = normalize_gender(normalized_values.get("comprador_es_hombre_o_mujer") or normalized_values.get("comprador_1_es_hombre_o_mujer"))
+        gender_2 = normalize_gender(normalized_values.get("comprador_2_es_hombre_o_mujer"))
+        genders = [gender for present, gender in ((buyer_1, gender_1), (buyer_2, gender_2)) if present]
+        individual_1 = grammar_for_gender(normalized_values.get("comprador_es_hombre_o_mujer") or normalized_values.get("comprador_1_es_hombre_o_mujer"))
+        individual_2 = grammar_for_gender(normalized_values.get("comprador_2_es_hombre_o_mujer"))
+
         for paragraph, _location in iter_document_paragraphs(document):
-            for marker in ("identificado(a/s)", "identificado(a)", "comprador(a)(es)"):
-                self._replace_marker_in_paragraph(paragraph, marker, replacement if "identificado" in marker else "compradores", None, "gender-literal-cleanup", color=None)
+            text = paragraph.text or ""
+            if buyer_1 and buyer_2 and normalized_values.get("nombre_comprador_1", "") in text and normalized_values.get("nombre_comprador_2", "") in text:
+                for marker, first, second in (
+                    ("domiciliado(a)", individual_1.domiciled, individual_2.domiciled),
+                    ("identificado(a/s)", individual_1.identified, individual_2.identified),
+                    ("identificado(a)", individual_1.identified, individual_2.identified),
+                ):
+                    if self._replace_first_marker_in_paragraph(paragraph, marker, first):
+                        self._replace_first_marker_in_paragraph(paragraph, marker, second)
+            else:
+                self._replace_marker_in_paragraph(paragraph, "domiciliado(a)", collective_adjective("domiciliado", genders), None, "gender-literal-cleanup", color=None)
+                self._replace_marker_in_paragraph(paragraph, "identificado(a/s)", collective_adjective("identificado", genders), None, "gender-literal-cleanup", color=None)
+                self._replace_marker_in_paragraph(paragraph, "identificado(a)", collective_adjective("identificado", genders), None, "gender-literal-cleanup", color=None)
+
+            replacements = {
+                "COMPRADOR(A/ES)": collective_label("comprador", genders).upper(),
+                "comprador(a)(es)": collective_label("comprador", genders).replace("el ", "").replace("la ", "").replace("los ", "").replace("las ", ""),
+                "EL COMPRADOR": collective_label("comprador", genders).upper(),
+                "EL(LOS) HIPOTECANTE(S)": collective_label("hipotecante", genders).upper(),
+                "EL(LOS) DEUDOR(ES)": collective_label("deudor", genders).upper(),
+                "de nacionalidad colombiana": "colombiana",
+                "de nacionalidad colombiano": "colombiano",
+                "de nacionalidad colombianas": "colombianas",
+                "de nacionalidad colombianos": "colombianos",
+                " quien en adelante se denominará(n)": " quienes en adelante se denominarán",
+            }
+            for marker, replacement in replacements.items():
+                self._replace_marker_in_paragraph(paragraph, marker, replacement, None, "collective-literal-cleanup", color=None)
+            while ",  " in (paragraph.text or ""):
+                self._replace_first_marker_in_paragraph(paragraph, ",  ", ", ")
+
+    def _remove_empty_signature_blocks(self, document: Document) -> int:
+        paragraphs = [paragraph for paragraph, _location in iter_document_paragraphs(document)]
+        removed = 0
+        for index, paragraph in enumerate(paragraphs):
+            if not SIGNATURE_LINE_PATTERN.match((paragraph.text or "").strip()):
+                continue
+            block = paragraphs[index + 1 : index + 8]
+            raw_block = [(item.text or "").strip() for item in block]
+            has_name_or_document = any(re.search(r"[A-ZÁÉÍÓÚÑ]{3,}.*\d{4,}", raw, re.IGNORECASE) for raw in raw_block[:2])
+            has_empty_labels = sum(1 for raw in raw_block if EMPTY_SIGNATURE_LABEL_PATTERN.match(raw)) >= 3
+            if has_name_or_document or not has_empty_labels:
+                continue
+            set_paragraph_text_preserving_first_run(paragraph, "")
+            for candidate in block:
+                raw = (candidate.text or "").strip()
+                if not raw or EMPTY_SIGNATURE_LABEL_PATTERN.match(raw):
+                    set_paragraph_text_preserving_first_run(candidate, "")
+            removed += 1
+        return removed
 
     def _structure(self, document: Document) -> dict[str, int]:
         dash_sequences = 0

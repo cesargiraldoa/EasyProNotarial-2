@@ -53,6 +53,9 @@ class NotarialDocumentEngine:
         )
         audit.issues.extend(issues)
         audit = self.auditor.audit_post_render(destination_path, audit)
+        post_blockers = [issue for issue in audit.issues if issue.severity.value == "blocker"]
+        if post_blockers:
+            raise NotarialRenderBlockedError(audit.issues)
         return NotarialRenderResult(
             output_path=Path(destination_path),
             audit=audit,
@@ -92,6 +95,8 @@ class NotarialDocumentEngine:
             "technical_tabs_resolved": audit.technical_tabs_resolved,
             "notarial_dash_sequences_preserved": audit.notarial_dash_sequences_preserved,
             "red_runs_detected": audit.red_runs_detected,
+            "empty_signature_blocks_detected": audit.empty_signature_blocks_detected,
+            "empty_signature_blocks_removed": audit.empty_signature_blocks_removed,
         }
 
     def _by_key(self, audit: RenderAudit) -> dict[str, int]:

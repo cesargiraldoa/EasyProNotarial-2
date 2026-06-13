@@ -48,6 +48,8 @@ class RenderAudit:
     technical_tabs_resolved: int = 0
     notarial_dash_sequences_preserved: int = 0
     red_runs_detected: int = 0
+    empty_signature_blocks_detected: int = 0
+    empty_signature_blocks_removed: int = 0
 
     @property
     def warnings(self) -> list[RenderIssue]:
@@ -73,6 +75,8 @@ class RenderAudit:
             "technical_tabs_resolved": self.technical_tabs_resolved,
             "notarial_dash_sequences_preserved": self.notarial_dash_sequences_preserved,
             "red_runs_detected": self.red_runs_detected,
+            "empty_signature_blocks_detected": self.empty_signature_blocks_detected,
+            "empty_signature_blocks_removed": self.empty_signature_blocks_removed,
         }
 
 

@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from docx import Document
 
 from app.services.minuta.engine.models import RenderAudit, RenderIssue, RenderSeverity
 from app.services.minuta.engine.template_analyzer import RESIDUAL_TOKEN_PATTERN, TemplateAnalyzer, iter_document_paragraphs
+
+INCOMPLETE_PHRASE_PATTERNS = (
+    re.compile(r"\bproveniente de\s*\.", re.IGNORECASE),
+    re.compile(r"\bcon\s*\.", re.IGNORECASE),
+    re.compile(r"\bmediante\s*\.", re.IGNORECASE),
+    re.compile(r"\bpor valor de\s*\.", re.IGNORECASE),
+    re.compile(r"\bidentificad[oa]s?\s+con\s*\.", re.IGNORECASE),
+    re.compile(r"\bcon c[ée]dula de ciudadan[íi]a n[úu]mero\s*\.", re.IGNORECASE),
+    re.compile(r"^\s*C\.C\.?\s*\.?\s*$", re.IGNORECASE),
+)
+EMPTY_SIGNATURE_SEQUENCE = re.compile(
+    r"(?:_{6,}|-{6,}|\s{6,})\s*\n\s*C\.?C\.?\s*\n\s*Celular\.?\s*\n\s*Direcci[óo]n:?\s*\n\s*Correo:?",
+    re.IGNORECASE,
+)
 
 
 class QualityAuditor:
@@ -36,6 +51,8 @@ class QualityAuditor:
 
         self._verify_red_replacements(output_path, audit)
         self._verify_structure(audit)
+        self._verify_incomplete_phrases(output_path, audit)
+        self._verify_empty_signature_blocks(output_path, audit)
         return audit
 
     def _verify_red_replacements(self, output_path: str | Path, audit: RenderAudit) -> None:
@@ -73,6 +90,40 @@ class QualityAuditor:
                     location=item.location,
                 )
             )
+
+    def _verify_incomplete_phrases(self, output_path: str | Path, audit: RenderAudit) -> None:
+        document = Document(str(output_path))
+        for paragraph, location in iter_document_paragraphs(document):
+            text = paragraph.text or ""
+            for pattern in INCOMPLETE_PHRASE_PATTERNS:
+                match = pattern.search(text)
+                if not match:
+                    continue
+                audit.issues.append(
+                    RenderIssue(
+                        code="incomplete_required_phrase",
+                        message="Frase incompleta por campo requerido vacío o no mapeado.",
+                        severity=RenderSeverity.BLOCKER,
+                        location=location,
+                        details={"text": match.group(0)},
+                    )
+                )
+
+    def _verify_empty_signature_blocks(self, output_path: str | Path, audit: RenderAudit) -> None:
+        document = Document(str(output_path))
+        text = "\n".join(paragraph.text for paragraph, _location in iter_document_paragraphs(document))
+        matches = EMPTY_SIGNATURE_SEQUENCE.findall(text)
+        audit.empty_signature_blocks_detected = len(matches)
+        if not matches:
+            return
+        audit.issues.append(
+            RenderIssue(
+                code="empty_signature_block",
+                message="Quedó bloque de firma vacío sin persona asociada.",
+                severity=RenderSeverity.BLOCKER,
+                details={"count": len(matches)},
+            )
+        )
 
     def _verify_structure(self, audit: RenderAudit) -> None:
         before = audit.structure_before

@@ -16,6 +16,9 @@ from app.services.minuta.marked_template_generator import (
     validate_gender_concordance,
 )
 from app.services.minuta.engine.notarial_document_engine import NotarialDocumentEngine, NotarialRenderBlockedError
+from app.services.minuta.rules.date_rules import contractual_date_text, notarial_date_text
+from app.services.minuta.rules.money_rules import number_to_words
+from app.services.minuta.rules.person_rules import collective_adjective, collective_label
 
 
 class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
@@ -127,6 +130,40 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
         self.assertEqual(normalized["retencion_en_la_fuente"], "119.000")
         self.assertEqual(normalized["numero_documento_comprador_1"], "1037657164")
         self.assertEqual(_format_money_value("212.600.000"), "212.600.000")
+
+    def test_money_words_use_de_pesos_for_exact_millions(self):
+        self.assertEqual(number_to_words(3_000_000, "PESOS"), "TRES MILLONES DE PESOS")
+        self.assertEqual(number_to_words(4_000_000, "PESOS"), "CUATRO MILLONES DE PESOS")
+        self.assertEqual(number_to_words(600_000_000, "PESOS"), "SEISCIENTOS MILLONES DE PESOS")
+        self.assertEqual(
+            number_to_words(678_943_221, "PESOS"),
+            "SEISCIENTOS SETENTA Y OCHO MILLONES NOVECIENTOS CUARENTA Y TRES MIL DOSCIENTOS VEINTE Y UN PESOS",
+        )
+
+    def test_contractual_and_deed_dates_have_different_notarial_formats(self):
+        self.assertEqual(
+            notarial_date_text("2025-06-12"),
+            "doce (12) días del mes de junio del año dos mil veinticinco (2025)",
+        )
+        self.assertEqual(
+            contractual_date_text("2026-06-12"),
+            "doce (12) de junio de dos mil veintiséis (2026)",
+        )
+        self.assertNotIn("veintiseis", contractual_date_text("2026-06-12"))
+        self.assertNotIn("días del mes", contractual_date_text("2026-06-12"))
+
+    def test_collective_person_concordance_labels(self):
+        self.assertEqual(collective_label("comprador", ["F"]), "la compradora")
+        self.assertEqual(collective_adjective("identificado", ["F"]), "identificada")
+        self.assertEqual(collective_adjective("domiciliado", ["F"]), "domiciliada")
+        self.assertEqual(collective_adjective("colombiano", ["F"]), "colombiana")
+        self.assertEqual(collective_label("comprador", ["M"]), "el comprador")
+        self.assertEqual(collective_adjective("identificado", ["M"]), "identificado")
+        self.assertEqual(collective_label("comprador", ["M", "F"]), "los compradores")
+        self.assertEqual(collective_adjective("identificado", ["M", "F"]), "identificados")
+        self.assertEqual(collective_label("comprador", ["F", "F"]), "las compradoras")
+        self.assertEqual(collective_adjective("domiciliado", ["F", "F"]), "domiciliadas")
+        self.assertEqual(collective_label("deudor", ["M", "M"]), "los deudores")
 
     def test_validate_gender_concordance_returns_structured_warnings(self):
         values = {
@@ -299,6 +336,156 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             self.assertEqual(result.statistics["technical_tabs_resolved"], 1)
             self.assertEqual(result.audit.residual_tokens, [])
 
+    def test_required_origin_blocks_incomplete_payment_clause_when_empty(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("A) CUOTA INICIAL: proveniente de {{ORIGEN_CUOTA_INICIAL}}.")
+            doc.save(source)
+
+            with self.assertRaises(NotarialRenderBlockedError) as exc:
+                NotarialDocumentEngine().render_marked_template(
+                    source,
+                    target,
+                    {"origen_cuota_inicial": ""},
+                    [{"key": "origen_cuota_inicial", "label": "Origen cuota inicial", "raw_markers": ["{{ORIGEN_CUOTA_INICIAL}}"]}],
+                )
+
+            self.assertTrue(any(issue.field_key == "origen_cuota_inicial" for issue in exc.exception.issues))
+
+    def test_required_origin_fills_payment_clause_when_present(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("A) CUOTA INICIAL: proveniente de {{ORIGEN_CUOTA_INICIAL}}.")
+            doc.save(source)
+
+            NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"origen_cuota_inicial": "recursos propios"},
+                [{"key": "origen_cuota_inicial", "label": "Origen cuota inicial", "raw_markers": ["{{ORIGEN_CUOTA_INICIAL}}"]}],
+            )
+
+            text = Document(str(target)).paragraphs[0].text
+            self.assertIn("proveniente de recursos propios.", text)
+            self.assertNotIn("proveniente de .", text)
+
+    def test_post_audit_blocks_incomplete_phrases(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("El saldo será pagado con {{FUENTE_SALDO}}.")
+            doc.save(source)
+
+            with self.assertRaises(NotarialRenderBlockedError) as exc:
+                NotarialDocumentEngine().render_marked_template(
+                    source,
+                    target,
+                    {"fuente_saldo": ""},
+                    [{"key": "fuente_saldo", "label": "Fuente saldo", "raw_markers": ["{{FUENTE_SALDO}}"]}],
+                )
+
+            self.assertTrue(any(issue.code == "incomplete_required_phrase" for issue in exc.exception.issues))
+
+    def test_person_concordance_literals_are_resolved_for_mixed_buyers(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph(
+                "{{NOMBRE_COMPRADOR_1}}, {{COMPRADOR_ES_HOMBRE_O_MUJER}}, mayor de edad, "
+                "de nacionalidad {{NACIONALIDAD_COMPRADOR}}, domiciliado(a) y residente en {{MUNICIPIO_DOMICILIO_COMPRADOR}}, "
+                "{{SELECCIONE_SI_COMPRADOR_ESTA_DE_TRANSITO}} identificado(a/s) con {{TIPO_DOCUMENTO_COMPRADOR_1}} {{NUMERO_DOCUMENTO_COMPRADOR_1}}, "
+                "de estado civil {{ESTADO_CIVIL_COMPRADOR}} y {{NOMBRE_COMPRADOR_2}}, {{COMPRADOR_2_ES_HOMBRE_O_MUJER}}, mayor de edad, "
+                "de nacionalidad {{NACIONALIDAD_COMPRADOR_2}}, domiciliado(a) y residente en {{MUNICIPIO_DOMICILIO_COMPRADOR_2}}, "
+                "{{SELECCIONE_SI_COMPRADOR_2_ESTA_DE_TRANSITO}} identificado(a/s) con {{TIPO_DOCUMENTO_COMPRADOR_2}} {{NUMERO_DOCUMENTO_COMPRADOR_2}}, "
+                "de estado civil {{ESTADO_CIVIL_COMPRADOR_2}}."
+            )
+            doc.save(source)
+
+            fields = [
+                {"key": key.lower(), "label": key, "raw_markers": [f"{{{{{key}}}}}"]}
+                for key in (
+                    "NOMBRE_COMPRADOR_1",
+                    "COMPRADOR_ES_HOMBRE_O_MUJER",
+                    "NACIONALIDAD_COMPRADOR",
+                    "MUNICIPIO_DOMICILIO_COMPRADOR",
+                    "SELECCIONE_SI_COMPRADOR_ESTA_DE_TRANSITO",
+                    "TIPO_DOCUMENTO_COMPRADOR_1",
+                    "NUMERO_DOCUMENTO_COMPRADOR_1",
+                    "ESTADO_CIVIL_COMPRADOR",
+                    "NOMBRE_COMPRADOR_2",
+                    "COMPRADOR_2_ES_HOMBRE_O_MUJER",
+                    "NACIONALIDAD_COMPRADOR_2",
+                    "MUNICIPIO_DOMICILIO_COMPRADOR_2",
+                    "SELECCIONE_SI_COMPRADOR_2_ESTA_DE_TRANSITO",
+                    "TIPO_DOCUMENTO_COMPRADOR_2",
+                    "NUMERO_DOCUMENTO_COMPRADOR_2",
+                    "ESTADO_CIVIL_COMPRADOR_2",
+                )
+            ]
+            values = {
+                "nombre_comprador_1": "DANIELA CAMPO",
+                "comprador_es_hombre_o_mujer": "MUJER",
+                "nacionalidad_comprador": "Colombiana",
+                "municipio_domicilio_comprador": "Bogotá D.C.",
+                "seleccione_si_comprador_esta_de_transito": "No está de transito",
+                "tipo_documento_comprador_1": "C.C.",
+                "numero_documento_comprador_1": "10203040",
+                "estado_civil_comprador": "Casada con sociedad conyugal disuelta y liquidada",
+                "nombre_comprador_2": "GERÓNIMO GIRALDO",
+                "comprador_2_es_hombre_o_mujer": "HOMBRE",
+                "nacionalidad_comprador_2": "Colombiano",
+                "municipio_domicilio_comprador_2": "Bogotá D.C.",
+                "seleccione_si_comprador_2_esta_de_transito": "No está de transito",
+                "tipo_documento_comprador_2": "C.C.",
+                "numero_documento_comprador_2": "20406080",
+                "estado_civil_comprador_2": "Casado sin sociedad conyugal por efecto de capitulaciones",
+            }
+
+            NotarialDocumentEngine().render_marked_template(source, target, values, fields)
+            text = Document(str(target)).paragraphs[0].text
+
+            self.assertIn("DANIELA CAMPO, mujer", text)
+            self.assertIn("colombiana, domiciliada", text)
+            self.assertIn("identificada con cédula de ciudadanía número 10203040", text)
+            self.assertIn("GERÓNIMO GIRALDO, varón", text)
+            self.assertIn("colombiano, domiciliado", text)
+            self.assertIn("identificado con cédula de ciudadanía número 20406080", text)
+            self.assertNotIn("identificado(a/s)", text)
+            self.assertNotIn("domiciliado(a)", text)
+            self.assertNotIn("transito", text)
+
+    def test_empty_signature_block_is_removed_but_valid_signature_is_preserved(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("____________________________")
+            doc.add_paragraph("C.C.")
+            doc.add_paragraph("Celular.")
+            doc.add_paragraph("Dirección:")
+            doc.add_paragraph("Correo:")
+            doc.add_paragraph("Profesión u Oficio:")
+            doc.add_paragraph("Actividad Económica:")
+            doc.add_paragraph("Estado Civil:")
+            doc.add_paragraph("____________________________")
+            doc.add_paragraph("DANIELA CAMPO")
+            doc.add_paragraph("C.C. 10203040")
+            doc.save(source)
+
+            result = NotarialDocumentEngine().render_marked_template(source, target, {}, [])
+            text = "\n".join(paragraph.text for paragraph in Document(str(target)).paragraphs)
+
+            self.assertEqual(result.statistics["empty_signature_blocks_removed"], 1)
+            self.assertNotIn("C.C.\nCelular.\nDirección:", text)
+            self.assertIn("DANIELA CAMPO", text)
+            self.assertIn("C.C. 10203040", text)
+
     def test_engine_reports_replaced_empty_missing_and_unresolved_placeholders(self):
         with TemporaryDirectory() as tmp_dir:
             source = Path(tmp_dir) / "source.docx"
@@ -307,21 +494,19 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("A {{A}} B {{B}} vivo {{C}}")
             doc.save(source)
 
-            result = NotarialDocumentEngine().render_marked_template(
-                source,
-                target,
-                {"a": "uno", "b": ""},
-                [
-                    {"key": "a", "label": "A", "raw_markers": ["{{A}}"]},
-                    {"key": "b", "label": "B", "raw_markers": ["{{B}}"]},
-                    {"key": "d", "label": "D", "raw_markers": ["{{D}}"]},
-                ],
-            )
+            with self.assertRaises(NotarialRenderBlockedError) as exc:
+                NotarialDocumentEngine().render_marked_template(
+                    source,
+                    target,
+                    {"a": "uno", "b": ""},
+                    [
+                        {"key": "a", "label": "A", "raw_markers": ["{{A}}"]},
+                        {"key": "b", "label": "B", "raw_markers": ["{{B}}"]},
+                        {"key": "d", "label": "D", "raw_markers": ["{{D}}"]},
+                    ],
+                )
 
-            self.assertTrue(result.audit.replaced)
-            self.assertTrue(result.audit.empty)
-            self.assertTrue(result.audit.missing)
-            self.assertIn("{{C}}", result.audit.unresolved_placeholders)
+            self.assertTrue(any(issue.code == "unresolved_placeholder" for issue in exc.exception.issues))
 
 
 if __name__ == "__main__":

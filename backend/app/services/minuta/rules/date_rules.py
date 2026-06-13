@@ -54,6 +54,15 @@ def notarial_date_text(value: object) -> str:
     return f"{day_words} ({parsed.day}) días del mes de {MONTHS[parsed.month]} del año {year_words} ({parsed.year})"
 
 
+def contractual_date_text(value: object) -> str:
+    parsed = parse_date_value(value)
+    if not parsed:
+        return normalize_value(value)
+    day_words = number_to_words(parsed.day).lower()
+    year_words = number_to_words(parsed.year).lower()
+    return f"{day_words} ({parsed.day}) de {MONTHS[parsed.month]} de {year_words} ({parsed.year})"
+
+
 def notarial_day_text(value: object) -> str:
     digits = extract_digits(value)
     if not digits:
@@ -76,3 +85,8 @@ def normalize_month_text(value: object) -> str:
         if normalize_key(month_name) == normalized:
             return month_name
     return raw.lower()
+
+
+def is_contractual_date_key(key: str) -> bool:
+    normalized = normalize_key(key)
+    return any(token in normalized for token in ("promesa", "contrato", "documento_privado", "celebracion"))

@@ -312,6 +312,8 @@ async def generate_marked_template_endpoint(
             "technical_tabs_resolved": int(stats_raw.get("technical_tabs_resolved", 0) or 0),
             "notarial_dash_sequences_preserved": int(stats_raw.get("notarial_dash_sequences_preserved", 0) or 0),
             "red_runs_detected": int(stats_raw.get("red_runs_detected", 0) or 0),
+            "empty_signature_blocks_detected": int(stats_raw.get("empty_signature_blocks_detected", 0) or 0),
+            "empty_signature_blocks_removed": int(stats_raw.get("empty_signature_blocks_removed", 0) or 0),
         },
         "estadisticas": {
             "total_reemplazos": int(stats_raw.get("total_replacements", 0) or 0),
