@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from copy import deepcopy
 from pathlib import Path
 from typing import Iterable
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.shared import RGBColor
+from docx.text.run import Run
+
+RED_COLOR = RGBColor(0xFF, 0x00, 0x00)
 
 
 def _iter_paragraphs_in_table(table) -> Iterable:
@@ -34,6 +40,60 @@ def _iter_document_paragraphs(document: Document) -> Iterable:
     for section in document.sections:
         yield from _iter_paragraphs_in_container(section.header)
         yield from _iter_paragraphs_in_container(section.footer)
+
+
+def _copy_run_format(source_run, target_run) -> None:
+    if source_run is None or target_run is None:
+        return
+    if source_run._r.rPr is not None:
+        target_run._r.insert(0, deepcopy(source_run._r.rPr))
+
+
+def _insert_run_after(paragraph, anchor_run, text: str, template_run=None, color: RGBColor | None = None):
+    new_r = OxmlElement("w:r")
+    anchor_run._r.addnext(new_r)
+    new_run = Run(new_r, paragraph)
+    if template_run is not None:
+        _copy_run_format(template_run, new_run)
+    new_run.text = text
+    if color is not None and text:
+        new_run.font.color.rgb = color
+    return new_run
+
+
+def _replace_match_with_formatted_runs(paragraph, affected: list[dict], match_start: int, match_end: int, new: str) -> int:
+    if not affected:
+        return 0
+
+    if len(affected) == 1:
+        info = affected[0]
+        run = info["run"]
+        start_local = match_start - info["start"]
+        end_local = match_end - info["start"]
+        prefix = run.text[:start_local]
+        suffix = run.text[end_local:]
+        run.text = prefix
+        inserted_run = _insert_run_after(paragraph, run, new, template_run=run, color=RED_COLOR)
+        if suffix:
+            _insert_run_after(paragraph, inserted_run, suffix, template_run=run)
+        return 1
+
+    first = affected[0]
+    last = affected[-1]
+    first_run = first["run"]
+    last_run = last["run"]
+    prefix = first_run.text[: match_start - first["start"]]
+    suffix = last_run.text[match_end - last["start"]:]
+
+    first_run.text = prefix
+    for info in affected[1:]:
+        info["run"].text = ""
+
+    inserted_run = _insert_run_after(paragraph, first_run, new, template_run=first_run, color=RED_COLOR)
+    if suffix:
+        _insert_run_after(paragraph, inserted_run, suffix, template_run=last_run)
+
+    return 1
 
 
 def _replace_literal_in_paragraph(paragraph, old: str, new: str) -> int:
@@ -70,27 +130,7 @@ def _replace_literal_in_paragraph(paragraph, old: str, new: str) -> int:
         if not affected:
             continue
 
-        if len(affected) == 1:
-            info = affected[0]
-            run = info["run"]
-            start_local = match_start - info["start"]
-            end_local = match_end - info["start"]
-            run.text = run.text[:start_local] + new + run.text[end_local:]
-            replacements += 1
-            continue
-
-        first = affected[0]
-        last = affected[-1]
-        prefix = first["run"].text[: match_start - first["start"]]
-        suffix = last["run"].text[match_end - last["start"]:]
-
-        first["run"].text = prefix + new
-        for info in affected[1:-1]:
-            info["run"].text = ""
-        if first is not last:
-            last["run"].text = suffix
-
-        replacements += 1
+        replacements += _replace_match_with_formatted_runs(paragraph, affected, match_start, match_end, new)
 
     return replacements
 
@@ -165,6 +205,43 @@ MONEY_FIELD_EXCLUDED_KEYWORDS = (
     "year",
 )
 
+ROLE_CONCORDANCE_BASES = (
+    "comprador",
+    "comprador_1",
+    "comprador_2",
+    "vendedor",
+    "fideicomitente",
+    "fideicomisario",
+    "poderdante",
+    "apoderado",
+    "inscrito",
+)
+
+GENDER_VALUE_MAP = {
+    "hombre": "M",
+    "masculino": "M",
+    "m": "M",
+    "mujer": "F",
+    "femenino": "F",
+    "f": "F",
+    "persona_juridica": "J",
+    "juridica": "J",
+    "j": "J",
+}
+
+CONCORDANCE_EXPECTATIONS = {
+    "M": {
+        "nationality": {"colombiano"},
+        "state_civil": {"casado", "soltero", "divorciado", "viudo"},
+        "role_words": {"deudor", "comprador", "vendedor", "apoderado", "inscrito", "fideicomisario"},
+    },
+    "F": {
+        "nationality": {"colombiana"},
+        "state_civil": {"casada", "soltera", "divorciada", "viuda"},
+        "role_words": {"deudora", "compradora", "vendedora", "apoderada", "inscrita", "fideicomisaria"},
+    },
+}
+
 
 def _is_money_field(field: dict) -> bool:
     haystack = " ".join(
@@ -192,6 +269,100 @@ def _format_money_value(value: str) -> str:
     if re.fullmatch(r"[\d.,]+", normalized_raw) is None and not raw.isdigit():
         return raw
     return f"{int(digits):,}".replace(",", ".")
+
+
+def _normalize_gender_value(value: str | None) -> str | None:
+    normalized = _normalize_key(value or "")
+    if not normalized:
+        return None
+    return GENDER_VALUE_MAP.get(normalized)
+
+
+def _find_first_non_empty(normalized_values: dict[str, str], candidate_keys: Iterable[str]) -> tuple[str | None, str]:
+    for candidate_key in candidate_keys:
+        value = _normalize_value(normalized_values.get(candidate_key, "")).strip()
+        if value:
+            return candidate_key, value
+    return None, ""
+
+
+def _resolve_role_gender(normalized_values: dict[str, str], role: str) -> str | None:
+    candidates = [
+        f"{role}_es_hombre_o_mujer",
+        f"{role}_es_hombre_0_mujer",
+        f"genero_{role}",
+        f"{role}_genero",
+        f"{role}_sexo",
+    ]
+    if role == "comprador_1":
+        candidates.extend(["comprador_es_hombre_o_mujer", "comprador_es_hombre_0_mujer", "genero_comprador", "comprador_genero", "comprador_sexo"])
+    _, value = _find_first_non_empty(normalized_values, candidates)
+    return _normalize_gender_value(value)
+
+
+def validate_gender_concordance(normalized_values: dict[str, str]) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+
+    for role in ROLE_CONCORDANCE_BASES:
+        gender = _resolve_role_gender(normalized_values, role)
+        if gender not in {"M", "F"}:
+            continue
+
+        expected = CONCORDANCE_EXPECTATIONS[gender]
+        nationality_candidates = [f"nacionalidad_{role}"]
+        state_civil_candidates = [f"estado_civil_{role}"]
+        if role == "comprador_1":
+            nationality_candidates.append("nacionalidad_comprador")
+            state_civil_candidates.append("estado_civil_comprador")
+
+        nationality_key, nationality_value = _find_first_non_empty(normalized_values, nationality_candidates)
+        normalized_nationality = _normalize_key(nationality_value)
+        if nationality_key and normalized_nationality and normalized_nationality not in expected["nationality"]:
+            warnings.append(
+                {
+                    "role": role,
+                    "field_key": nationality_key,
+                    "value": nationality_value,
+                    "expected_gender": gender,
+                    "message": f"Nacionalidad no concuerda con género {gender} para {role}.",
+                }
+            )
+
+        state_key, state_value = _find_first_non_empty(normalized_values, state_civil_candidates)
+        normalized_state = _normalize_key(state_value)
+        if state_key and normalized_state and normalized_state not in expected["state_civil"]:
+            warnings.append(
+                {
+                    "role": role,
+                    "field_key": state_key,
+                    "value": state_value,
+                    "expected_gender": gender,
+                    "message": f"Estado civil no concuerda con género {gender} para {role}.",
+                }
+            )
+
+        descriptor_candidates = [
+            f"calidad_{role}",
+            f"rol_{role}",
+            role,
+        ]
+        descriptor_key, descriptor_value = _find_first_non_empty(normalized_values, descriptor_candidates)
+        normalized_descriptor = _normalize_key(descriptor_value)
+        if descriptor_key and normalized_descriptor and any(
+            word in normalized_descriptor for word in {"deudor", "deudora", "comprador", "compradora", "vendedor", "vendedora", "apoderado", "apoderada", "inscrito", "inscrita", "fideicomisario", "fideicomisaria"}
+        ):
+            if not any(word in normalized_descriptor for word in expected["role_words"]):
+                warnings.append(
+                    {
+                        "role": role,
+                        "field_key": descriptor_key,
+                        "value": descriptor_value,
+                        "expected_gender": gender,
+                        "message": f"Rol o descriptor no concuerda con género {gender} para {role}.",
+                    }
+                )
+
+    return warnings
 
 
 UNIDADES = [
@@ -441,6 +612,9 @@ def apply_marked_template_replacements(
         normalized_values.get("valor_del_acto_de_la_hipoteca_en_letras"),
     )
     print("### VALUE origen_cuota_inicial:", normalized_values.get("origen_cuota_inicial"))
+    concordance_warnings = validate_gender_concordance(normalized_values)
+    if concordance_warnings:
+        print("### GENDER CONCORDANCE WARNINGS ###", concordance_warnings)
 
     replacement_targets: list[tuple[str, str, str]] = []
     for field in fields_list:
@@ -468,6 +642,7 @@ def apply_marked_template_replacements(
         "total_replacements": 0,
         "by_key": {},
         "not_found": [],
+        "gender_concordance_warnings": concordance_warnings,
     }
 
     seen_markers: set[str] = set()

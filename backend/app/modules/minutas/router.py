@@ -293,5 +293,10 @@ async def generate_marked_template_endpoint(
                 for item in (stats_raw.get("not_found", []) or [])
                 if isinstance(item, dict)
             ],
+            "advertencias_concordancia": [
+                item
+                for item in (stats_raw.get("gender_concordance_warnings", []) or [])
+                if isinstance(item, dict)
+            ],
         },
     }
