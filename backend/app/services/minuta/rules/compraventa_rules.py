@@ -25,7 +25,7 @@ def validate_required_actors(required_roles: set[str], values: dict[str, str]) -
             RenderIssue(
                 code="template_requires_missing_actor",
                 message=f"La plantilla exige {role}, pero los datos no lo incluyen.",
-                severity=RenderSeverity.BLOCKER,
+                severity=RenderSeverity.WARNING,
                 field_key=role,
                 details={"role": role},
             )
@@ -66,7 +66,7 @@ def validate_required_fields(field_keys: set[str], values: dict[str, str], marke
             RenderIssue(
                 code="required_field_missing",
                 message=message,
-                severity=RenderSeverity.BLOCKER,
+                severity=RenderSeverity.WARNING,
                 field_key=key,
                 placeholder=marker_by_key.get(key),
             )

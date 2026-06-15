@@ -15,6 +15,7 @@ from app.services.minuta.rules.common_rules import normalize_key
 from app.services.minuta.rules.conditional_blocks import should_remove_si_aplica_block
 from app.services.minuta.rules.gender_rules import normalize_gender
 from app.services.minuta.rules.person_rules import collective_adjective, collective_label, grammar_for_gender
+from app.services.minuta.rules.phrase_rules import normalize_notarial_phrase
 
 RED_COLOR = RGBColor(0xFF, 0x00, 0x00)
 TECHNICAL_TAB_TOKEN = "[[--]]"
@@ -122,6 +123,7 @@ class DocxRenderer:
         self._remove_auxiliary_tokens(document)
         self._cleanup_optional_empty_segments(document, audit)
         self._normalize_known_gender_literals(document, normalized_values)
+        self._normalize_composed_phrases(document)
         audit.empty_signature_blocks_removed = self._remove_empty_signature_blocks(document)
         audit.structure_after = self._structure(document)
         audit.notarial_dash_sequences_preserved = min(
@@ -313,6 +315,13 @@ class DocxRenderer:
                 self._replace_marker_in_paragraph(paragraph, marker, replacement, None, "collective-literal-cleanup", color=None)
             while ",  " in (paragraph.text or ""):
                 self._replace_first_marker_in_paragraph(paragraph, ",  ", ", ")
+
+    def _normalize_composed_phrases(self, document: Document) -> None:
+        for paragraph, _location in iter_document_paragraphs(document):
+            text = paragraph.text or ""
+            normalized = normalize_notarial_phrase(text)
+            if normalized != text:
+                set_paragraph_text_preserving_first_run(paragraph, normalized)
 
     def _remove_empty_signature_blocks(self, document: Document) -> int:
         paragraphs = [paragraph for paragraph, _location in iter_document_paragraphs(document)]

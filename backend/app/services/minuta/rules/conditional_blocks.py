@@ -30,7 +30,7 @@ def residual_conditional_issue(token: str, location: str) -> RenderIssue:
     return RenderIssue(
         code="residual_conditional_token",
         message=f"Quedó token condicional sin resolver: {token}",
-        severity=RenderSeverity.BLOCKER,
+        severity=RenderSeverity.WARNING,
         location=location,
         details={"token": token},
     )

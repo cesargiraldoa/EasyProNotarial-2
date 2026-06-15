@@ -11,6 +11,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_COLOR_INDEX
+from app.services.minuta.rules.money_rules import normalize_cop_replacements
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 DASH_PLACEHOLDER = "[[--]]"
@@ -144,10 +145,11 @@ def render_docx_template(source_path: str | Path, destination_path: str | Path, 
     destination = Path(destination_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     document = Document(str(source))
-    _replace_tokens_in_container(document, replacements)
+    safe_replacements = normalize_cop_replacements(replacements)
+    _replace_tokens_in_container(document, safe_replacements)
     for section in document.sections:
-        _replace_tokens_in_container(section.header, replacements)
-        _replace_tokens_in_container(section.footer, replacements)
+        _replace_tokens_in_container(section.header, safe_replacements)
+        _replace_tokens_in_container(section.footer, safe_replacements)
     document.save(str(destination))
 
 

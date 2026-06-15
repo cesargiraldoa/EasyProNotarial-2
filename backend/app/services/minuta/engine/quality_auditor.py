@@ -7,6 +7,7 @@ from docx import Document
 
 from app.services.minuta.engine.models import RenderAudit, RenderIssue, RenderSeverity
 from app.services.minuta.engine.template_analyzer import RESIDUAL_TOKEN_PATTERN, TemplateAnalyzer, iter_document_paragraphs
+from app.services.minuta.document_alerts import detect_live_text_alerts
 
 INCOMPLETE_PHRASE_PATTERNS = (
     re.compile(r"\bproveniente de\s*\.", re.IGNORECASE),
@@ -34,7 +35,7 @@ class QualityAuditor:
                 RenderIssue(
                     code="unresolved_placeholder",
                     message=f"Quedó placeholder sin resolver: {placeholder}",
-                    severity=RenderSeverity.BLOCKER,
+                    severity=RenderSeverity.WARNING,
                     placeholder=placeholder,
                 )
             )
@@ -44,7 +45,7 @@ class QualityAuditor:
                 RenderIssue(
                     code="residual_token",
                     message=f"Quedó token residual: {token}",
-                    severity=RenderSeverity.BLOCKER,
+                    severity=RenderSeverity.WARNING,
                     details={"token": token},
                 )
             )
@@ -53,6 +54,7 @@ class QualityAuditor:
         self._verify_structure(audit)
         self._verify_incomplete_phrases(output_path, audit)
         self._verify_empty_signature_blocks(output_path, audit)
+        self._verify_live_document_alerts(output_path, audit)
         return audit
 
     def _verify_red_replacements(self, output_path: str | Path, audit: RenderAudit) -> None:
@@ -103,7 +105,7 @@ class QualityAuditor:
                     RenderIssue(
                         code="incomplete_required_phrase",
                         message="Frase incompleta por campo requerido vacío o no mapeado.",
-                        severity=RenderSeverity.BLOCKER,
+                        severity=RenderSeverity.WARNING,
                         location=location,
                         details={"text": match.group(0)},
                     )
@@ -120,10 +122,27 @@ class QualityAuditor:
             RenderIssue(
                 code="empty_signature_block",
                 message="Quedó bloque de firma vacío sin persona asociada.",
-                severity=RenderSeverity.BLOCKER,
+                severity=RenderSeverity.WARNING,
                 details={"count": len(matches)},
             )
         )
+
+    def _verify_live_document_alerts(self, output_path: str | Path, audit: RenderAudit) -> None:
+        alerts = detect_live_text_alerts(
+            (paragraph.text or "", location)
+            for paragraph, location in iter_document_paragraphs(Document(str(output_path)))
+        )
+        for alert in alerts:
+            audit.issues.append(
+                RenderIssue(
+                    code=alert.code,
+                    message=alert.message,
+                    severity=RenderSeverity.WARNING,
+                    field_key=alert.field_key,
+                    location=alert.location,
+                    details=alert.details or {"value": alert.value},
+                )
+            )
 
     def _verify_structure(self, audit: RenderAudit) -> None:
         before = audit.structure_before

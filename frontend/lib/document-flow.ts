@@ -210,6 +210,8 @@ export type CaseDocument = { id: number; category: string; title: string; curren
 export type CaseParticipant = { id: number; role_code: string; role_label: string; person_id: number; person: PersonRecord; snapshot_json: string; created_at: string; updated_at: string };
 export type CaseActData = { id: number; case_id: number; data_json?: string; gari_draft_text?: string | null; created_at: string; updated_at: string };
 export type DocumentFlowCase = { id: number; notary_id: number; notary_label: string; template_id?: number | null; template_name?: string | null; template?: TemplateRecord | null; case_type: string; act_type: string; consecutive: number; year: number; internal_case_number?: string | null; official_deed_number?: string | null; official_deed_year?: number | null; current_state: string; current_owner_user_id?: number | null; current_owner_user_name?: string | null; created_by_user_id?: number | null; created_by_user_name?: string | null; client_user_id?: number | null; client_user_name?: string | null; protocolist_user_id?: number | null; protocolist_user_name?: string | null; approver_user_id?: number | null; approver_user_name?: string | null; titular_notary_user_id?: number | null; titular_notary_user_name?: string | null; substitute_notary_user_id?: number | null; substitute_notary_user_name?: string | null; requires_client_review: boolean; final_signed_uploaded: boolean; approved_at?: string | null; approved_by_user_id?: number | null; approved_by_user_name?: string | null; approved_by_role_code?: string | null; approved_document_version_id?: number | null; metadata_json: string; created_at: string; updated_at: string; timeline_events: CaseTimelineEvent[]; workflow_events: CaseWorkflowEvent[]; participants: CaseParticipant[]; act_data?: CaseActData | null; client_comments: CaseComment[]; internal_notes: CaseComment[]; documents: CaseDocument[] };
+export type DocumentAlert = { code?: string; message?: string; severity?: string; field_key?: string | null; location?: string | null; value?: string | null; details?: Record<string, unknown> | null };
+export type GenerateFromTemplateResult = { status: string; message: string; case_id: number; document_id: number; version_id: number; version_number: number; storage_path: string; original_filename: string; document_alerts?: DocumentAlert[] };
 
 function normalizeTemplateRole(value: unknown): TemplateRequiredRole {
   const item = (value ?? {}) as Record<string, unknown>;
@@ -370,6 +372,23 @@ export async function createDocumentCase(payload: {
   return response.json();
 }
 export async function getDocumentCase(caseId: number) { return normalizeCase(await apiFetch<unknown>(`/api/v1/document-flow/cases/${caseId}`)); }
+export async function generateFromTemplate(caseId: number, actData: Record<string, string>): Promise<GenerateFromTemplateResult> {
+  const token = getToken();
+  const response = await fetch(buildApiUrl(`/api/v1/document-flow/cases/${caseId}/generate-from-template`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ act_data: actData }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(extractHttpErrorMessage(text, "No fue posible generar el Word de la minuta."));
+  }
+  return response.json();
+}
 export async function saveCaseParticipants(
   caseId: number,
   payload: any[]

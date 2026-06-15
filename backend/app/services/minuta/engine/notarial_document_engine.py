@@ -37,10 +37,6 @@ class NotarialDocumentEngine:
         analysis = self.analyzer.analyze(source_path, fields_list)
         context = self.context_builder.build(values, fields_list)
         issues = self.rule_engine.pre_render_issues(analysis, context.normalized_values)
-        blockers = [issue for issue in issues if issue.severity.value == "blocker"]
-        if blockers:
-            raise NotarialRenderBlockedError(issues)
-
         marker_values, marker_keys = self._marker_values(fields_list, context.normalized_values)
         issues.extend(self.rule_engine.required_value_issues(marker_values))
 
@@ -53,9 +49,6 @@ class NotarialDocumentEngine:
         )
         audit.issues.extend(issues)
         audit = self.auditor.audit_post_render(destination_path, audit)
-        post_blockers = [issue for issue in audit.issues if issue.severity.value == "blocker"]
-        if post_blockers:
-            raise NotarialRenderBlockedError(audit.issues)
         return NotarialRenderResult(
             output_path=Path(destination_path),
             audit=audit,

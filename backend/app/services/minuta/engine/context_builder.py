@@ -13,6 +13,8 @@ from app.services.minuta.rules.date_rules import (
 from app.services.minuta.rules.gender_rules import normalize_gender
 from app.services.minuta.rules.money_rules import format_money_value, is_money_field, number_to_words
 from app.services.minuta.rules.person_rules import grammar_for_gender, normalize_document_type, normalize_transit_phrase
+from app.services.minuta.rules.avf_rules import resolve_avf
+from app.services.minuta.rules.rph_rules import resolve_rph, normalize_ph_name
 
 DERIVED_MONEY_RULES = (
     ("valor_de_la_venta_en_numeros", "valor_apartamento_en_letras", "PESOS MONEDA LEGAL"),
@@ -45,6 +47,7 @@ class ContextBuilder:
         self._derive_money_letters(normalized_values, field_key_map)
         dates = self._normalize_dates(normalized_values, fields_list)
         self._normalize_person_values(normalized_values)
+        self._derive_real_estate_values(normalized_values)
 
         return NotarialRenderContext(
             values={str(key): normalize_value(value) for key, value in (values or {}).items()},
@@ -134,6 +137,23 @@ class ContextBuilder:
         for key in ("seleccione_si_comprador_esta_de_transito", "seleccione_si_comprador_1_esta_de_transito", "seleccione_si_comprador_2_esta_de_transito"):
             if key in normalized_values:
                 normalized_values[key] = normalize_transit_phrase(normalized_values[key])
+
+    def _derive_real_estate_values(self, normalized_values: dict[str, str]) -> None:
+        for key in ("conjunto_o_edificio", "nombre_conjunto", "nombre_edificio"):
+            if key in normalized_values:
+                normalized_values[key] = normalize_ph_name(normalized_values[key])
+
+        avf = resolve_avf(normalized_values)
+        if "decision_avf" in normalized_values and not normalized_values.get("decision_avf"):
+            normalized_values["decision_avf"] = avf.decision
+        for key in ("texto_avf", "clausula_avf", "afectacion_vivienda_familiar"):
+            if key in normalized_values and not normalized_values.get(key):
+                normalized_values[key] = avf.text
+
+        rph = resolve_rph(normalized_values)
+        for key in ("constancia_administracion", "texto_administracion", "paz_salvo_administracion_texto"):
+            if key in normalized_values and not normalized_values.get(key):
+                normalized_values[key] = rph.text
 
     def _people(self, normalized_values: dict[str, str]) -> list[NotarialPerson]:
         people: list[NotarialPerson] = []

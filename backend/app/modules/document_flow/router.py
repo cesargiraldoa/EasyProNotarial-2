@@ -59,6 +59,11 @@ from app.schemas.act_catalog import CaseActOut, CaseActsPayload
 from app.schemas.person import PersonCreate
 from app.schemas.template import TemplateFieldSummary, TemplateRequiredRoleSummary, TemplateSummary
 from app.services.document_generation import build_case_text_snapshot, convert_docx_to_pdf, extract_text_from_docx, generate_plain_pdf, render_docx_template, serialize_placeholder_snapshot
+from app.services.minuta.document_alerts import alerts_to_dicts, detect_live_text_alerts, detect_matricula_alerts, document_text
+from app.services.minuta.rules.avf_rules import resolve_avf
+from app.services.minuta.rules.common_rules import normalize_key
+from app.services.minuta.rules.money_rules import normalize_cop_replacements
+from app.services.minuta.rules.rph_rules import resolve_rph
 from app.services.gari_document_service import (
     build_gari_docx_buffer,
     generate_notarial_document,
@@ -405,7 +410,71 @@ def build_placeholder_replacements(case: Case) -> dict[str, str]:
             value = f"${value:,.0f}".replace(",", ".")
         replacements[f"{{{{{placeholder}}}}}"] = str(value)
     replacements["{{NUMERO_ESCRITURA}}"] = case.official_deed_number or "PENDIENTE ASIGNACIÓN"
-    return replacements
+    return normalize_cop_replacements(replacements)
+
+
+def parse_case_act_data(case: Case) -> dict[str, object]:
+    if case.act_data is None:
+        return {}
+    try:
+        parsed = json.loads(case.act_data.data_json or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def template_replacements_from_act_data(template: DocumentTemplate, act_data: dict[str, object]) -> dict[str, str]:
+    replacements: dict[str, object] = {}
+    normalized_data = {normalize_key(key): value for key, value in (act_data or {}).items()}
+    for field in template.fields or []:
+        field_code = normalize_key(field.field_code)
+        placeholder_key = (field.placeholder_key or field.field_code or "").strip()
+        marker_name = placeholder_key.strip("{}").strip() or field.field_code
+        replacements[f"{{{{{marker_name.upper()}}}}}"] = normalized_data.get(field_code, "")
+    for key, value in normalized_data.items():
+        replacements.setdefault(f"{{{{{key.upper()}}}}}", value)
+    return normalize_cop_replacements(replacements)
+
+
+def latest_generated_template_id(case: Case) -> int | None:
+    for document in case.documents:
+        for version in document.versions:
+            if version.generated_from_template_id:
+                return version.generated_from_template_id
+    return None
+
+
+def resolve_case_template_for_generation(db: Session, case: Case) -> DocumentTemplate | None:
+    template_id = case.template_id or latest_generated_template_id(case)
+    if template_id is None:
+        return None
+    template = (
+        db.query(DocumentTemplate)
+        .options(joinedload(DocumentTemplate.fields), joinedload(DocumentTemplate.required_roles))
+        .filter(DocumentTemplate.id == template_id)
+        .first()
+    )
+    if template is not None and case.template_id is None:
+        case.template_id = template.id
+        append_workflow(
+            db,
+            case,
+            None,
+            "template_link_recovered",
+            comment="Vínculo de plantilla recuperado desde versión documental generada.",
+            metadata={"template_id": template.id},
+        )
+        db.flush()
+    return template
+
+
+def build_document_alerts(output_path: Path, act_data: dict[str, object], case_acts: list[dict] | None = None) -> list[dict]:
+    alerts = detect_live_text_alerts(document_text(output_path))
+    alerts.extend(detect_matricula_alerts(output_path, act_data, case_acts))
+    result = alerts_to_dicts(alerts)
+    for alert in resolve_avf(act_data).alerts + resolve_rph(act_data).alerts:
+        result.append({"severity": "warning", **alert})
+    return result
 
 
 def latest_document_version(case: Case, category: str, file_format: str | None = None) -> CaseDocumentVersion | None:
@@ -1207,10 +1276,12 @@ def generate_from_template(
     current_user: User = Depends(require_roles("super_admin", "admin_notary", "protocolist", "approver", "notary", "notary_titular", "notary_suplente")),
 ):
     case = load_case_or_404(db, case_id)
-    if case.template_id is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El caso no tiene plantilla configurada.")
-
-    template = db.query(DocumentTemplate).filter(DocumentTemplate.id == case.template_id).first()
+    template = resolve_case_template_for_generation(db, case)
+    if template is None:
+        latest_draft = latest_document_version(case, "draft", "docx") or latest_document_version(case, "marked_template", "docx")
+        if latest_draft is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El caso no tiene plantilla configurada, pero conserva un DOCX editable. Abre el editor desde el detalle del caso.")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El caso no tiene plantilla configurada ni documento base recuperable.")
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La plantilla asociada al caso no existe.")
     if not template.storage_path:
@@ -1222,11 +1293,22 @@ def generate_from_template(
     else:
         case.act_data.data_json = json.dumps(act_data, ensure_ascii=False)
 
-    replacements = {f"{{{{{key.upper()}}}}}": value for key, value in act_data.items()}
+    replacements = template_replacements_from_act_data(template, act_data)
+    case_acts = [
+        {
+            "act_code": item.act_code,
+            "act_label": item.act_label,
+            "act_order": item.act_order,
+            "roles_json": item.roles_json,
+        }
+        for item in case.acts
+    ]
+    document_alerts: list[dict] = []
     with tempfile.TemporaryDirectory(prefix=f"easypro-generate-case-{case.id}-") as temp_dir:
         temp_output = Path(temp_dir) / "borrador.docx"
         template_source = resolve_template_source_path(template.storage_path, temp_dir=temp_dir)
         render_docx_template(template_source, temp_output, replacements)
+        document_alerts = build_document_alerts(temp_output, act_data, case_acts)
         version = add_document_version(
             db=db,
             case=case,
@@ -1237,7 +1319,7 @@ def generate_from_template(
             original_filename=f"borrador_v{(latest_document_version(case, 'draft', 'docx').version_number + 1) if latest_document_version(case, 'draft', 'docx') else 1}.docx",
             created_by_user_id=current_user.id,
             template_id=template.id,
-            placeholder_snapshot_json=json.dumps(replacements, ensure_ascii=False, indent=2),
+            placeholder_snapshot_json=json.dumps({"replacements": replacements, "document_alerts": document_alerts}, ensure_ascii=False, indent=2),
         )
     db.refresh(version)
     document = db.query(CaseDocument).filter(CaseDocument.id == version.case_document_id).first()
@@ -1262,7 +1344,7 @@ def generate_from_template(
         case.current_state,
         case.current_state,
         comment="Documento generado desde plantilla",
-        metadata={"template_id": template.id, "version_number": version.version_number},
+        metadata={"template_id": template.id, "version_number": version.version_number, "document_alerts": document_alerts},
     )
     db.commit()
     return {
@@ -1274,4 +1356,5 @@ def generate_from_template(
         "version_number": version.version_number,
         "storage_path": version.storage_path,
         "original_filename": version.original_filename,
+        "document_alerts": document_alerts,
     }

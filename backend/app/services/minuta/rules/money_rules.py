@@ -66,6 +66,27 @@ def format_money_value(value: object) -> str:
     return f"{int(digits):,}".replace(",", ".")
 
 
+def format_cop_value(value: object, include_symbol: bool = False) -> str:
+    formatted = format_money_value(value)
+    if not formatted:
+        return ""
+    return f"${formatted}" if include_symbol and not formatted.startswith("$") else formatted
+
+
+def normalize_cop_replacements(replacements: dict[str, object]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for marker, value in (replacements or {}).items():
+        key = normalize_key(marker)
+        if any(excluded in key for excluded in MONEY_FIELD_EXCLUDED_KEYWORDS):
+            result[str(marker)] = normalize_value(value)
+            continue
+        if any(keyword in key for keyword in MONEY_FIELD_KEYWORDS):
+            result[str(marker)] = format_cop_value(value, include_symbol=normalize_value(value).startswith("$"))
+        else:
+            result[str(marker)] = normalize_value(value)
+    return result
+
+
 UNIDADES = [
     "",
     "UNO",

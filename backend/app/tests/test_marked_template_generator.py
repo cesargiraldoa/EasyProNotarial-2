@@ -280,7 +280,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             self.assertEqual(result.statistics["blockers_count"], 0)
             self.assertIn("JUAN CAMILO y MARIA PEREZ", Document(str(target)).paragraphs[0].text)
 
-    def test_engine_blocks_two_buyer_template_with_one_buyer_data(self):
+    def test_engine_warns_two_buyer_template_with_one_buyer_data(self):
         with TemporaryDirectory() as tmp_dir:
             source = Path(tmp_dir) / "source.docx"
             target = Path(tmp_dir) / "target.docx"
@@ -288,16 +288,18 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("Compradores: {{NOMBRE_COMPRADOR_1}} y {{NOMBRE_COMPRADOR_2}}")
             doc.save(source)
 
-            with self.assertRaises(NotarialRenderBlockedError):
-                NotarialDocumentEngine().render_marked_template(
-                    source,
-                    target,
-                    {"nombre_comprador_1": "JUAN CAMILO"},
-                    [
-                        {"key": "nombre_comprador_1", "label": "Comprador 1", "raw_markers": ["{{NOMBRE_COMPRADOR_1}}"]},
-                        {"key": "nombre_comprador_2", "label": "Comprador 2", "raw_markers": ["{{NOMBRE_COMPRADOR_2}}"]},
-                    ],
-                )
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"nombre_comprador_1": "JUAN CAMILO"},
+                [
+                    {"key": "nombre_comprador_1", "label": "Comprador 1", "raw_markers": ["{{NOMBRE_COMPRADOR_1}}"]},
+                    {"key": "nombre_comprador_2", "label": "Comprador 2", "raw_markers": ["{{NOMBRE_COMPRADOR_2}}"]},
+                ],
+            )
+
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertTrue(any(issue.code in {"template_requires_missing_actor", "empty_replacement_value"} for issue in result.warnings))
 
     def test_engine_formats_money_letters_date_residuals_and_conditional_block(self):
         with TemporaryDirectory() as tmp_dir:
@@ -398,7 +400,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             self.assertTrue(any(issue.code == "optional_field_omitted" for issue in result.warnings))
             self.assertNotIn("con .", text)
 
-    def test_critical_field_empty_still_blocks_generation(self):
+    def test_critical_field_empty_generates_warning_without_blocking_generation(self):
         with TemporaryDirectory() as tmp_dir:
             source = Path(tmp_dir) / "source.docx"
             target = Path(tmp_dir) / "target.docx"
@@ -406,15 +408,15 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("Matrícula {{NUMERO_MATRICULA}}.")
             doc.save(source)
 
-            with self.assertRaises(NotarialRenderBlockedError) as exc:
-                NotarialDocumentEngine().render_marked_template(
-                    source,
-                    target,
-                    {"numero_matricula": ""},
-                    [{"key": "numero_matricula", "label": "Matrícula", "raw_markers": ["{{NUMERO_MATRICULA}}"]}],
-                )
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"numero_matricula": ""},
+                [{"key": "numero_matricula", "label": "Matrícula", "raw_markers": ["{{NUMERO_MATRICULA}}"]}],
+            )
 
-            self.assertTrue(any(issue.code == "required_field_missing" and issue.field_key == "numero_matricula" for issue in exc.exception.issues))
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertTrue(any(issue.code == "required_field_missing" and issue.field_key == "numero_matricula" for issue in result.warnings))
 
     def test_person_concordance_literals_are_resolved_for_mixed_buyers(self):
         with TemporaryDirectory() as tmp_dir:
@@ -519,19 +521,37 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             doc.add_paragraph("A {{A}} B {{B}} vivo {{C}}")
             doc.save(source)
 
-            with self.assertRaises(NotarialRenderBlockedError) as exc:
-                NotarialDocumentEngine().render_marked_template(
-                    source,
-                    target,
-                    {"a": "uno", "b": ""},
-                    [
-                        {"key": "a", "label": "A", "raw_markers": ["{{A}}"]},
-                        {"key": "b", "label": "B", "raw_markers": ["{{B}}"]},
-                        {"key": "d", "label": "D", "raw_markers": ["{{D}}"]},
-                    ],
-                )
+            result = NotarialDocumentEngine().render_marked_template(
+                source,
+                target,
+                {"a": "uno", "b": ""},
+                [
+                    {"key": "a", "label": "A", "raw_markers": ["{{A}}"]},
+                    {"key": "b", "label": "B", "raw_markers": ["{{B}}"]},
+                    {"key": "d", "label": "D", "raw_markers": ["{{D}}"]},
+                ],
+            )
 
-            self.assertTrue(any(issue.code == "unresolved_placeholder" for issue in exc.exception.issues))
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertTrue(any(issue.code == "unresolved_placeholder" for issue in result.warnings))
+
+    def test_composed_phrase_normalizer_cleans_common_notarial_duplicates(self):
+        with TemporaryDirectory() as tmp_dir:
+            source = Path(tmp_dir) / "source.docx"
+            target = Path(tmp_dir) / "target.docx"
+            doc = Document()
+            doc.add_paragraph("número número de escritura por cantidad de de pesos y P.H. P.H. varón(fideicomisario)")
+            doc.save(source)
+
+            result = NotarialDocumentEngine().render_marked_template(source, target, {}, [])
+            text = Document(str(target)).paragraphs[0].text
+
+            self.assertEqual(result.statistics["blockers_count"], 0)
+            self.assertIn("número de escritura", text)
+            self.assertIn("cantidad de pesos", text)
+            self.assertIn("P.H.", text)
+            self.assertNotIn("P.H. P.H.", text)
+            self.assertNotIn("varón(fideicomisario)", text)
 
 
 if __name__ == "__main__":

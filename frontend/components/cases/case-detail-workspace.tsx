@@ -7,8 +7,10 @@ import { ArrowLeft, FileText, Upload, X } from "lucide-react";
 import {
   buildCaseOnlyOfficeEditorPath,
   downloadDocumentVersionBlob,
+  generateFromTemplate,
   getDocumentCase,
   uploadFinalSigned,
+  type DocumentAlert,
   type DocumentFlowCase,
 } from "@/lib/document-flow";
 import { formatDateTime } from "@/lib/datetime";
@@ -45,6 +47,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [isGeneratingWord, setIsGeneratingWord] = useState(false);
   const [isOpeningSignedPdf, setIsOpeningSignedPdf] = useState(false);
   const [isPdfDragActive, setIsPdfDragActive] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
@@ -87,6 +90,23 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
   const isMarkedTemplateCase = caseDetail?.act_type === "minuta_marcada" || (primaryDocument?.category ?? "") === "marked_template";
   const caseDisplayTitle = isMarkedTemplateCase ? (primaryDocument?.title || "Minuta marcada") : (caseDetail?.act_type || "Minuta");
   const currentVersionLabel = latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin version DOCX";
+  const canGenerateFromTemplate = Boolean(caseDetail?.template_id || caseDetail?.template?.id);
+
+  const documentAlerts = useMemo(() => {
+    const alerts: DocumentAlert[] = [];
+    for (const event of caseDetail?.workflow_events ?? []) {
+      if (!event.metadata_json) continue;
+      try {
+        const metadata = JSON.parse(event.metadata_json) as { document_alerts?: DocumentAlert[] };
+        if (Array.isArray(metadata.document_alerts)) {
+          alerts.push(...metadata.document_alerts);
+        }
+      } catch {
+        // Ignorar metadata antigua no JSON.
+      }
+    }
+    return alerts.slice(0, 12);
+  }, [caseDetail?.workflow_events]);
 
   async function fileToBase64(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -101,6 +121,27 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
     if (!primaryDocument?.id || !latestWordVersion?.id) return;
     const editorPath = buildCaseOnlyOfficeEditorPath(caseId, primaryDocument.id, latestWordVersion.id);
     router.push(editorPath);
+  }
+
+  async function handleGenerateWord() {
+    if (!caseDetail) return;
+    setError(null);
+    setFeedback(null);
+    setIsGeneratingWord(true);
+    try {
+      const parsedActData = JSON.parse(caseDetail.act_data?.data_json || "{}") as Record<string, string>;
+      const result = await generateFromTemplate(caseId, parsedActData);
+      const updated = await getDocumentCase(caseId);
+      setCaseDetail(updated);
+      setFeedback(result.document_alerts?.length ? "Word generado con alertas documentales para revisar." : "Word generado correctamente.");
+      if (result.document_id && result.version_id) {
+        router.push(buildCaseOnlyOfficeEditorPath(caseId, result.document_id, result.version_id));
+      }
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "No fue posible generar el Word de la minuta.");
+    } finally {
+      setIsGeneratingWord(false);
+    }
   }
 
   async function handleViewFinalSigned(event?: MouseEvent<HTMLButtonElement>) {
@@ -247,6 +288,37 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
                 Editar minuta
               </button>
             </div>
+          ) : null}
+          {!hasEditableDocumentVersion ? (
+            <div className="space-y-3 rounded-[1.75rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
+              <p className="text-sm font-semibold text-primary">Documento editable</p>
+              <p className="text-sm text-secondary">
+                {canGenerateFromTemplate ? "La minuta tiene plantilla asociada y puede generar un Word editable." : "La minuta no tiene plantilla asociada ni documento DOCX editable."}
+              </p>
+              {canGenerateFromTemplate ? (
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateWord()}
+                  disabled={isGeneratingWord}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {isGeneratingWord ? "Generando..." : "Generar Word"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {documentAlerts.length > 0 ? (
+            <section className="space-y-3 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-5">
+              <p className="text-sm font-semibold text-amber-900">Alertas documentales</p>
+              <div className="space-y-2">
+                {documentAlerts.map((alert, index) => (
+                  <p key={`${alert.code ?? "alert"}-${index}`} className="text-sm text-amber-900">
+                    {alert.message || alert.code || "Alerta documental pendiente de revisión."}
+                  </p>
+                ))}
+              </div>
+            </section>
           ) : null}
 
           <section className="space-y-4 rounded-[1.75rem] border border-[var(--line)] bg-[var(--panel-soft)] p-5">
