@@ -638,8 +638,9 @@ function getMarkedMoneyIntegerDigits(value: string | number | null | undefined):
   return integerDigits;
 }
 
-function splitMarkedMoneyParts(value: string | number | null | undefined): { integerDigits: string; cents: number | null } {
+function splitMarkedMoneyParts(value: string | number | null | undefined): { hasSymbol: boolean; integerDigits: string; cents: number | null; centsText: string | null } {
   const raw = String(value ?? "");
+  const hasSymbol = raw.trim().startsWith("$");
   const lastComma = raw.lastIndexOf(",");
   const lastDot = raw.lastIndexOf(".");
   const decimalSeparatorIndex = Math.max(lastComma, lastDot);
@@ -655,10 +656,13 @@ function splitMarkedMoneyParts(value: string | number | null | undefined): { int
   const integerPart = hasMixedSeparators || hasSingleDecimalSeparator
     ? raw.slice(0, decimalSeparatorIndex)
     : raw;
+  const centsText = hasDecimalSeparator ? decimalDigits.slice(0, 2).padEnd(2, "0") : null;
 
   return {
+    hasSymbol,
     integerDigits: integerPart.replace(/\D/g, ""),
-    cents: hasDecimalSeparator ? Number(decimalDigits.slice(0, 2).padEnd(2, "0")) : null,
+    cents: centsText == null ? null : Number(centsText),
+    centsText,
   };
 }
 
@@ -1147,6 +1151,16 @@ function isMarkedDropdownField(field: MarkedTemplateField) {
 
 function sanitizeMarkedCOPInput(value: string): string {
   return value.replace(/[^\d.,\s$]/g, "");
+}
+
+function formatMarkedCOPOnBlur(value: string): string {
+  const sanitized = sanitizeMarkedCOPInput(value);
+  const { hasSymbol, integerDigits, centsText } = splitMarkedMoneyParts(sanitized);
+  if (!integerDigits) return sanitized.trim();
+
+  const trimmedInteger = integerDigits.replace(/^0+(?=\d)/, "");
+  const formattedInteger = trimmedInteger.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${hasSymbol ? "$" : ""}${formattedInteger}${centsText == null ? "" : `,${centsText}`}`;
 }
 
 function getMarkedFieldTokens(field: MarkedTemplateField): string[] {
@@ -1812,6 +1826,7 @@ function MarkedFieldsForm({
           inputMode="decimal"
           value={currentValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
+          onBlur={(e) => handleFieldChange(field, formatMarkedCOPOnBlur(e.target.value))}
           className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
           placeholder="Ej. 250.000.000"
         />
