@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.services.minuta.engine.models import NotarialDateValue, NotarialMoneyValue, NotarialPerson, NotarialRenderContext
-from app.services.minuta.rules.common_rules import extract_digits, normalize_key, normalize_value
+from app.services.minuta.rules.common_rules import normalize_key, normalize_value
 from app.services.minuta.rules.date_rules import (
     contractual_date_text,
     is_contractual_date_key,
@@ -11,13 +11,13 @@ from app.services.minuta.rules.date_rules import (
     notarial_day_text,
 )
 from app.services.minuta.rules.gender_rules import normalize_gender
-from app.services.minuta.rules.money_rules import format_money_value, is_money_field, number_to_words
+from app.services.minuta.rules.money_rules import extract_money_integer_digits, format_money_value, is_money_field, money_to_words
 from app.services.minuta.rules.person_rules import grammar_for_gender, normalize_document_type, normalize_transit_phrase
 from app.services.minuta.rules.avf_rules import resolve_avf
 from app.services.minuta.rules.rph_rules import resolve_rph, normalize_ph_name
 
 DERIVED_MONEY_RULES = (
-    ("valor_de_la_venta_en_numeros", "valor_apartamento_en_letras", "PESOS MONEDA LEGAL"),
+    ("valor_de_la_venta_en_numeros", "valor_apartamento_en_letras", "PESOS MONEDA CORRIENTE"),
     ("en_numeros_cuota_inicial", "en_letras_cuota_inicial", "PESOS"),
     ("valor_del_acto_de_la_hipoteca", "valor_del_acto_de_la_hipoteca_en_letras", "PESOS"),
 )
@@ -68,8 +68,8 @@ class ContextBuilder:
                 continue
             formatted = format_money_value(normalized_values[key])
             normalized_values[key] = formatted
-            digits = extract_digits(formatted)
-            words = number_to_words(int(digits), "PESOS") if digits else ""
+            digits = extract_money_integer_digits(formatted)
+            words = money_to_words(formatted, "PESOS")
             result.append(NotarialMoneyValue(key=key, numeric_text=digits, formatted_text=formatted, text_in_words=words))
         return result
 
@@ -79,9 +79,9 @@ class ContextBuilder:
                 continue
             if normalized_values.get(letter_key, "").strip():
                 continue
-            digits = extract_digits(normalized_values.get(money_key, ""))
+            digits = extract_money_integer_digits(normalized_values.get(money_key, ""))
             if digits:
-                normalized_values[letter_key] = number_to_words(int(digits), suffix)
+                normalized_values[letter_key] = money_to_words(normalized_values.get(money_key, ""), suffix)
 
     def _normalize_dates(self, normalized_values: dict[str, str], fields: list[dict]) -> list[NotarialDateValue]:
         result: list[NotarialDateValue] = []

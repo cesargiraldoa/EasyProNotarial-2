@@ -23,8 +23,10 @@ from app.services.case_numbering import (
     resolve_next_sequence,
 )
 from app.services.document_persistence import persist_case_document_version
+from app.services.minuta.engine.context_builder import ContextBuilder
 from app.services.minuta.marked_template_detector import detect_marked_template
 from app.services.minuta.marked_template_generator import NotarialRenderBlockedError, apply_marked_template_replacements
+from app.services.minuta.rules.common_rules import normalize_key, normalize_value
 from app.modules.minuta.router import _make_file_token, _resolve_public_api_base
 
 router = APIRouter(prefix="/minutas", tags=["minutas"])
@@ -112,6 +114,44 @@ def _create_marked_template_case(db: Session, current_user: User, filename: str)
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="No fue posible crear la minuta persistente.",
             ) from exc
+
+
+def _latest_marked_template_snapshot(case: Case) -> dict | None:
+    versions = [
+        version
+        for document in (case.documents or [])
+        for version in (document.versions or [])
+        if (version.file_format or "").lower() == "docx"
+    ]
+    for version in sorted(versions, key=lambda item: (item.created_at or datetime.min, item.id), reverse=True):
+        try:
+            snapshot = json.loads(version.placeholder_snapshot_json or "{}")
+        except json.JSONDecodeError:
+            continue
+        if snapshot.get("source") == "marked_template" and isinstance(snapshot.get("fields"), list) and isinstance(snapshot.get("values"), dict):
+            return snapshot
+    return None
+
+
+def _previous_value_marker_fields(snapshot: dict) -> list[dict]:
+    fields = [field for field in (snapshot.get("fields") or []) if isinstance(field, dict)]
+    values = snapshot.get("values") if isinstance(snapshot.get("values"), dict) else {}
+    if not fields or not values:
+        return []
+
+    previous_context = ContextBuilder().build(values, fields)
+    result: list[dict] = []
+    seen_markers: set[str] = set()
+    for field in fields:
+        key = normalize_key(field.get("key") or "")
+        if not key:
+            continue
+        marker = normalize_value(previous_context.normalized_values.get(key, ""))
+        if len(marker) < 3 or marker in seen_markers:
+            continue
+        seen_markers.add(marker)
+        result.append({**field, "raw_markers": [marker]})
+    return result
 
 
 @router.post("/marked-template/detect", response_model=MarkedTemplateDetectionResponse)
@@ -203,6 +243,17 @@ async def generate_marked_template_endpoint(
             )
         fields_data = parsed_fields
 
+    case: Case | None = None
+    previous_snapshot: dict | None = None
+    if case_id is not None:
+        case = db.query(Case).filter(Case.id == case_id).first()
+        if case is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La minuta indicada no existe.")
+        manageable_notary_ids = get_manageable_notary_ids(current_user)
+        if case.notary_id not in manageable_notary_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para usar esta minuta.")
+        previous_snapshot = _latest_marked_template_snapshot(case)
+
     content = await archivo.read()
     if not content:
         raise HTTPException(
@@ -219,6 +270,10 @@ async def generate_marked_template_endpoint(
 
     try:
         stats_raw = apply_marked_template_replacements(path_entrada, path_salida, values_data, fields_data)
+        if int(stats_raw.get("total_replacements", 0) or 0) == 0 and previous_snapshot:
+            fallback_fields = _previous_value_marker_fields(previous_snapshot)
+            if fallback_fields:
+                stats_raw = apply_marked_template_replacements(path_entrada, path_salida, values_data, fallback_fields)
         content_out = Path(path_salida).read_bytes()
     except NotarialRenderBlockedError as exc:
         raise HTTPException(
@@ -252,14 +307,7 @@ async def generate_marked_template_endpoint(
         Path(path_salida).unlink(missing_ok=True)
 
     display_name, document_title = _sanitize_marked_document_name(document_name, archivo.filename or "minuta.docx")
-    if case_id is not None:
-        case = db.query(Case).filter(Case.id == case_id).first()
-        if case is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La minuta indicada no existe.")
-        manageable_notary_ids = get_manageable_notary_ids(current_user)
-        if case.notary_id not in manageable_notary_ids:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para usar esta minuta.")
-    else:
+    if case is None:
         case = _create_marked_template_case(db, current_user, display_name)
 
     version = persist_case_document_version(

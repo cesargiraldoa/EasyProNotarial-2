@@ -314,6 +314,7 @@ export async function generateMarkedTemplate(
   values: Record<string, string>,
   fields: MarkedTemplateField[],
   documentName?: string,
+  caseId?: number | null,
 ): Promise<MinutaGenerarResult> {
   const form = new FormData();
   form.append("archivo", file);
@@ -322,6 +323,9 @@ export async function generateMarkedTemplate(
   const normalizedDocumentName = (documentName ?? "").trim();
   if (normalizedDocumentName) {
     form.append("document_name", normalizedDocumentName);
+  }
+  if (caseId && Number.isFinite(caseId) && caseId > 0) {
+    form.append("case_id", String(caseId));
   }
   const response = await fetch(buildApiUrl("/api/v1/minutas/marked-template/generate"), {
     method: "POST",

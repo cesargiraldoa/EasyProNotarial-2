@@ -12,6 +12,7 @@ import {
   type MinutaInmueble, type MinutaNotaria, type MinutaValor, type MinutaDatos,
   type MinutaAdquisicion, type MarkedTemplateDetectResult, type MarkedTemplateField, type MinutaGenerarResult,
 } from "@/lib/minuta";
+import { downloadDocumentVersionBlob } from "@/lib/document-flow";
 import { TIPOS_DOCUMENTO, NOTAS_LINDEROS, ESTADOS_CIVILES_GENERALES, PAISES, getEstadosCiviles, getNacionalidadesPorGenero, isGenderField } from "@/lib/listas-notariales";
 import { isPlaceholderDropdownValue } from "@/lib/dropdown-options";
 import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByMunicipio } from "@/lib/colombia-geo";
@@ -112,7 +113,7 @@ function numeroALetras(n: number): string {
 }
 
 function numeroALetrasConSufijo(n: number, suffix: string): string {
-  if (n === 0) return `CERO ${suffix}`;
+  if (n === 0) return `CERO ${suffix}`.trim();
   const partes: string[] = [];
   const miles_millones = Math.floor(n / 1_000_000_000);
   const millones = Math.floor((n % 1_000_000_000) / 1_000_000);
@@ -134,7 +135,7 @@ function numeroALetrasConSufijo(n: number, suffix: string): string {
   if (resto > 0) {
     partes.push(centenas(resto));
   }
-  return partes.join(" ") + ` ${suffix}`;
+  return `${partes.join(" ")} ${suffix}`.trim();
 }
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
@@ -632,8 +633,33 @@ function getMarkedMoneySourceKeyForLetter(field: MarkedTemplateField): string | 
   return null;
 }
 
-function extractMarkedMoneyDigits(value: string | number | null | undefined): string {
-  return String(value ?? "").replace(/\D/g, "");
+function getMarkedMoneyIntegerDigits(value: string | number | null | undefined): string {
+  const { integerDigits } = splitMarkedMoneyParts(value);
+  return integerDigits;
+}
+
+function splitMarkedMoneyParts(value: string | number | null | undefined): { integerDigits: string; cents: number | null } {
+  const raw = String(value ?? "");
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  const decimalSeparatorIndex = Math.max(lastComma, lastDot);
+  const hasMixedSeparators = lastComma >= 0 && lastDot >= 0;
+  const decimalDigits = decimalSeparatorIndex >= 0
+    ? raw.slice(decimalSeparatorIndex + 1).replace(/\D/g, "")
+    : "";
+  const hasSingleDecimalSeparator =
+    decimalSeparatorIndex >= 0 &&
+    !hasMixedSeparators &&
+    decimalDigits.length === 2;
+  const hasDecimalSeparator = hasMixedSeparators || hasSingleDecimalSeparator;
+  const integerPart = hasMixedSeparators || hasSingleDecimalSeparator
+    ? raw.slice(0, decimalSeparatorIndex)
+    : raw;
+
+  return {
+    integerDigits: integerPart.replace(/\D/g, ""),
+    cents: hasDecimalSeparator ? Number(decimalDigits.slice(0, 2).padEnd(2, "0")) : null,
+  };
 }
 
 function getMarkedLettersSuffix(moneyFieldKey: string, letterFieldKey: string): string {
@@ -646,17 +672,23 @@ function getMarkedLettersSuffix(moneyFieldKey: string, letterFieldKey: string): 
     normalizedMoneyKey === "valor_venta" ||
     normalizedLetterKey === "valor_apartamento_en_letras"
   ) {
-    return "PESOS MONEDA LEGAL";
+    return "PESOS MONEDA CORRIENTE";
   }
   return "PESOS";
 }
 
-function getMarkedLettersFromMoneyValue(value: string | number | null | undefined, moneyFieldKey: string, letterFieldKey: string): string {
-  const digits = extractMarkedMoneyDigits(value);
-  if (!digits) return "";
-  const amount = Number(digits);
+function dineroMarcadoALetras(value: string | number | null | undefined, suffix: string): string {
+  const { integerDigits, cents } = splitMarkedMoneyParts(value);
+  if (!integerDigits) return "";
+  const amount = Number(integerDigits);
   if (!Number.isFinite(amount) || amount <= 0) return "";
-  return numeroALetrasConSufijo(amount, getMarkedLettersSuffix(moneyFieldKey, letterFieldKey));
+  const words = numeroALetrasConSufijo(amount, suffix);
+  if (cents == null || cents <= 0) return words;
+  return `${words} CON ${numeroALetrasConSufijo(cents, "")} CENTAVOS`;
+}
+
+function getMarkedLettersFromMoneyValue(value: string | number | null | undefined, moneyFieldKey: string, letterFieldKey: string): string {
+  return dineroMarcadoALetras(value, getMarkedLettersSuffix(moneyFieldKey, letterFieldKey));
 }
 
 function getMarkedBuyerFields(fields: MarkedTemplateField[], buyerIndex: 1 | 2 | 3) {
@@ -1113,14 +1145,8 @@ function isMarkedDropdownField(field: MarkedTemplateField) {
   );
 }
 
-function formatMarkedCOP(value: string): string {
-  const digits = extractMarkedMoneyDigits(value);
-  if (!digits) return "";
-  return Number(digits).toLocaleString("es-CO");
-}
-
-function parseMarkedCOP(value: string): string {
-  return extractMarkedMoneyDigits(value);
+function sanitizeMarkedCOPInput(value: string): string {
+  return value.replace(/[^\d.,\s$]/g, "");
 }
 
 function getMarkedFieldTokens(field: MarkedTemplateField): string[] {
@@ -1444,7 +1470,7 @@ function MarkedFieldsForm({
     const previousValue = values[field.key] ?? "";
 
     if (kind === "money") {
-      nextValue = parseMarkedCOP(rawValue);
+      nextValue = sanitizeMarkedCOPInput(rawValue);
     } else if (kind === "day") {
       nextValue = rawValue.replace(/\D/g, "").slice(0, 2);
     } else if (kind === "year") {
@@ -1783,8 +1809,8 @@ function MarkedFieldsForm({
       return (
         <input
           type="text"
-          inputMode="numeric"
-          value={formatMarkedCOP(currentValue)}
+          inputMode="decimal"
+          value={currentValue}
           onChange={(e) => handleFieldChange(field, e.target.value)}
           className="ep-input w-full min-w-0 rounded-2xl px-4 py-3 text-sm leading-5 transition-all h-11 md:h-12"
           placeholder="Ej. 250.000.000"
@@ -2986,6 +3012,60 @@ function AdquisicionCard({
 
 const TOUR_KEY = "easypro_minutas_tour_done";
 const MARKED_QA_GENERATED_RESULT_KEY = "easypro_marked_template_qa_generated_result";
+const MARKED_TEMPLATE_EDIT_KEY_PREFIX = "easypro:marked-template-edit:";
+
+type MarkedTemplateEditSession = {
+  caseId: number;
+  documentName: string;
+  fields: MarkedTemplateField[];
+  values: Record<string, string>;
+  sourceDocumentTitle: string;
+  versionId: number;
+  documentId: number;
+};
+
+function isMarkedTemplateFieldPayload(value: unknown): value is MarkedTemplateField {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.key === "string" && typeof item.label === "string";
+}
+
+function parseMarkedTemplateEditSession(raw: string | null, expectedCaseId: number): MarkedTemplateEditSession | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<MarkedTemplateEditSession>;
+    if (!parsed || parsed.caseId !== expectedCaseId) return null;
+    if (!Array.isArray(parsed.fields) || !parsed.fields.every(isMarkedTemplateFieldPayload)) return null;
+    if (!parsed.values || typeof parsed.values !== "object" || Array.isArray(parsed.values)) return null;
+    return {
+      caseId: expectedCaseId,
+      documentName: String(parsed.documentName || "Minuta marcada"),
+      fields: parsed.fields,
+      values: Object.fromEntries(
+        Object.entries(parsed.values as Record<string, unknown>).map(([key, value]) => [key, value == null ? "" : String(value)])
+      ),
+      sourceDocumentTitle: String(parsed.sourceDocumentTitle || parsed.documentName || "Minuta marcada"),
+      versionId: Number(parsed.versionId || 0),
+      documentId: Number(parsed.documentId || 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function markedTemplateResultFromFields(fields: MarkedTemplateField[]): MarkedTemplateDetectResult {
+  return {
+    fields,
+    total_fields: fields.length,
+    total_occurrences: fields.reduce((total, field) => total + Number(field.occurrences || 0), 0),
+    marker_types: {
+      bracket: fields.filter((field) => field.marker_types?.includes("bracket")).length,
+      curly: fields.filter((field) => field.marker_types?.includes("curly")).length,
+      parenthesis: fields.filter((field) => field.marker_types?.includes("parenthesis")).length,
+      highlight: fields.filter((field) => field.marker_types?.includes("highlight")).length,
+    },
+  };
+}
 
 // ─── Tour steps ───────────────────────────────────────────────────────────────
 
@@ -3065,6 +3145,7 @@ export function NuevaMinutaWorkspace() {
   const [qaFeedback, setQaFeedback] = useState<string | null>(null);
   const [markedGenerationWarning, setMarkedGenerationWarning] = useState<string | null>(null);
   const [lastMarkedGeneratedResult, setLastMarkedGeneratedResult] = useState<MinutaGenerarResult | null>(null);
+  const [markedEditCaseId, setMarkedEditCaseId] = useState<number | null>(null);
   const [aiSteps, setAiSteps] = useState<AiStep[]>([]);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -3077,6 +3158,68 @@ export function NuevaMinutaWorkspace() {
 
   useEffect(() => {
     if (!localStorage.getItem(TOUR_KEY)) setTourVisible(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const mode = searchParams.get("mode");
+    const caseId = Number(searchParams.get("caseId") || 0);
+    if (mode !== "edit-form" || !Number.isFinite(caseId) || caseId <= 0) return;
+
+    const payload = parseMarkedTemplateEditSession(
+      window.sessionStorage.getItem(`${MARKED_TEMPLATE_EDIT_KEY_PREFIX}${caseId}`),
+      caseId
+    );
+    if (!payload) {
+      setError("No se encontraron datos recuperables del formulario. Vuelve al detalle de la minuta e intenta de nuevo.");
+      return;
+    }
+
+    const editPayload = payload;
+    const effectiveFields = getEffectiveMarkedTemplateFields(editPayload.fields);
+    setMarkedEditCaseId(caseId);
+    setMarkedTemplateResult(markedTemplateResultFromFields(editPayload.fields));
+    setAnalisisResult(null);
+    setPersonas([]);
+    setInmuebleEdit(EMPTY_INMUEBLE);
+    setNotariaEdit(EMPTY_NOTARIA);
+    setValoresEdit([]);
+    setDecisionesEdit({ vivienda_familiar: null, patrimonio_familia: null, notificacion_electronica: null });
+    setAdquisicionEdit(EMPTY_ADQUISICION);
+    setMarkedDocumentName(editPayload.documentName);
+    setMarkedFieldValues(
+      Object.fromEntries(effectiveFields.map((field) => [field.key, normalizeDropdownFieldValue(editPayload.values[field.key] ?? "")]))
+    );
+    setStep(1);
+    setError(null);
+
+    let cancelled = false;
+    async function loadExistingDocx() {
+      if (!editPayload.documentId || !editPayload.versionId) {
+        setError("Formulario cargado. Selecciona el DOCX base antes de regenerar.");
+        return;
+      }
+      try {
+        const blob = await downloadDocumentVersionBlob(
+          `/api/v1/document-flow/cases/${caseId}/documents/${editPayload.documentId}/versions/${editPayload.versionId}/download`
+        );
+        if (cancelled) return;
+        const filename = editPayload.sourceDocumentTitle.toLowerCase().endsWith(".docx")
+          ? editPayload.sourceDocumentTitle
+          : `${editPayload.sourceDocumentTitle || editPayload.documentName}.docx`;
+        setFile(new File([blob], filename, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+      } catch {
+        if (!cancelled) {
+          setError("Formulario cargado, pero no fue posible recuperar el DOCX base. Selecciona el archivo antes de regenerar.");
+        }
+      }
+    }
+    void loadExistingDocx();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -3340,7 +3483,7 @@ export function NuevaMinutaWorkspace() {
       markedTemplateFields.forEach((field) => {
         const presetValue = JAGGUA_BANCO_BOGOTA_QA_VALUES_NORMALIZED[markedFieldKey(field)];
         if (presetValue == null) return;
-        next[field.key] = isMarkedMoneyField(field) ? parseMarkedCOP(presetValue) : normalizeDropdownFieldValue(presetValue);
+        next[field.key] = isMarkedMoneyField(field) ? sanitizeMarkedCOPInput(presetValue) : normalizeDropdownFieldValue(presetValue);
       });
       return withDerivedMarkedLetterValues(markedTemplateFields, next);
     });
@@ -3426,7 +3569,7 @@ export function NuevaMinutaWorkspace() {
           return [field.key, normalizeDropdownFieldValue(value)];
         }
         if (isMarkedMoneyField(field)) {
-          return [field.key, value ? formatMarkedCOP(value) : ""];
+          return [field.key, value];
         }
         return [field.key, value];
       })
@@ -3490,7 +3633,7 @@ export function NuevaMinutaWorkspace() {
             origen_cuota_inicial: sanitizedValues.origen_cuota_inicial ?? "",
           });
         }
-        const result = await generateMarkedTemplate(file, sanitizedValues, markedTemplateFields, markedDocumentName);
+        const result = await generateMarkedTemplate(file, sanitizedValues, markedTemplateFields, markedDocumentName, markedEditCaseId);
         const warningMessage = getMarkedGenerationWarningMessage(result.warnings);
         if (warningMessage) {
           setMarkedGenerationWarning(warningMessage);

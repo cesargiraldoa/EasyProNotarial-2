@@ -97,7 +97,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
 
         self.assertEqual(
             derived["valor_apartamento_en_letras"],
-            "DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA LEGAL",
+            "DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA CORRIENTE",
         )
         self.assertEqual(
             derived["en_letras_cuota_inicial"],
@@ -108,6 +108,30 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
             "CIENTO CUARENTA Y NUEVE MILLONES QUINIENTOS CINCUENTA Y NUEVE MIL QUINIENTOS VEINTE PESOS",
         )
         self.assertEqual(derived["origen_cuota_inicial"], "")
+
+    def test_derive_missing_marked_values_includes_cents_in_money_letters(self):
+        values = {"en_numeros_cuota_inicial": "63.040.480,76"}
+        field_keys = {"en_numeros_cuota_inicial", "en_letras_cuota_inicial"}
+
+        derived = _derive_missing_marked_values(values, field_keys)
+
+        self.assertEqual(derived["en_numeros_cuota_inicial"], "63.040.480,76")
+        self.assertEqual(
+            derived["en_letras_cuota_inicial"],
+            "SESENTA Y TRES MILLONES CUARENTA MIL CUATROCIENTOS OCHENTA PESOS CON SETENTA Y SEIS CENTAVOS",
+        )
+
+    def test_derive_sale_value_letters_use_current_currency_and_cents(self):
+        values = {"valor_de_la_venta_en_numeros": "212.600.000,78"}
+        field_keys = {"valor_de_la_venta_en_numeros", "valor_apartamento_en_letras"}
+
+        derived = _derive_missing_marked_values(values, field_keys)
+
+        self.assertEqual(derived["valor_de_la_venta_en_numeros"], "212.600.000,78")
+        self.assertEqual(
+            derived["valor_apartamento_en_letras"],
+            "DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA CORRIENTE CON SETENTA Y OCHO CENTAVOS",
+        )
 
     def test_money_normalization_formats_general_monetary_fields_without_touching_non_monetary_numbers(self):
         fields = [
@@ -328,7 +352,7 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
 
             text = "\n".join(paragraph.text for paragraph in Document(str(target)).paragraphs)
             self.assertIn("212.600.000", text)
-            self.assertIn("DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA LEGAL", text)
+            self.assertIn("DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA CORRIENTE", text)
             self.assertIn("doce (12) días del mes de junio del año DOS MIL VEINTICINCO (2025)".lower(), text.lower())
             self.assertNotIn("[[--]]", text)
             self.assertIn("\t", text)

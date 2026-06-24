@@ -14,6 +14,9 @@ import {
   type DocumentFlowCase,
 } from "@/lib/document-flow";
 import { formatDateTime } from "@/lib/datetime";
+import { type MarkedTemplateField } from "@/lib/minuta";
+
+const MARKED_TEMPLATE_EDIT_KEY_PREFIX = "easypro:marked-template-edit:";
 
 const stateLabels: Record<string, string> = {
   borrador: "Borrador",
@@ -37,6 +40,51 @@ function pretty(value: string) {
 function prettyState(value: string | null | undefined) {
   if (!value) return "Sin estado";
   return stateLabels[value] ?? value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+type MarkedTemplateEditPayload = {
+  caseId: number;
+  documentName: string;
+  fields: MarkedTemplateField[];
+  values: Record<string, string>;
+  sourceDocumentTitle: string;
+  versionId: number;
+  documentId: number;
+};
+
+function parseJsonObject(raw: string | null | undefined): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function isMarkedTemplateField(value: unknown): value is MarkedTemplateField {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.key === "string" && typeof item.label === "string";
+}
+
+function valuesRecord(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, item == null ? "" : String(item)])
+  );
+}
+
+function markedEditSourceFromObject(source: Record<string, unknown> | null) {
+  if (!source) return null;
+  const candidate = source.source === "marked_template" ? source : source.marked_template;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const item = candidate as Record<string, unknown>;
+  const fields = Array.isArray(item.fields) ? item.fields.filter(isMarkedTemplateField) : [];
+  const values = valuesRecord(item.values);
+  const documentName = typeof item.document_name === "string" ? item.document_name : "";
+  if (fields.length === 0 || !values || !documentName.trim()) return null;
+  return { fields, values, documentName: documentName.trim() };
 }
 
 export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: string }) {
@@ -91,6 +139,22 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
   const caseDisplayTitle = isMarkedTemplateCase ? (primaryDocument?.title || "Minuta marcada") : (caseDetail?.act_type || "Minuta");
   const currentVersionLabel = latestWordVersion ? `v${latestWordVersion.version_number}` : "Sin version DOCX";
   const canGenerateFromTemplate = Boolean(caseDetail?.template_id || caseDetail?.template?.id);
+  const markedTemplateEditPayload = useMemo<MarkedTemplateEditPayload | null>(() => {
+    if (!caseDetail || !primaryDocument?.id || !latestWordVersion?.id) return null;
+    const snapshotSource = markedEditSourceFromObject(parseJsonObject(latestWordVersion.placeholder_snapshot_json));
+    const actDataSource = markedEditSourceFromObject(parseJsonObject(caseDetail.act_data?.data_json));
+    const source = snapshotSource ?? actDataSource;
+    if (!source) return null;
+    return {
+      caseId,
+      documentName: source.documentName,
+      fields: source.fields,
+      values: source.values,
+      sourceDocumentTitle: primaryDocument.title || source.documentName,
+      versionId: latestWordVersion.id,
+      documentId: primaryDocument.id,
+    };
+  }, [caseDetail, caseId, latestWordVersion, primaryDocument]);
 
   const documentAlerts = useMemo(() => {
     const alerts: DocumentAlert[] = [];
@@ -121,6 +185,24 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
     if (!primaryDocument?.id || !latestWordVersion?.id) return;
     const editorPath = buildCaseOnlyOfficeEditorPath(caseId, primaryDocument.id, latestWordVersion.id);
     router.push(editorPath);
+  }
+
+  function handleOpenEditForm() {
+    if (!markedTemplateEditPayload) {
+      setFeedback(null);
+      setError("No hay datos de formulario recuperables para esta minuta.");
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(
+        `${MARKED_TEMPLATE_EDIT_KEY_PREFIX}${caseId}`,
+        JSON.stringify(markedTemplateEditPayload)
+      );
+      router.push(`/dashboard/minutas/nueva?caseId=${caseId}&mode=edit-form`);
+    } catch {
+      setFeedback(null);
+      setError("No fue posible preparar la edicion del formulario en este navegador.");
+    }
   }
 
   async function handleGenerateWord() {
@@ -287,6 +369,15 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
               >
                 Editar minuta
               </button>
+              {markedTemplateEditPayload ? (
+                <button
+                  type="button"
+                  onClick={handleOpenEditForm}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-white px-5 py-3 text-sm font-semibold text-primary"
+                >
+                  Editar formulario
+                </button>
+              ) : null}
             </div>
           ) : null}
           {!hasEditableDocumentVersion ? (
