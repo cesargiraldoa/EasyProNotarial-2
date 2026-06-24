@@ -666,19 +666,8 @@ function splitMarkedMoneyParts(value: string | number | null | undefined): { has
   };
 }
 
-function getMarkedLettersSuffix(moneyFieldKey: string, letterFieldKey: string): string {
-  const normalizedMoneyKey = normalizeMarkedKey(moneyFieldKey);
-  const normalizedLetterKey = normalizeMarkedKey(letterFieldKey);
-  if (
-    normalizedMoneyKey === "valor_de_la_venta_en_numeros" ||
-    normalizedMoneyKey === "valor_de_la_venta" ||
-    normalizedMoneyKey === "valor_venta_numeros" ||
-    normalizedMoneyKey === "valor_venta" ||
-    normalizedLetterKey === "valor_apartamento_en_letras"
-  ) {
-    return "PESOS MONEDA CORRIENTE";
-  }
-  return "PESOS";
+function getMarkedLettersSuffix(): string {
+  return "PESOS MONEDA CORRIENTE";
 }
 
 function dineroMarcadoALetras(value: string | number | null | undefined, suffix: string): string {
@@ -691,8 +680,8 @@ function dineroMarcadoALetras(value: string | number | null | undefined, suffix:
   return `${words} CON ${numeroALetrasConSufijo(cents, "")} CENTAVOS`;
 }
 
-function getMarkedLettersFromMoneyValue(value: string | number | null | undefined, moneyFieldKey: string, letterFieldKey: string): string {
-  return dineroMarcadoALetras(value, getMarkedLettersSuffix(moneyFieldKey, letterFieldKey));
+function getMarkedLettersFromMoneyValue(value: string | number | null | undefined): string {
+  return dineroMarcadoALetras(value, getMarkedLettersSuffix());
 }
 
 function getMarkedBuyerFields(fields: MarkedTemplateField[], buyerIndex: 1 | 2 | 3) {
@@ -780,6 +769,9 @@ function isMarkedTypeDocumentField(field: MarkedTemplateField): boolean {
 }
 
 function isMarkedMoneyField(field: MarkedTemplateField): boolean {
+  const fieldType = normalizeMarkedText(String((field as Record<string, unknown>).field_type ?? (field as Record<string, unknown>).fieldType ?? ""));
+  if (["money", "currency", "cop"].includes(fieldType)) return true;
+
   return isMarkedField(field, [
     "valor",
     "precio",
@@ -1109,16 +1101,17 @@ function getMarkedFieldKind(field: MarkedTemplateField): MarkedFieldKind {
   if (key === "origen_cuota_inicial" || key === "protocolista" || key === "consecutivo_hojas_papel_notarial") {
     return "text";
   }
-  if (MARKED_BASIC_ORDER.includes(key)) {
-    if (key === "linderos") return "textarea";
-    return "text";
-  }
   if (
     key === "valor_de_la_venta_en_numeros" ||
     key === "en_numeros_cuota_inicial" ||
     key === "valor_del_acto_de_la_hipoteca" ||
-    MARKED_LIQUIDATION_ORDER.includes(key)
+    MARKED_LIQUIDATION_ORDER.includes(key) ||
+    isMarkedMoneyField(field)
   ) return "money";
+  if (MARKED_BASIC_ORDER.includes(key)) {
+    if (key === "linderos") return "textarea";
+    return "text";
+  }
   if (isMarkedGenderField(field)) return "gender";
   if (isMarkedStateCivilField(field)) return "stateCivil";
   if (isMarkedLettersField(field)) return "textarea";
@@ -1233,7 +1226,7 @@ function withDerivedMarkedLetterValues(
     if (String(next[field.key] ?? "").trim()) return;
     const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
     if (!linkedMoneyField) return;
-    const derivedValue = getMarkedLettersFromMoneyValue(next[linkedMoneyField.key] ?? "", linkedMoneyField.key, field.key);
+    const derivedValue = getMarkedLettersFromMoneyValue(next[linkedMoneyField.key] ?? "");
     if (derivedValue) {
       next[field.key] = derivedValue;
     }
@@ -1278,7 +1271,7 @@ function applyDerivedMarkedMoneyLettersToValues(
     if (!moneyField || !letterField) return;
 
     const moneyValue = result[moneyField.key] ?? "";
-    const letterValue = getMarkedLettersFromMoneyValue(moneyValue, moneyField.key, letterField.key);
+    const letterValue = getMarkedLettersFromMoneyValue(moneyValue);
     if (letterValue) {
       result[letterField.key] = letterValue;
     }
@@ -1528,7 +1521,7 @@ function MarkedFieldsForm({
     if (kind === "textarea" && isMarkedLettersField(field)) {
       const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
       const autoLetterValue = linkedMoneyField
-        ? getMarkedLettersFromMoneyValue(values[linkedMoneyField.key] ?? "", linkedMoneyField.key, field.key)
+        ? getMarkedLettersFromMoneyValue(values[linkedMoneyField.key] ?? "")
         : "";
       const isManualOverride = nextValue.trim() !== "" && nextValue.trim() !== autoLetterValue;
       setMarkedLetterManualOverrides((prev) => ({ ...prev, [field.key]: isManualOverride }));
@@ -1543,8 +1536,8 @@ function MarkedFieldsForm({
       if (linkedMoneyField?.key !== field.key) return;
 
       const currentLetterValue = values[candidate.key] ?? "";
-      const previousAutoValue = getMarkedLettersFromMoneyValue(previousValue, field.key, candidate.key);
-      const nextAutoValue = getMarkedLettersFromMoneyValue(nextValue, field.key, candidate.key);
+      const previousAutoValue = getMarkedLettersFromMoneyValue(previousValue);
+      const nextAutoValue = getMarkedLettersFromMoneyValue(nextValue);
       const hasManualOverride = Boolean(markedLetterManualOverrides[candidate.key] && currentLetterValue.trim());
       const canAutofill = !currentLetterValue.trim() || currentLetterValue === previousAutoValue || !hasManualOverride;
 
@@ -1838,7 +1831,7 @@ function MarkedFieldsForm({
       const linkedMoneyField = getLinkedMarkedMoneyFieldForLetter(field, fields);
       const linkedMoneyValue = linkedMoneyField ? values[linkedMoneyField.key] ?? "" : "";
       const autoLetterValue = linkedMoneyField
-        ? getMarkedLettersFromMoneyValue(linkedMoneyValue, linkedMoneyField.key, field.key)
+        ? getMarkedLettersFromMoneyValue(linkedMoneyValue)
         : "";
       return (
         <div className="space-y-1">

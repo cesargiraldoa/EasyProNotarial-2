@@ -18,8 +18,8 @@ from app.services.minuta.rules.rph_rules import resolve_rph, normalize_ph_name
 
 DERIVED_MONEY_RULES = (
     ("valor_de_la_venta_en_numeros", "valor_apartamento_en_letras", "PESOS MONEDA CORRIENTE"),
-    ("en_numeros_cuota_inicial", "en_letras_cuota_inicial", "PESOS"),
-    ("valor_del_acto_de_la_hipoteca", "valor_del_acto_de_la_hipoteca_en_letras", "PESOS"),
+    ("en_numeros_cuota_inicial", "en_letras_cuota_inicial", "PESOS MONEDA CORRIENTE"),
+    ("valor_del_acto_de_la_hipoteca", "valor_del_acto_de_la_hipoteca_en_letras", "PESOS MONEDA CORRIENTE"),
 )
 
 PERSON_ROLES = (
