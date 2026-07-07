@@ -4,7 +4,7 @@ import { BrandProvider } from "@/components/ui/brand-provider";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 
 export const metadata: Metadata = {
-  title: "EasyPro 2",
+  title: "Ecosistema Notarial",
   description: "Base multinotaría para operación notarial premium.",
 };
 
