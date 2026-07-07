@@ -10,12 +10,12 @@
 };
 
 export const defaultBranding: NotaryBranding = {
-  commercialName: "EasyPro Notarial",
+  commercialName: "Ecosistema Notarial",
   legalName: "Plataforma notarial digital",
   primaryColor: "13 46 93",
   secondaryColor: "77 91 124",
   accentColor: "80 214 144",
-  logoInitials: "EP",
+  logoInitials: "EN",
   officeLabel: "Sede principal",
   city: "Colombia",
 };
