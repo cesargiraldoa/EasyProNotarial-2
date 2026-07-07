@@ -1,1 +1,11 @@
 /* Dashboard brand name override. */
+
+.ep-sidebar > div:first-child p:first-child {
+  font-size: 0;
+  line-height: 1.25rem;
+}
+
+.ep-sidebar > div:first-child p:first-child::after {
+  content: "ECOSISTEMA NOTARIAL";
+  font-size: 0.875rem;
+}
