@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import sys
+import os
 import json
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from docx import Document
 
@@ -21,6 +24,7 @@ from tools.notarial_template_lab.models import FieldProposal, ProposalOccurrence
 from tools.notarial_template_lab.prompt_contracts import compact_document_map
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
 from tools.notarial_template_lab.run_lab import LabLLMExecutionError, run_lab
+from tools.notarial_template_lab.report_writer import safe_document_name
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
 
 
@@ -457,6 +461,66 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertIn("payload too large, reduce batch size", str(raised.exception))
             self.assertEqual(client.calls, [])
 
+    def test_reuse_llm_artifacts_loads_existing_proposals_without_openai_key(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            llm_proposal = self._proposal_for_value(document_map, "correo_llm", "usuario@example.org")
+            write_llm_artifacts(artifacts_root / safe_document_name(source.stem), [llm_proposal])
+
+            with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+                result = run_lab(source, artifacts_root, reuse_llm_artifacts=True)
+
+            self.assertTrue(result["reused_llm_artifacts"])
+            self.assertEqual(result["total_llm_proposals"], 1)
+
+    def test_reuse_llm_artifacts_with_review_file_generates_confirmed_outputs(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            llm_proposal = self._proposal_for_value(document_map, "correo_llm", "usuario@example.org")
+            write_llm_artifacts(artifacts_root / safe_document_name(source.stem), [llm_proposal])
+            review_path = write_review_file(
+                Path(tmp) / "review.json",
+                [
+                    {
+                        "field_key": "correo_llm",
+                        "value": "usuario@example.org",
+                        "decision": "confirm",
+                        "marker": "{{correo_desde_llm}}",
+                        "apply_strategy": "all_occurrences",
+                    }
+                ],
+            )
+
+            result = run_lab(source, artifacts_root, reuse_llm_artifacts=True, review_file=review_path)
+            artifacts_dir = Path(result["artifacts_dir"])
+
+            self.assertTrue((artifacts_dir / "08_review_decisions_applied.json").exists())
+            self.assertTrue((artifacts_dir / "09_template_confirmed.docx").exists())
+            self.assertTrue((artifacts_dir / "10_confirmed_validation_report.json").exists())
+            self.assertGreaterEqual(result["confirmed_replacements"], 1)
+            self.assertTrue(result["confirmed_validation_passed"])
+
+    def test_reuse_llm_artifacts_fails_cleanly_when_proposals_are_missing(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            artifacts_dir = artifacts_root / safe_document_name(source.stem)
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            (artifacts_dir / "02_document_profile.json").write_text(json.dumps(document_profile_payload()), encoding="utf-8")
+
+            with self.assertRaises(LabLLMExecutionError) as raised:
+                run_lab(source, artifacts_root, reuse_llm_artifacts=True)
+
+            self.assertIn("no existing LLM artifacts found", str(raised.exception))
+            self.assertIn("03_field_proposals_llm.json", str(raised.exception))
+
     def test_human_review_confirmed_exact_location_replaces_and_renames_marker(self):
         with TemporaryDirectory() as tmp:
             source = Path(tmp) / "synthetic.docx"
@@ -610,6 +674,33 @@ class NotarialTemplateLabTests(unittest.TestCase):
 def write_review_file(path: Path, decisions: list[dict]) -> Path:
     path.write_text(json.dumps({"decisions": decisions}, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def write_llm_artifacts(artifacts_dir: Path, proposals: list[FieldProposal]) -> None:
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (artifacts_dir / "02_document_profile.json").write_text(
+        json.dumps(document_profile_payload(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (artifacts_dir / "03_field_proposals_llm.json").write_text(
+        json.dumps([asdict(proposal) for proposal in proposals], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def document_profile_payload() -> dict:
+    return {
+        "document_type": "escritura_publica",
+        "recommended_mode": "documento_individual",
+        "acts_detected": ["COMPRAVENTA"],
+        "structural_sections": [],
+        "parties_summary": [],
+        "property_summary": {},
+        "money_summary": [],
+        "risk_notes": [],
+        "confidence": 0.7,
+        "evidence": [],
+    }
 
 
 if __name__ == "__main__":
