@@ -19,6 +19,7 @@ import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByM
 import { getCurrentUser } from "@/lib/api";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 import { MinutasTour, type TourStep } from "@/components/minutas/minutas-tour";
+import { ReverseTemplateBuilderPanel } from "@/components/minutas/reverse-template-builder-panel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -3131,6 +3132,7 @@ function getMarkedGenerationWarningMessage(warnings: MinutaGenerarResult["warnin
 
 export function NuevaMinutaWorkspace() {
   const router = useRouter();
+  const [workspaceMode, setWorkspaceMode] = useState<"marked" | "reverse-builder">("marked");
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -3744,7 +3746,9 @@ export function NuevaMinutaWorkspace() {
         </p>
       </div>
 
-      <StepBar current={step} labels={isMarkedTemplateMode ? MARKED_STEPS : IA_STEPS} />
+      {workspaceMode === "marked" && (
+        <StepBar current={step} labels={isMarkedTemplateMode ? MARKED_STEPS : IA_STEPS} />
+      )}
 
       {error && (
         <div className="ep-kpi-critical rounded-xl px-4 py-3 flex items-start gap-3 mb-6">
@@ -3776,9 +3780,36 @@ export function NuevaMinutaWorkspace() {
         </div>
       )}
 
+      {workspaceMode === "reverse-builder" && (
+        <ReverseTemplateBuilderPanel onBackToMarkedFlow={() => setWorkspaceMode("marked")} />
+      )}
+
       {/* ── PASO 1 ── */}
-      {step === 0 && (
+      {workspaceMode === "marked" && step === 0 && (
         <div className="space-y-5">
+          <div className="rounded-2xl border border-line bg-panel p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Crear plantilla inteligente</p>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  Construye candidatos de campos desde una minuta ya diligenciada, sin generar plantilla todavia.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspaceMode("reverse-builder");
+                  setError(null);
+                  setMarkedGenerationWarning(null);
+                }}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white hover:opacity-90"
+              >
+                <FileText size={16} />
+                Crear plantilla inteligente
+              </button>
+            </div>
+          </div>
+
           <div id="tour-upload-zone">
             <UploadZone
               file={file} isDragging={isDragging}
@@ -3847,7 +3878,7 @@ export function NuevaMinutaWorkspace() {
       )}
 
       {/* ── PASO 2 ── */}
-      {step === 1 && (
+      {workspaceMode === "marked" && step === 1 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
             <p className={isMarkedTemplateMode ? "hidden" : "text-sm text-muted"}>
@@ -3992,7 +4023,7 @@ export function NuevaMinutaWorkspace() {
       )}
 
       {/* ── PASO 3 ── */}
-      {step === 2 && (
+      {workspaceMode === "marked" && step === 2 && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted">Listo para generar con los datos revisados.</p>

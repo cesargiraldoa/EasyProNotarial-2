@@ -191,6 +191,37 @@ export type MarkedTemplateDetectResult = {
   };
 };
 
+export type ReverseTemplateCandidateContext = {
+  location: string;
+  before: string;
+  after: string;
+};
+
+export type ReverseTemplateCandidate = {
+  id: string;
+  text: string;
+  suggested_key: string;
+  label: string;
+  section: string;
+  type: string;
+  confidence: number;
+  occurrences: number;
+  contexts: ReverseTemplateCandidateContext[];
+  status: "pending" | string;
+};
+
+export type ReverseTemplateAnalyzeResult = {
+  mode: "single";
+  filename: string;
+  candidates: ReverseTemplateCandidate[];
+  summary: {
+    total_candidates: number;
+    high_confidence: number;
+    medium_confidence: number;
+    low_confidence: number;
+  };
+};
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function authHeaders(): Headers {
@@ -307,6 +338,20 @@ export async function detectMarkedTemplate(file: File): Promise<MarkedTemplateDe
   });
   if (!response.ok) await handleError(response);
   return response.json() as Promise<MarkedTemplateDetectResult>;
+}
+
+export async function analyzeReverseTemplateSingle(file: File): Promise<ReverseTemplateAnalyzeResult> {
+  const form = new FormData();
+  form.append("archivo", file);
+  const response = await fetch(buildApiUrl("/api/v1/template-builder/reverse/single/analyze"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<ReverseTemplateAnalyzeResult>;
 }
 
 export async function generateMarkedTemplate(

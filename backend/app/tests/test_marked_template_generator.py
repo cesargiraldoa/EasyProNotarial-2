@@ -101,11 +101,11 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
         )
         self.assertEqual(
             derived["en_letras_cuota_inicial"],
-            "SESENTA Y TRES MILLONES CUARENTA MIL CUATROCIENTOS OCHENTA PESOS",
+            "SESENTA Y TRES MILLONES CUARENTA MIL CUATROCIENTOS OCHENTA PESOS MONEDA CORRIENTE",
         )
         self.assertEqual(
             derived["valor_del_acto_de_la_hipoteca_en_letras"],
-            "CIENTO CUARENTA Y NUEVE MILLONES QUINIENTOS CINCUENTA Y NUEVE MIL QUINIENTOS VEINTE PESOS",
+            "CIENTO CUARENTA Y NUEVE MILLONES QUINIENTOS CINCUENTA Y NUEVE MIL QUINIENTOS VEINTE PESOS MONEDA CORRIENTE",
         )
         self.assertEqual(derived["origen_cuota_inicial"], "")
 
@@ -118,19 +118,40 @@ class MarkedTemplateGeneratorCleanupTests(unittest.TestCase):
         self.assertEqual(derived["en_numeros_cuota_inicial"], "63.040.480,76")
         self.assertEqual(
             derived["en_letras_cuota_inicial"],
-            "SESENTA Y TRES MILLONES CUARENTA MIL CUATROCIENTOS OCHENTA PESOS CON SETENTA Y SEIS CENTAVOS",
+            "SESENTA Y TRES MILLONES CUARENTA MIL CUATROCIENTOS OCHENTA PESOS MONEDA CORRIENTE CON SETENTA Y SEIS CENTAVOS",
         )
 
-    def test_derive_sale_value_letters_use_current_currency_and_cents(self):
-        values = {"valor_de_la_venta_en_numeros": "212.600.000,78"}
-        field_keys = {"valor_de_la_venta_en_numeros", "valor_apartamento_en_letras"}
+    def test_derive_sale_quota_and_mortgage_letters_use_current_currency_and_cents(self):
+        values = {
+            "valor_de_la_venta_en_numeros": "680785432,12",
+            "en_numeros_cuota_inicial": "456789021,45",
+            "valor_del_acto_de_la_hipoteca": "345876234,12",
+        }
+        field_keys = {
+            "valor_de_la_venta_en_numeros",
+            "valor_apartamento_en_letras",
+            "en_numeros_cuota_inicial",
+            "en_letras_cuota_inicial",
+            "valor_del_acto_de_la_hipoteca",
+            "valor_del_acto_de_la_hipoteca_en_letras",
+        }
 
         derived = _derive_missing_marked_values(values, field_keys)
 
-        self.assertEqual(derived["valor_de_la_venta_en_numeros"], "212.600.000,78")
+        self.assertEqual(derived["valor_de_la_venta_en_numeros"], "680.785.432,12")
+        self.assertEqual(derived["en_numeros_cuota_inicial"], "456.789.021,45")
+        self.assertEqual(derived["valor_del_acto_de_la_hipoteca"], "345.876.234,12")
         self.assertEqual(
             derived["valor_apartamento_en_letras"],
-            "DOSCIENTOS DOCE MILLONES SEISCIENTOS MIL PESOS MONEDA CORRIENTE CON SETENTA Y OCHO CENTAVOS",
+            "SEISCIENTOS OCHENTA MILLONES SETECIENTOS OCHENTA Y CINCO MIL CUATROCIENTOS TREINTA Y DOS PESOS MONEDA CORRIENTE CON DOCE CENTAVOS",
+        )
+        self.assertEqual(
+            derived["en_letras_cuota_inicial"],
+            "CUATROCIENTOS CINCUENTA Y SEIS MILLONES SETECIENTOS OCHENTA Y NUEVE MIL VEINTE Y UN PESOS MONEDA CORRIENTE CON CUARENTA Y CINCO CENTAVOS",
+        )
+        self.assertEqual(
+            derived["valor_del_acto_de_la_hipoteca_en_letras"],
+            "TRESCIENTOS CUARENTA Y CINCO MILLONES OCHOCIENTOS SETENTA Y SEIS MIL DOSCIENTOS TREINTA Y CUATRO PESOS MONEDA CORRIENTE CON DOCE CENTAVOS",
         )
 
     def test_money_normalization_formats_general_monetary_fields_without_touching_non_monetary_numbers(self):
