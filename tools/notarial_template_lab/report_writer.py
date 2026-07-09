@@ -11,6 +11,7 @@ from tools.notarial_template_lab.models import (
     DocumentProfile,
     DraftResult,
     FieldProposal,
+    HumanReviewResult,
     ValidationResult,
 )
 
@@ -26,6 +27,9 @@ class ReportWriter:
         artifacts_root: str | Path = "artifacts/notarial_template_lab",
         document_profile: DocumentProfile | None = None,
         llm_proposals: list[FieldProposal] | None = None,
+        human_review_result: HumanReviewResult | None = None,
+        confirmed_draft_result: DraftResult | None = None,
+        confirmed_validation_result: ValidationResult | None = None,
     ) -> Path:
         source_path = Path(source_docx)
         output_dir = Path(artifacts_root) / safe_document_name(source_path.stem)
@@ -39,7 +43,17 @@ class ReportWriter:
             write_json(output_dir / "03_field_proposals_llm.json", [asdict(proposal) for proposal in llm_proposals])
         write_json(output_dir / "07_validation_report.json", asdict(validation_result))
         (output_dir / "05_review_report.html").write_text(
-            self._html(document_map, proposals, draft_result, validation_result, document_profile, llm_proposals),
+            self._html(
+                document_map,
+                proposals,
+                draft_result,
+                validation_result,
+                document_profile,
+                llm_proposals,
+                human_review_result,
+                confirmed_draft_result,
+                confirmed_validation_result,
+            ),
             encoding="utf-8",
         )
         return output_dir
@@ -52,6 +66,9 @@ class ReportWriter:
         validation_result: ValidationResult,
         document_profile: DocumentProfile | None = None,
         llm_proposals: list[FieldProposal] | None = None,
+        human_review_result: HumanReviewResult | None = None,
+        confirmed_draft_result: DraftResult | None = None,
+        confirmed_validation_result: ValidationResult | None = None,
     ) -> str:
         occurrence_rows = []
         for occurrence_type, occurrences in document_map.occurrences_index.items():
@@ -110,6 +127,19 @@ class ReportWriter:
             "</tr>"
             for block in document_map.blocks
         ]
+        human_review_rows = [
+            "<tr>"
+            f"<td>{esc(item.field_key)}</td>"
+            f"<td>{esc(item.value)}</td>"
+            f"<td>{esc(item.original_marker)}</td>"
+            f"<td>{esc(item.decision)}</td>"
+            f"<td>{esc(item.final_marker)}</td>"
+            f"<td>{'si' if item.replaceable else 'no'}</td>"
+            f"<td>{esc(item.block_reason)}</td>"
+            f"<td>{', '.join(esc(value) for value in item.selected_occurrence_ids)}</td>"
+            "</tr>"
+            for item in (human_review_result.applied_decisions if human_review_result else [])
+        ]
 
         return f"""<!doctype html>
 <html lang="es">
@@ -151,6 +181,9 @@ class ReportWriter:
   <p>Validacion: <span class="{'ok' if validation_result.passed else 'fail'}">{'PASS' if validation_result.passed else 'FAIL'}</span></p>
   <p>Campos detectados por marked_template_detector: <strong>{validation_result.marked_fields_count}</strong></p>
 
+  <h2>Plantilla confirmada por revision humana</h2>
+  {confirmed_template_html(human_review_result, confirmed_draft_result, confirmed_validation_result)}
+
   <h2>Bloques</h2>
   <table><thead><tr><th>ID</th><th>Tipo</th><th>Ubicacion</th><th>Chars</th><th>Vacio</th><th>Texto</th></tr></thead><tbody>{''.join(block_rows)}</tbody></table>
 
@@ -162,6 +195,9 @@ class ReportWriter:
 
   <h2>Propuestas LLM</h2>
   <table><thead><tr><th>Field key</th><th>Label</th><th>Marker</th><th>Valor</th><th>Conf.</th><th>Tipo</th><th>Rol</th><th>Scope</th><th>Estrategia</th><th>Ocurr.</th><th>Razon</th></tr></thead><tbody>{''.join(llm_proposal_rows) or '<tr><td colspan="11">No se ejecuto la capa LLM.</td></tr>'}</tbody></table>
+
+  <h2>Decisiones humanas aplicadas</h2>
+  <table><thead><tr><th>Field key</th><th>Valor</th><th>Marcador original</th><th>Decision</th><th>Marcador final</th><th>Reemplazable</th><th>Motivo bloqueo</th><th>Ocurrencias</th></tr></thead><tbody>{''.join(human_review_rows) or '<tr><td colspan="8">No se cargo review-file.</td></tr>'}</tbody></table>
 
   <h2>Review required</h2>
   <ul>{''.join(review_rows) or '<li>No hay campos pendientes de revision.</li>'}</ul>
@@ -205,4 +241,26 @@ def profile_html(profile: DocumentProfile | None) -> str:
         f"<p><strong>Actos:</strong> {esc(acts)}</p>"
         f"<p><strong>Riesgos:</strong></p><ul>{risks}</ul>"
         f"<p><strong>Evidencia:</strong></p><ul>{evidence or '<li>Sin evidencia citada.</li>'}</ul></div>"
+    )
+
+
+def confirmed_template_html(
+    human_review_result: HumanReviewResult | None,
+    draft_result: DraftResult | None,
+    validation_result: ValidationResult | None,
+) -> str:
+    if human_review_result is None:
+        return "<p>No se cargo review-file; no se genero plantilla confirmada.</p>"
+    output = esc(draft_result.output_path if draft_result else "")
+    replacements = len(draft_result.replacements) if draft_result else 0
+    validation = "PASS" if validation_result and validation_result.passed else "FAIL"
+    fields = validation_result.marked_fields_count if validation_result else 0
+    errors = "".join(f"<li>{esc(error)}</li>" for error in (validation_result.errors if validation_result else []))
+    return (
+        f"<p>Review file: <code>{esc(human_review_result.source_review_file)}</code></p>"
+        f"<p>Ruta: <code>{output}</code></p>"
+        f"<p>Reemplazos confirmados: <strong>{replacements}</strong></p>"
+        f"<p>Validacion confirmada: <span class=\"{'ok' if validation == 'PASS' else 'fail'}\">{validation}</span></p>"
+        f"<p>Campos detectados en confirmada: <strong>{fields}</strong></p>"
+        f"<ul>{errors or '<li>Sin errores de validacion confirmada.</li>'}</ul>"
     )

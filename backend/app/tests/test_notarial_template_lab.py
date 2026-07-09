@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ from tools.notarial_template_lab.docx_structural_extractor import DocxStructural
 from tools.notarial_template_lab.document_profiler_agent import DocumentProfilerAgent
 from tools.notarial_template_lab.field_proposal_agent import FieldProposalAgent
 from tools.notarial_template_lab.field_proposer import FieldProposer
+from tools.notarial_template_lab.human_review import apply_human_review, load_review_decisions
 from tools.notarial_template_lab.models import FieldProposal, ProposalOccurrence
 from tools.notarial_template_lab.prompt_contracts import compact_document_map
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
@@ -112,6 +114,46 @@ class NotarialTemplateLabTests(unittest.TestCase):
         nested = table.cell(1, 1).add_table(rows=1, cols=1)
         nested.cell(0, 0).text = "Fecha escritura 05/06/2026"
         doc.save(path)
+
+    def _proposal_for_value(
+        self,
+        document_map,
+        field_key: str,
+        value: str,
+        proposal_type: str = "document_field",
+        confidence: float = 0.95,
+    ) -> FieldProposal:
+        occurrences = []
+        for block in document_map.blocks:
+            start = 0
+            while True:
+                index = block.raw_text.find(value, start)
+                if index < 0:
+                    break
+                occurrences.append(
+                    ProposalOccurrence(
+                        occurrence_id=f"occ_{field_key}_{len(occurrences) + 1}",
+                        block_id=block.block_id,
+                        location=block.location,
+                        text=value,
+                        start=index,
+                        end=index + len(value),
+                        before=block.raw_text[max(0, index - 20):index],
+                        after=block.raw_text[index + len(value):index + len(value) + 20],
+                    )
+                )
+                start = index + len(value)
+        return FieldProposal(
+            field_key=field_key,
+            label=field_key.replace("_", " ").capitalize(),
+            marker=f"{{{{{field_key}}}}}",
+            value=value,
+            confidence=confidence,
+            proposal_type=proposal_type,  # type: ignore[arg-type]
+            occurrences=occurrences,
+            apply_strategy="all_occurrences",
+            reason="Synthetic proposal for human review tests.",
+        )
 
     def test_extracts_paragraphs_tables_headers_footers_and_runs(self):
         with TemporaryDirectory() as tmp:
@@ -259,6 +301,160 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertTrue((artifacts_dir / "02_document_profile.json").exists())
             self.assertTrue((artifacts_dir / "03_field_proposals_llm.json").exists())
             self.assertGreaterEqual(result["total_llm_proposals"], 1)
+
+    def test_human_review_confirmed_exact_location_replaces_and_renames_marker(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            confirmed = Path(tmp) / "confirmed.docx"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "correo_comprador", "usuario@example.org")
+            decisions = load_review_decisions(
+                write_review_file(
+                    Path(tmp) / "review.json",
+                    [
+                        {
+                            "field_key": "correo_comprador",
+                            "decision": "confirm",
+                            "marker": "{{email_cliente}}",
+                            "apply_strategy": "all_occurrences",
+                        }
+                    ],
+                )
+            )
+
+            review = apply_human_review([proposal], decisions)
+            draft_result = TemplateDraftWriter().write(source, confirmed, document_map, review.confirmed_proposals)
+            text = "\n".join(paragraph.text for paragraph in Document(str(confirmed)).paragraphs)
+
+            self.assertEqual(len(draft_result.replacements), 1)
+            self.assertIn("{{email_cliente}}", text)
+            self.assertNotIn("usuario@example.org", text)
+
+    def test_human_review_selected_occurrences_replaces_only_selected(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "repeated.docx"
+            confirmed = Path(tmp) / "confirmed.docx"
+            doc = Document()
+            doc.add_paragraph("Correos: usuario@example.org y usuario@example.org.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "correo", "usuario@example.org")
+            selected_id = proposal.occurrences[1].occurrence_id
+            decisions = load_review_decisions(
+                write_review_file(
+                    Path(tmp) / "review.json",
+                    [
+                        {
+                            "field_key": "correo",
+                            "decision": "confirm",
+                            "apply_strategy": "selected_occurrences",
+                            "occurrence_ids": [selected_id],
+                        }
+                    ],
+                )
+            )
+
+            review = apply_human_review([proposal], decisions)
+            draft_result = TemplateDraftWriter().write(source, confirmed, document_map, review.confirmed_proposals)
+            text = Document(str(confirmed)).paragraphs[0].text
+
+            self.assertEqual(len(draft_result.replacements), 1)
+            self.assertEqual(text.count("usuario@example.org"), 1)
+            self.assertEqual(text.count("{{correo}}"), 1)
+            self.assertTrue(text.startswith("Correos: usuario@example.org y {{correo}}"))
+
+    def test_human_review_blocks_missing_location_review_required_and_fixed_text(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            missing_location = FieldProposal(
+                field_key="sin_ubicacion",
+                label="Sin ubicacion",
+                marker="{{sin_ubicacion}}",
+                value="usuario@example.org",
+                confidence=0.99,
+                proposal_type="document_field",
+                occurrences=[
+                    ProposalOccurrence(
+                        occurrence_id="occ_missing",
+                        block_id="",
+                        location="",
+                        text="usuario@example.org",
+                        start=0,
+                        end=19,
+                        before="",
+                        after="",
+                    )
+                ],
+                apply_strategy="all_occurrences",
+                reason="Missing location.",
+            )
+            review_required = self._proposal_for_value(document_map, "nombre_revision", "NOMBRE GENERICO UNO", "review_required", 0.99)
+            fixed_text = self._proposal_for_value(document_map, "texto_fijo", "EL COMPRADOR", "fixed_text", 0.99)
+            low_confidence = self._proposal_for_value(document_map, "correo_bajo", "usuario@example.org", "document_field", 0.5)
+            decisions = [
+                {"field_key": item.field_key, "decision": "confirm", "apply_strategy": "all_occurrences"}
+                for item in [missing_location, review_required, fixed_text, low_confidence]
+            ]
+            review = apply_human_review(
+                [missing_location, review_required, fixed_text, low_confidence],
+                [decision for decision in load_review_decisions(write_review_file(Path(tmp) / "review.json", decisions))],
+            )
+
+            self.assertEqual(len(review.confirmed_proposals), 0)
+            reasons = " ".join(item.block_reason or "" for item in review.applied_decisions)
+            self.assertIn("block_id", reasons)
+            self.assertIn("review_required", reasons)
+            self.assertIn("fixed_text", reasons)
+            self.assertIn("Confianza insuficiente", reasons)
+
+    def test_run_lab_without_review_file_does_not_generate_confirmed_template(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+
+            result = run_lab(source, artifacts_root)
+            artifacts_dir = Path(result["artifacts_dir"])
+
+            self.assertTrue((artifacts_dir / "06_template_draft.docx").exists())
+            self.assertFalse((artifacts_dir / "09_template_confirmed.docx").exists())
+
+    def test_run_lab_with_review_file_generates_confirmed_template_and_validation(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "correo_comprador", "usuario@example.org")
+            review_path = write_review_file(
+                Path(tmp) / "review.json",
+                [
+                    {
+                        "field_key": "correo_comprador",
+                        "value": proposal.value,
+                        "decision": "confirm",
+                        "marker": "{{email_cliente}}",
+                        "apply_strategy": "all_occurrences",
+                    }
+                ],
+            )
+
+            result = run_lab(source, artifacts_root, review_file=review_path)
+            artifacts_dir = Path(result["artifacts_dir"])
+
+            self.assertTrue((artifacts_dir / "08_review_decisions_applied.json").exists())
+            self.assertTrue((artifacts_dir / "09_template_confirmed.docx").exists())
+            self.assertTrue((artifacts_dir / "10_confirmed_validation_report.json").exists())
+            self.assertGreaterEqual(result["confirmed_replacements"], 1)
+            self.assertTrue(result["confirmed_validation_passed"])
+
+
+def write_review_file(path: Path, decisions: list[dict]) -> Path:
+    path.write_text(json.dumps({"decisions": decisions}, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from typing import Literal
 
 ProposalType = Literal["project_field", "document_field", "derived_field", "review_required", "fixed_text"]
 ApplyStrategy = Literal["all_occurrences", "selected_occurrences", "review_required"]
+ReviewDecisionValue = Literal["confirm", "reject", "review_required"]
 
 
 @dataclass
@@ -143,6 +144,38 @@ class ValidationResult:
     marked_fields_count: int
     marked_fields: list[dict]
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class HumanReviewDecision:
+    field_key: str
+    decision: ReviewDecisionValue
+    value: str | None = None
+    marker: str | None = None
+    apply_strategy: ApplyStrategy | None = None
+    occurrence_ids: list[str] = field(default_factory=list)
+    notes: str | None = None
+
+
+@dataclass
+class AppliedHumanReviewDecision:
+    field_key: str
+    value: str
+    original_marker: str
+    final_marker: str
+    decision: str
+    replaceable: bool
+    block_reason: str | None
+    selected_occurrence_ids: list[str]
+    original_proposal: dict
+    human_decision: dict | None
+
+
+@dataclass
+class HumanReviewResult:
+    source_review_file: str | None
+    applied_decisions: list[AppliedHumanReviewDecision]
+    confirmed_proposals: list[FieldProposal]
 
 
 def to_plain(value) -> dict:

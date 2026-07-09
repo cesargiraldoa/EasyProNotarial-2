@@ -46,7 +46,7 @@ class TemplateDraftWriter:
                 skipped.append({"field_key": proposal.field_key, "value": proposal.value, "reason": skip_reason})
                 continue
 
-            for occurrence in proposal.occurrences:
+            for occurrence in sorted(proposal.occurrences, key=lambda item: (item.block_id, item.start), reverse=True):
                 paragraph = paragraph_by_block.get(occurrence.block_id)
                 block = block_by_id.get(occurrence.block_id)
                 if paragraph is None or block is None:
@@ -55,7 +55,7 @@ class TemplateDraftWriter:
                 if block.structural_hints.get("is_heading_like") or looks_like_title(block.raw_text):
                     skipped.append({"field_key": proposal.field_key, "value": proposal.value, "reason": "El bloque parece titulo o encabezado juridico."})
                     continue
-                if self._replace_in_runs(paragraph, proposal.value, proposal.marker):
+                if self._replace_in_runs(paragraph, proposal.value, proposal.marker, occurrence):
                     replacements.append(
                         DraftReplacement(
                             field_key=proposal.field_key,
@@ -94,7 +94,20 @@ class TemplateDraftWriter:
                 return "Una ocurrencia esta en un titulo o encabezado."
         return None
 
-    def _replace_in_runs(self, paragraph: Paragraph, value: str, marker: str) -> bool:
+    def _replace_in_runs(self, paragraph: Paragraph, value: str, marker: str, occurrence=None) -> bool:
+        if occurrence is not None:
+            cursor = 0
+            for run in paragraph.runs:
+                text = run.text or ""
+                run_start = occurrence.start - cursor
+                if run_start < 0 or run_start > len(text):
+                    cursor += len(text)
+                    continue
+                run_end = run_start + len(value)
+                if run_end <= len(text) and text[run_start:run_end] == value:
+                    run.text = f"{text[:run_start]}{marker}{text[run_end:]}"
+                    return True
+                cursor += len(text)
         for run in paragraph.runs:
             if value in (run.text or ""):
                 run.text = run.text.replace(value, marker, 1)
