@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, CheckCircle2, ChevronRight, ExternalLink,
-  FileText, HelpCircle, Loader2, Plus, Upload, X,
+  FileSearch, FileText, HelpCircle, Loader2, Plus, Upload, X,
 } from "lucide-react";
 import {
   analyzeMinuta, detectMarkedTemplate, generateMinuta, generateMarkedTemplate, emptyPersona,
@@ -19,6 +19,7 @@ import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByM
 import { getCurrentUser } from "@/lib/api";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 import { MinutasTour, type TourStep } from "@/components/minutas/minutas-tour";
+import { AssistedTaggingPanel } from "@/components/minutas/assisted-tagging-panel";
 import { ReverseTemplateBuilderPanel } from "@/components/minutas/reverse-template-builder-panel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -3132,7 +3133,7 @@ function getMarkedGenerationWarningMessage(warnings: MinutaGenerarResult["warnin
 
 export function NuevaMinutaWorkspace() {
   const router = useRouter();
-  const [workspaceMode, setWorkspaceMode] = useState<"marked" | "reverse-builder">("marked");
+  const [workspaceMode, setWorkspaceMode] = useState<"marked" | "reverse-builder" | "assisted-tagging">("marked");
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -3780,6 +3781,10 @@ export function NuevaMinutaWorkspace() {
         </div>
       )}
 
+      {workspaceMode === "assisted-tagging" && (
+        <AssistedTaggingPanel onBackToMarkedFlow={() => setWorkspaceMode("marked")} />
+      )}
+
       {workspaceMode === "reverse-builder" && (
         <ReverseTemplateBuilderPanel onBackToMarkedFlow={() => setWorkspaceMode("marked")} />
       )}
@@ -3787,14 +3792,45 @@ export function NuevaMinutaWorkspace() {
       {/* ── PASO 1 ── */}
       {workspaceMode === "marked" && step === 0 && (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-line bg-panel p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-ink">Crear plantilla inteligente</p>
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  Construye candidatos de campos desde una minuta ya diligenciada, sin generar plantilla todavia.
-                </p>
-              </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border-2 border-primary bg-panel-highlight p-4">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white">
+                <Upload size={18} />
+              </span>
+              <p className="mt-3 text-sm font-bold text-ink">Flujo actual plantilla marcada</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Sube un DOCX marcado, detecta campos, diligencia formulario y genera en OnlyOffice.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-line bg-panel p-4">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-panel-soft text-primary">
+                <FileText size={18} />
+              </span>
+              <p className="mt-3 text-sm font-bold text-ink">Crear plantilla inteligente</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Pre-etiqueta una minuta elaborada con variables en rojo y guardala en biblioteca tras aprobacion.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspaceMode("assisted-tagging");
+                  setError(null);
+                  setMarkedGenerationWarning(null);
+                }}
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white hover:opacity-90"
+              >
+                <FileText size={16} />
+                LLM embebido
+              </button>
+            </div>
+            <div className="rounded-2xl border border-line bg-panel p-4">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-panel-soft text-primary">
+                <FileSearch size={18} />
+              </span>
+              <p className="mt-3 text-sm font-bold text-ink">Construccion inversa</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Analiza una minuta diligenciada para revisar candidatos sin afectar el flujo marcado.
+              </p>
               <button
                 type="button"
                 onClick={() => {
@@ -3802,10 +3838,10 @@ export function NuevaMinutaWorkspace() {
                   setError(null);
                   setMarkedGenerationWarning(null);
                 }}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white hover:opacity-90"
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-muted hover:border-primary hover:text-primary"
               >
-                <FileText size={16} />
-                Crear plantilla inteligente
+                <FileSearch size={16} />
+                Reverse builder
               </button>
             </div>
           </div>
