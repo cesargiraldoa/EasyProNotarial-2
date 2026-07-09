@@ -20,9 +20,11 @@ from tools.notarial_template_lab.document_profiler_agent import DocumentProfiler
 from tools.notarial_template_lab.field_proposal_agent import FieldProposalAgent
 from tools.notarial_template_lab.field_proposer import FieldProposer
 from tools.notarial_template_lab.human_review import apply_human_review, load_review_decisions
+from tools.notarial_template_lab.human_review_writer import write_human_review_html
 from tools.notarial_template_lab.models import FieldProposal, ProposalOccurrence
 from tools.notarial_template_lab.prompt_contracts import compact_document_map
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator, iter_all_text
+from tools.notarial_template_lab.run_batch import run_batch
 from tools.notarial_template_lab.run_lab import LabLLMExecutionError, mark_human_review_applied, run_lab
 from tools.notarial_template_lab.report_writer import safe_document_name
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
@@ -583,6 +585,85 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertTrue((artifacts_dir / "03_llm_field_payload_batch_001.json").exists())
             self.assertGreaterEqual(result["total_llm_proposals"], 1)
             self.assertLess(max(client.payload_sizes), 20000)
+
+    def test_human_review_writer_generates_static_html_with_export(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            result = run_lab(source, artifacts_root, use_llm=True, llm_client=FakeLLMClient())
+            artifacts_dir = Path(result["artifacts_dir"])
+
+            html_path = write_human_review_html(artifacts_dir)
+            html_text = html_path.read_text(encoding="utf-8")
+
+            self.assertTrue(html_path.exists())
+            self.assertIn("Descargar review_decisions.json", html_text)
+            self.assertIn("matricula_inmobiliaria", html_text)
+            self.assertIn("occurrence_ids", html_text)
+            self.assertIn("exportDecisions", html_text)
+
+    def test_run_batch_processes_multiple_docx_and_writes_summary(self):
+        with TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "docs"
+            artifacts_root = Path(tmp) / "artifacts"
+            input_dir.mkdir()
+            self._build_docx(input_dir / "uno.docx")
+            self._build_docx(input_dir / "dos.docx")
+
+            summary = run_batch(input_dir, artifacts_root, use_llm=True, llm_client=FakeLLMClient())
+
+            self.assertEqual(summary["total_documents"], 2)
+            self.assertEqual(summary["ok"], 2)
+            self.assertTrue((artifacts_root / "batch_summary.json").exists())
+            self.assertTrue((artifacts_root / "batch_summary.html").exists())
+            for item in summary["documents"]:
+                artifact_dir = Path(item["artifact_dir"])
+                self.assertTrue((artifact_dir / "01_document_map.json").exists())
+                self.assertTrue((artifact_dir / "02_document_profile.json").exists())
+                self.assertTrue((artifact_dir / "03_field_proposals_llm.json").exists())
+                self.assertTrue((artifact_dir / "05_review_report.html").exists())
+                self.assertTrue((artifact_dir / "05_human_review.html").exists())
+                self.assertTrue((artifact_dir / "07_validation_report.json").exists())
+                self.assertTrue((artifact_dir / "original_summary.txt").exists())
+
+    def test_run_batch_continues_when_one_docx_fails(self):
+        with TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "docs"
+            artifacts_root = Path(tmp) / "artifacts"
+            input_dir.mkdir()
+            self._build_docx(input_dir / "ok.docx")
+            (input_dir / "broken.docx").write_text("not a real docx", encoding="utf-8")
+
+            summary = run_batch(input_dir, artifacts_root, use_llm=True, llm_client=FakeLLMClient())
+
+            self.assertEqual(summary["total_documents"], 2)
+            self.assertEqual(summary["ok"], 1)
+            self.assertEqual(summary["error"], 1)
+            failed = next(item for item in summary["documents"] if item["status"] == "error")
+            self.assertIn("broken.docx", failed["filename"])
+            self.assertTrue(failed["error"])
+
+    def test_run_batch_reuse_llm_artifacts_does_not_require_openai_key(self):
+        with TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "docs"
+            artifacts_root = Path(tmp) / "artifacts"
+            input_dir.mkdir()
+            first = input_dir / "primero.docx"
+            second = input_dir / "segundo.docx"
+            self._build_docx(first)
+            self._build_docx(second)
+            for source in (first, second):
+                document_map = DocxStructuralExtractor().extract(source)
+                proposal = self._proposal_for_value(document_map, "correo_llm", "usuario@example.org")
+                write_llm_artifacts(artifacts_root / safe_document_name(source.stem), [proposal])
+
+            with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+                summary = run_batch(input_dir, artifacts_root, reuse_llm_artifacts=True)
+
+            self.assertEqual(summary["ok"], 2)
+            self.assertEqual(summary["error"], 0)
+            self.assertTrue(all(item["total_llm_proposals"] == 1 for item in summary["documents"]))
 
     def test_run_lab_with_llm_aborts_before_api_when_payload_is_too_large(self):
         with TemporaryDirectory() as tmp:
