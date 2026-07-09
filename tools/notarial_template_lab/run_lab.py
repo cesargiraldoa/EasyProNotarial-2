@@ -20,6 +20,14 @@ from tools.notarial_template_lab.field_proposer import FieldProposer
 from tools.notarial_template_lab.field_proposal_agent import FieldProposalAgent
 from tools.notarial_template_lab.llm_client import JSONLLMClient, OpenAILLMClient
 from tools.notarial_template_lab.human_review import apply_human_review, load_review_decisions
+from tools.notarial_template_lab.prompt_contracts import (
+    DEFAULT_MAX_BLOCKS,
+    DEFAULT_MAX_BLOCKS_PER_BATCH,
+    DEFAULT_MAX_BLOCK_CHARS,
+    DEFAULT_SAFE_PAYLOAD_TOKENS,
+    PayloadTooLargeError,
+    write_debug_payload,
+)
 from tools.notarial_template_lab.report_writer import ReportWriter, safe_document_name, write_json
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
@@ -37,6 +45,10 @@ def run_lab(
     use_llm: bool = False,
     llm_client: JSONLLMClient | None = None,
     review_file: str | Path | None = None,
+    llm_max_blocks_per_batch: int = DEFAULT_MAX_BLOCKS_PER_BATCH,
+    llm_max_block_chars: int = DEFAULT_MAX_BLOCK_CHARS,
+    llm_debug_payloads: bool = False,
+    llm_max_estimated_tokens: int = DEFAULT_SAFE_PAYLOAD_TOKENS,
 ) -> dict:
     source = Path(input_path)
     if not source.exists():
@@ -71,8 +83,38 @@ def run_lab(
         try:
             _ = json.loads(document_map_path.read_text(encoding="utf-8"))
             client = llm_client or OpenAILLMClient()
-            document_profile = DocumentProfilerAgent(client).run(document_map)
-            llm_proposals = FieldProposalAgent(client).run(document_map, document_profile)
+            profile_max_blocks = max(1, min(DEFAULT_MAX_BLOCKS, llm_max_blocks_per_batch * 3))
+            profile_agent = DocumentProfilerAgent(client)
+            profile_payload = profile_agent.build_payload(
+                document_map,
+                max_blocks=profile_max_blocks,
+                max_block_chars=llm_max_block_chars,
+            )
+            if llm_debug_payloads:
+                write_debug_payload(artifacts_dir / "02_llm_profile_payload.json", profile_payload)
+            document_profile = profile_agent.run(
+                document_map,
+                max_blocks=profile_max_blocks,
+                max_block_chars=llm_max_block_chars,
+                max_estimated_tokens=llm_max_estimated_tokens,
+            )
+            field_agent = FieldProposalAgent(client)
+            field_payloads = field_agent.build_payloads(
+                document_map,
+                document_profile,
+                max_blocks_per_batch=llm_max_blocks_per_batch,
+                max_block_chars=llm_max_block_chars,
+            )
+            if llm_debug_payloads:
+                for index, payload in enumerate(field_payloads, start=1):
+                    write_debug_payload(artifacts_dir / f"03_llm_field_payload_batch_{index:03d}.json", payload)
+            llm_proposals = field_agent.run(
+                document_map,
+                document_profile,
+                max_blocks_per_batch=llm_max_blocks_per_batch,
+                max_block_chars=llm_max_block_chars,
+                max_estimated_tokens=llm_max_estimated_tokens,
+            )
             report_writer.write_all(
                 source,
                 document_map,
@@ -84,6 +126,11 @@ def run_lab(
                 llm_proposals=llm_proposals,
             )
             write_json(artifacts_dir / "04_draft_replacements.json", asdict(draft_result))
+        except PayloadTooLargeError as exc:
+            raise LabLLMExecutionError(
+                f"payload too large, reduce batch size. Artefactos base preservados en {artifacts_dir}. Detalle: {exc}",
+                artifacts_dir,
+            ) from exc
         except Exception as exc:
             raise LabLLMExecutionError(
                 f"La capa LLM fallo de forma controlada. Artefactos base preservados en {artifacts_dir}. Detalle: {exc}",
@@ -147,10 +194,21 @@ def main() -> int:
     parser.add_argument("--artifacts-root", default=str(REPO_ROOT / "artifacts" / "notarial_template_lab"))
     parser.add_argument("--use-llm", action="store_true", help="Ejecuta DocumentProfilerAgent y FieldProposalAgent sobre 01_document_map.json.")
     parser.add_argument("--review-file", help="JSON de decisiones humanas simuladas para generar 09_template_confirmed.docx.")
+    parser.add_argument("--llm-max-blocks-per-batch", type=int, default=DEFAULT_MAX_BLOCKS_PER_BATCH)
+    parser.add_argument("--llm-max-block-chars", type=int, default=DEFAULT_MAX_BLOCK_CHARS)
+    parser.add_argument("--llm-debug-payloads", action="store_true", help="Guarda payloads compactos enviados a la capa LLM.")
     args = parser.parse_args()
 
     try:
-        result = run_lab(args.input, args.artifacts_root, use_llm=args.use_llm, review_file=args.review_file)
+        result = run_lab(
+            args.input,
+            args.artifacts_root,
+            use_llm=args.use_llm,
+            review_file=args.review_file,
+            llm_max_blocks_per_batch=args.llm_max_blocks_per_batch,
+            llm_max_block_chars=args.llm_max_block_chars,
+            llm_debug_payloads=args.llm_debug_payloads,
+        )
     except LabLLMExecutionError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         print(f"artifacts: {exc.artifacts_dir}", file=sys.stderr)
