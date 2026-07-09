@@ -19,6 +19,7 @@ from tools.notarial_template_lab.document_profiler_agent import DocumentProfiler
 from tools.notarial_template_lab.field_proposer import FieldProposer
 from tools.notarial_template_lab.field_proposal_agent import FieldProposalAgent
 from tools.notarial_template_lab.llm_client import JSONLLMClient, OpenAILLMClient
+from tools.notarial_template_lab.human_review import apply_human_review, load_review_decisions
 from tools.notarial_template_lab.report_writer import ReportWriter, safe_document_name, write_json
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
@@ -35,6 +36,7 @@ def run_lab(
     artifacts_root: str | Path = REPO_ROOT / "artifacts" / "notarial_template_lab",
     use_llm: bool = False,
     llm_client: JSONLLMClient | None = None,
+    review_file: str | Path | None = None,
 ) -> dict:
     source = Path(input_path)
     if not source.exists():
@@ -57,6 +59,7 @@ def run_lab(
     artifacts_dir = report_writer.write_all(source, document_map, proposals, draft_result, validation_result, artifacts_root)
     # Keep draft result metadata available without adding a required named artifact.
     write_json(artifacts_dir / "04_draft_replacements.json", asdict(draft_result))
+    cleanup_confirmed_artifacts(artifacts_dir)
 
     document_profile = None
     llm_proposals = None
@@ -87,6 +90,39 @@ def run_lab(
                 artifacts_dir,
             ) from exc
 
+    human_review_result = None
+    confirmed_draft_result = None
+    confirmed_validation_result = None
+    if review_file is not None:
+        review_path = Path(review_file)
+        decisions = load_review_decisions(review_path)
+        review_source_proposals = llm_proposals if llm_proposals is not None else proposals
+        human_review_result = apply_human_review(review_source_proposals, decisions, str(review_path))
+        confirmed_path = artifacts_dir / "09_template_confirmed.docx"
+        confirmed_draft_result = TemplateDraftWriter().write(
+            source,
+            confirmed_path,
+            document_map,
+            human_review_result.confirmed_proposals,
+        )
+        confirmed_validation_result = RoundtripValidator().validate(confirmed_path)
+        write_json(artifacts_dir / "08_review_decisions_applied.json", asdict(human_review_result))
+        write_json(artifacts_dir / "10_confirmed_validation_report.json", asdict(confirmed_validation_result))
+        report_writer.write_all(
+            source,
+            document_map,
+            proposals,
+            draft_result,
+            validation_result,
+            artifacts_root,
+            document_profile=document_profile,
+            llm_proposals=llm_proposals,
+            human_review_result=human_review_result,
+            confirmed_draft_result=confirmed_draft_result,
+            confirmed_validation_result=confirmed_validation_result,
+        )
+        write_json(artifacts_dir / "04_draft_replacements.json", asdict(draft_result))
+
     return {
         "artifacts_dir": str(artifacts_dir),
         "total_blocks": document_map.quality.total_blocks,
@@ -98,6 +134,10 @@ def run_lab(
         "marked_fields_count": validation_result.marked_fields_count,
         "marked_fields": validation_result.marked_fields,
         "used_llm": use_llm,
+        "review_file": str(review_file) if review_file is not None else None,
+        "confirmed_replacements": len(confirmed_draft_result.replacements) if confirmed_draft_result else 0,
+        "confirmed_validation_passed": confirmed_validation_result.passed if confirmed_validation_result else None,
+        "confirmed_marked_fields_count": confirmed_validation_result.marked_fields_count if confirmed_validation_result else 0,
     }
 
 
@@ -106,10 +146,11 @@ def main() -> int:
     parser.add_argument("--input", required=True, help="Ruta al DOCX diligenciado.")
     parser.add_argument("--artifacts-root", default=str(REPO_ROOT / "artifacts" / "notarial_template_lab"))
     parser.add_argument("--use-llm", action="store_true", help="Ejecuta DocumentProfilerAgent y FieldProposalAgent sobre 01_document_map.json.")
+    parser.add_argument("--review-file", help="JSON de decisiones humanas simuladas para generar 09_template_confirmed.docx.")
     args = parser.parse_args()
 
     try:
-        result = run_lab(args.input, args.artifacts_root, use_llm=args.use_llm)
+        result = run_lab(args.input, args.artifacts_root, use_llm=args.use_llm, review_file=args.review_file)
     except LabLLMExecutionError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         print(f"artifacts: {exc.artifacts_dir}", file=sys.stderr)
@@ -127,8 +168,23 @@ def main() -> int:
     print(f"total replacements: {result['total_replacements']}")
     print(f"validation: {'PASS' if result['validation_passed'] else 'FAIL'}")
     print(f"marked fields detected: {result['marked_fields_count']}")
+    if result.get("review_file"):
+        print(f"confirmed replacements: {result['confirmed_replacements']}")
+        print(f"confirmed validation: {'PASS' if result['confirmed_validation_passed'] else 'FAIL'}")
+        print(f"confirmed marked fields detected: {result['confirmed_marked_fields_count']}")
     print(json.dumps(result["marked_fields"], ensure_ascii=False, indent=2))
     return 0 if result["validation_passed"] else 2
+
+
+def cleanup_confirmed_artifacts(artifacts_dir: Path) -> None:
+    for filename in (
+        "08_review_decisions_applied.json",
+        "09_template_confirmed.docx",
+        "10_confirmed_validation_report.json",
+    ):
+        path = artifacts_dir / filename
+        if path.exists():
+            path.unlink()
 
 
 if __name__ == "__main__":
