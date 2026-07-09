@@ -175,6 +175,7 @@ def run_lab(
             document_map,
             human_review_result.confirmed_proposals,
         )
+        mark_human_review_applied(human_review_result, confirmed_draft_result)
         confirmed_validation_result = RoundtripValidator().validate(confirmed_path)
         write_json(artifacts_dir / "08_review_decisions_applied.json", asdict(human_review_result))
         write_json(artifacts_dir / "10_confirmed_validation_report.json", asdict(confirmed_validation_result))
@@ -269,6 +270,61 @@ def cleanup_confirmed_artifacts(artifacts_dir: Path) -> None:
         path = artifacts_dir / filename
         if path.exists():
             path.unlink()
+
+
+def mark_human_review_applied(human_review_result, draft_result) -> None:
+    replacement_counts: dict[tuple[str, str, str], int] = {}
+    replacement_counts_by_field_marker: dict[tuple[str, str], int] = {}
+    for replacement in draft_result.replacements:
+        key = (replacement.field_key, replacement.value, replacement.marker)
+        replacement_counts[key] = replacement_counts.get(key, 0) + 1
+        field_marker_key = (replacement.field_key, replacement.marker)
+        replacement_counts_by_field_marker[field_marker_key] = replacement_counts_by_field_marker.get(field_marker_key, 0) + 1
+
+    skipped_by_key: dict[tuple[str, str, str], list[dict]] = {}
+    skipped_by_field_marker: dict[tuple[str, str], list[dict]] = {}
+    for item in draft_result.skipped:
+        key = (str(item.get("field_key") or ""), str(item.get("value") or ""), str(item.get("marker") or ""))
+        field_marker_key = (key[0], key[2])
+        payload = failed_occurrence_payload(item)
+        skipped_by_key.setdefault(key, []).append(payload)
+        skipped_by_field_marker.setdefault(field_marker_key, []).append(payload)
+
+    for decision in human_review_result.applied_decisions:
+        decision.expected_count = len(decision.selected_occurrence_ids) if decision.selected_occurrence_ids else (1 if decision.replaceable else 0)
+        if not decision.replaceable:
+            decision.applied = False
+            decision.applied_count = 0
+            decision.partial = False
+            continue
+        key = (decision.field_key, decision.value, decision.final_marker)
+        field_marker_key = (decision.field_key, decision.final_marker)
+        applied_count = replacement_counts.get(key, replacement_counts_by_field_marker.get(field_marker_key, 0))
+        decision.applied_count = applied_count
+        decision.applied = applied_count >= decision.expected_count
+        decision.partial = 0 < applied_count < decision.expected_count
+        decision.failed_occurrences = skipped_by_key.get(key, skipped_by_field_marker.get(field_marker_key, []))
+        if not decision.applied:
+            decision.block_reason = first_failure_reason(decision.failed_occurrences) or "No matching writer result for confirmed occurrence."
+
+
+def failed_occurrence_payload(item: dict) -> dict:
+    return {
+        "block_id": item.get("block_id") or "",
+        "location": item.get("location") or "",
+        "start": item.get("start"),
+        "end": item.get("end"),
+        "expected_value": item.get("expected_value") or item.get("value") or "",
+        "marker": item.get("marker") or "",
+        "failure_reason": item.get("failure_reason") or item.get("reason") or "",
+    }
+
+
+def first_failure_reason(failed_occurrences: list[dict]) -> str | None:
+    for item in failed_occurrences:
+        if item.get("failure_reason"):
+            return str(item["failure_reason"])
+    return None
 
 
 def load_existing_llm_artifacts(artifacts_dir: Path) -> tuple[DocumentProfile, list[FieldProposal]]:
