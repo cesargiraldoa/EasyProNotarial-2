@@ -126,6 +126,8 @@ class DraftReplacement:
     value: str
     block_id: str
     location: str
+    applied: bool = True
+    reason: str | None = None
 
 
 @dataclass
@@ -169,6 +171,11 @@ class AppliedHumanReviewDecision:
     selected_occurrence_ids: list[str]
     original_proposal: dict
     human_decision: dict | None
+    applied: bool = False
+    applied_count: int = 0
+    expected_count: int = 0
+    partial: bool = False
+    failed_occurrences: list[dict] = field(default_factory=list)
 
 
 @dataclass

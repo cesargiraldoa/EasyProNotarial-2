@@ -22,8 +22,8 @@ from tools.notarial_template_lab.field_proposer import FieldProposer
 from tools.notarial_template_lab.human_review import apply_human_review, load_review_decisions
 from tools.notarial_template_lab.models import FieldProposal, ProposalOccurrence
 from tools.notarial_template_lab.prompt_contracts import compact_document_map
-from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
-from tools.notarial_template_lab.run_lab import LabLLMExecutionError, run_lab
+from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator, iter_all_text
+from tools.notarial_template_lab.run_lab import LabLLMExecutionError, mark_human_review_applied, run_lab
 from tools.notarial_template_lab.report_writer import safe_document_name
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
 
@@ -236,6 +236,18 @@ class NotarialTemplateLabTests(unittest.TestCase):
             reason="Synthetic proposal for human review tests.",
         )
 
+    def _build_same_block_docx(self, path: Path) -> None:
+        doc = Document()
+        paragraph = doc.add_paragraph()
+        paragraph.add_run("Datos confirmados: ")
+        paragraph.add_run("123-4567890")
+        paragraph.add_run(", ")
+        paragraph.add_run("usuario@example.org")
+        paragraph.add_run(", ")
+        paragraph.add_run("$98.765.432")
+        paragraph.add_run(".")
+        doc.save(path)
+
     def test_extracts_paragraphs_tables_headers_footers_and_runs(self):
         with TemporaryDirectory() as tmp:
             source = Path(tmp) / "synthetic.docx"
@@ -301,6 +313,138 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertGreater(validation.marked_fields_count, 0)
             detected_keys = {field["key"] for field in validation.marked_fields}
             self.assertIn("matricula_inmobiliaria", detected_keys)
+
+    def test_writer_applies_multiple_replacements_in_same_paragraph(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "same_block.docx"
+            draft = Path(tmp) / "draft.docx"
+            self._build_same_block_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposals = [
+                self._proposal_for_value(document_map, "matricula", "123-4567890"),
+                self._proposal_for_value(document_map, "correo", "usuario@example.org"),
+                self._proposal_for_value(document_map, "precio", "$98.765.432"),
+            ]
+
+            result = TemplateDraftWriter().write(source, draft, document_map, proposals)
+            text = docx_text(draft)
+
+            self.assertEqual(len(result.replacements), 3)
+            self.assertIn("{{matricula}}", text)
+            self.assertIn("{{correo}}", text)
+            self.assertIn("{{precio}}", text)
+
+    def test_writer_uses_descending_offsets_so_later_replacement_does_not_shift_earlier_one(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "offsets.docx"
+            draft = Path(tmp) / "draft.docx"
+            doc = Document()
+            doc.add_paragraph("Campos: 111111 y 222222.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposals = [
+                self._proposal_for_value(document_map, "campo_inicio", "111111"),
+                self._proposal_for_value(document_map, "campo_final", "222222"),
+            ]
+            proposals[0].marker = "{{MARCADOR_MUCHO_MAS_LARGO_QUE_VALOR_ORIGINAL}}"
+
+            result = TemplateDraftWriter().write(source, draft, document_map, proposals)
+            text = docx_text(draft)
+
+            self.assertEqual(len(result.replacements), 2)
+            self.assertIn("{{MARCADOR_MUCHO_MAS_LARGO_QUE_VALOR_ORIGINAL}}", text)
+            self.assertIn("{{campo_final}}", text)
+            self.assertNotIn("111111", text)
+            self.assertNotIn("222222", text)
+
+    def test_writer_replaces_value_in_long_paragraph(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "long.docx"
+            draft = Path(tmp) / "draft.docx"
+            doc = Document()
+            doc.add_paragraph(f"{'texto ' * 250} FECHA 12/04/2026 {'contexto ' * 250}")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "fecha_larga", "12/04/2026")
+
+            result = TemplateDraftWriter().write(source, draft, document_map, [proposal])
+            text = docx_text(draft)
+
+            self.assertEqual(len(result.replacements), 1)
+            self.assertIn("{{fecha_larga}}", text)
+            self.assertNotIn("12/04/2026", text)
+
+    def test_writer_replaces_value_split_across_runs_by_rebuilding_paragraph(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "runs.docx"
+            draft = Path(tmp) / "draft.docx"
+            doc = Document()
+            paragraph = doc.add_paragraph("Codigo: ")
+            paragraph.add_run("ABC").bold = True
+            paragraph.add_run("DEF").italic = True
+            paragraph.add_run(" confirmado.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "codigo", "ABCDEF")
+
+            result = TemplateDraftWriter().write(source, draft, document_map, [proposal])
+            text = docx_text(draft)
+
+            self.assertEqual(len(result.replacements), 1)
+            self.assertIn("{{codigo}}", text)
+            self.assertNotIn("ABCDEF", text)
+
+    def test_writer_reports_block_id_not_found(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            draft = Path(tmp) / "draft.docx"
+            self._build_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "correo", "usuario@example.org")
+            proposal.occurrences[0].block_id = "block_missing"
+
+            result = TemplateDraftWriter().write(source, draft, document_map, [proposal])
+
+            self.assertEqual(len(result.replacements), 0)
+            self.assertIn("block_id not found", result.skipped[0]["reason"])
+            self.assertEqual(result.skipped[0]["start"], proposal.occurrences[0].start)
+
+    def test_writer_uses_unique_text_fallback_on_offset_mismatch(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "fallback.docx"
+            draft = Path(tmp) / "draft.docx"
+            doc = Document()
+            doc.add_paragraph("Valor unico: ABC123.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "codigo", "ABC123")
+            proposal.occurrences[0].start = 0
+            proposal.occurrences[0].end = 6
+
+            result = TemplateDraftWriter().write(source, draft, document_map, [proposal])
+            text = docx_text(draft)
+
+            self.assertEqual(len(result.replacements), 1)
+            self.assertIn("unique text fallback", result.replacements[0].reason)
+            self.assertIn("{{codigo}}", text)
+
+    def test_writer_reports_ambiguous_text_fallback(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "ambiguous.docx"
+            draft = Path(tmp) / "draft.docx"
+            doc = Document()
+            doc.add_paragraph("Codigo ABC123 y otro ABC123.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "codigo", "ABC123")
+            proposal.occurrences = [proposal.occurrences[0]]
+            proposal.occurrences[0].start = 0
+            proposal.occurrences[0].end = 6
+
+            result = TemplateDraftWriter().write(source, draft, document_map, [proposal])
+
+            self.assertEqual(len(result.replacements), 0)
+            self.assertIn("expected text appears multiple times", result.skipped[0]["failure_reason"])
 
     def test_compacts_document_map_for_llm_with_auditable_offsets(self):
         with TemporaryDirectory() as tmp:
@@ -506,6 +650,135 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertGreaterEqual(result["confirmed_replacements"], 1)
             self.assertTrue(result["confirmed_validation_passed"])
 
+    def test_human_review_three_confirmed_fields_in_same_block_leave_three_markers(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "same_block.docx"
+            confirmed = Path(tmp) / "confirmed.docx"
+            self._build_same_block_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposals = [
+                self._proposal_for_value(document_map, "matricula", "123-4567890"),
+                self._proposal_for_value(document_map, "correo", "usuario@example.org"),
+                self._proposal_for_value(document_map, "precio", "$98.765.432"),
+            ]
+            decisions = load_review_decisions(
+                write_review_file(
+                    Path(tmp) / "review.json",
+                    [
+                        {"field_key": "matricula", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                        {"field_key": "correo", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                        {"field_key": "precio", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                    ],
+                )
+            )
+
+            review = apply_human_review(proposals, decisions)
+            draft_result = TemplateDraftWriter().write(source, confirmed, document_map, review.confirmed_proposals)
+            mark_human_review_applied(review, draft_result)
+            text = docx_text(confirmed)
+
+            self.assertEqual(len(draft_result.replacements), 3)
+            self.assertTrue(all(item.applied for item in review.applied_decisions if item.replaceable))
+            self.assertEqual(text.count("{{"), 3)
+
+    def test_human_review_failed_occurrences_include_writer_reason(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "ambiguous.docx"
+            confirmed = Path(tmp) / "confirmed.docx"
+            doc = Document()
+            doc.add_paragraph("Codigo ABC123 y otro ABC123.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposal = self._proposal_for_value(document_map, "codigo", "ABC123")
+            proposal.occurrences = [proposal.occurrences[0]]
+            proposal.occurrences[0].start = 0
+            proposal.occurrences[0].end = 6
+            decisions = load_review_decisions(
+                write_review_file(
+                    Path(tmp) / "review.json",
+                    [{"field_key": "codigo", "decision": "confirm", "apply_strategy": "all_occurrences"}],
+                )
+            )
+
+            review = apply_human_review([proposal], decisions)
+            draft_result = TemplateDraftWriter().write(source, confirmed, document_map, review.confirmed_proposals)
+            mark_human_review_applied(review, draft_result)
+            applied = review.applied_decisions[0]
+
+            self.assertFalse(applied.applied)
+            self.assertEqual(applied.applied_count, 0)
+            self.assertEqual(applied.expected_count, 1)
+            self.assertIn("expected text appears multiple times", applied.failed_occurrences[0]["failure_reason"])
+
+    def test_regression_seventeen_confirmed_fields_produce_seventeen_markers(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "seventeen.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            values = [f"dato-{index:02d}" for index in range(17)]
+            doc = Document()
+            doc.add_paragraph(" ".join(values))
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposals = [self._proposal_for_value(document_map, f"campo_{index:02d}", value) for index, value in enumerate(values)]
+            write_llm_artifacts(artifacts_root / safe_document_name(source.stem), proposals)
+            review_path = write_review_file(
+                Path(tmp) / "review.json",
+                [
+                    {"field_key": f"campo_{index:02d}", "decision": "confirm", "apply_strategy": "all_occurrences"}
+                    for index in range(17)
+                ],
+            )
+
+            result = run_lab(source, artifacts_root, reuse_llm_artifacts=True, review_file=review_path)
+            text = docx_text(Path(result["artifacts_dir"]) / "09_template_confirmed.docx")
+            review_payload = json.loads((Path(result["artifacts_dir"]) / "08_review_decisions_applied.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(result["confirmed_replacements"], 17)
+            self.assertEqual(text.count("{{"), 17)
+            self.assertTrue(all(item["applied"] for item in review_payload["applied_decisions"] if item["replaceable"]))
+
+    def test_regression_confirmed_replacements_match_expected_markers_with_reused_llm_artifacts(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "same_block.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_same_block_docx(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            proposals = [
+                self._proposal_for_value(document_map, "matricula", "123-4567890"),
+                self._proposal_for_value(document_map, "correo", "usuario@example.org"),
+                self._proposal_for_value(document_map, "precio", "$98.765.432"),
+            ]
+            write_llm_artifacts(artifacts_root / safe_document_name(source.stem), proposals)
+            review_path = write_review_file(
+                Path(tmp) / "review.json",
+                [
+                    {"field_key": "matricula", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                    {"field_key": "correo", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                    {"field_key": "precio", "decision": "confirm", "apply_strategy": "all_occurrences"},
+                ],
+            )
+
+            result = run_lab(source, artifacts_root, reuse_llm_artifacts=True, review_file=review_path)
+            text = docx_text(Path(result["artifacts_dir"]) / "09_template_confirmed.docx")
+
+            self.assertEqual(result["confirmed_replacements"], 3)
+            self.assertIn("{{matricula}}", text)
+            self.assertIn("{{correo}}", text)
+            self.assertIn("{{precio}}", text)
+            self.assertEqual(text.count("{{"), 3)
+
+    def test_load_review_decisions_accepts_utf8_bom(self):
+        with TemporaryDirectory() as tmp:
+            review_path = Path(tmp) / "review.json"
+            review_path.write_text(
+                json.dumps({"decisions": [{"field_key": "campo", "decision": "confirm"}]}),
+                encoding="utf-8-sig",
+            )
+
+            decisions = load_review_decisions(review_path)
+
+            self.assertEqual(decisions[0].field_key, "campo")
+
     def test_reuse_llm_artifacts_fails_cleanly_when_proposals_are_missing(self):
         with TemporaryDirectory() as tmp:
             source = Path(tmp) / "synthetic.docx"
@@ -701,6 +974,10 @@ def document_profile_payload() -> dict:
         "confidence": 0.7,
         "evidence": [],
     }
+
+
+def docx_text(path: Path) -> str:
+    return "\n".join(iter_all_text(Document(str(path))))
 
 
 if __name__ == "__main__":

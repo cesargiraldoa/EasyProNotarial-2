@@ -24,7 +24,7 @@ class HumanReviewError(ValueError):
 
 def load_review_decisions(path: str | Path) -> list[HumanReviewDecision]:
     review_path = Path(path)
-    payload = json.loads(review_path.read_text(encoding="utf-8"))
+    payload = json.loads(review_path.read_text(encoding="utf-8-sig"))
     raw_items = payload.get("decisions") if isinstance(payload, dict) else payload
     if not isinstance(raw_items, list):
         raise HumanReviewError("El archivo de revision debe ser una lista o un objeto con clave 'decisions'.")
