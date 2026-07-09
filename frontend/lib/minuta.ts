@@ -222,6 +222,32 @@ export type ReverseTemplateAnalyzeResult = {
   };
 };
 
+export type AssistedTaggingField = {
+  field_code: string;
+  label: string;
+  section: string;
+  confidence: number;
+  occurrences: number;
+  status: string;
+  warning?: string | null;
+};
+
+export type AssistedTaggingJob = {
+  id: number;
+  job_uuid: string;
+  status: string;
+  document_type: string;
+  source_filename: string;
+  template_id?: number | null;
+  onlyoffice_path?: string | null;
+  download_url?: string | null;
+  warnings: string[];
+  error_message?: string | null;
+  fields: AssistedTaggingField[];
+  created_at: string;
+  updated_at: string;
+};
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function authHeaders(): Headers {
@@ -352,6 +378,68 @@ export async function analyzeReverseTemplateSingle(file: File): Promise<ReverseT
   });
   if (!response.ok) await handleError(response);
   return response.json() as Promise<ReverseTemplateAnalyzeResult>;
+}
+
+export async function createAssistedTaggingJob(file: File, documentType: string): Promise<AssistedTaggingJob> {
+  const form = new FormData();
+  form.append("archivo", file);
+  form.append("document_type", documentType);
+  const response = await fetch(buildApiUrl("/api/v1/minutas/assisted-tagging/jobs"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
+}
+
+export async function runAssistedTaggingJob(jobId: number): Promise<AssistedTaggingJob> {
+  const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}/run`), {
+    method: "POST",
+    headers: authHeaders(),
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
+}
+
+export async function getAssistedTaggingJob(jobId: number): Promise<AssistedTaggingJob> {
+  const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}`), {
+    method: "GET",
+    headers: authHeaders(),
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
+}
+
+export async function approveAssistedTaggingJob(jobId: number): Promise<AssistedTaggingJob> {
+  const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}/approve`), {
+    method: "POST",
+    headers: authHeaders(),
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
+}
+
+export async function rejectAssistedTaggingJob(jobId: number, reason?: string): Promise<AssistedTaggingJob> {
+  const form = new FormData();
+  if (reason?.trim()) form.append("reason", reason.trim());
+  const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}/reject`), {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
 }
 
 export async function generateMarkedTemplate(

@@ -1,4 +1,5 @@
 from app.models.act_catalog import ActCatalog
+from app.models.assisted_tagging import AssistedTaggingField, AssistedTaggingJob
 from app.models.case import Case
 from app.models.case_act import CaseAct
 from app.models.case_act_data import CaseActData

@@ -1,5 +1,7 @@
 from app.models import (
     ActCatalog,
+    AssistedTaggingField,
+    AssistedTaggingJob,
     Case,
     CaseAct,
     CaseActData,

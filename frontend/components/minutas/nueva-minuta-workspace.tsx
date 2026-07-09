@@ -19,7 +19,7 @@ import { DEPARTAMENTOS_COLOMBIA, getMunicipiosByDepartamento, getDepartamentoByM
 import { getCurrentUser } from "@/lib/api";
 import { AiProgressModal, type AiStep } from "@/components/ui/ai-progress-modal";
 import { MinutasTour, type TourStep } from "@/components/minutas/minutas-tour";
-import { ReverseTemplateBuilderPanel } from "@/components/minutas/reverse-template-builder-panel";
+import { AssistedTaggingPanel } from "@/components/minutas/assisted-tagging-panel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -3132,7 +3132,7 @@ function getMarkedGenerationWarningMessage(warnings: MinutaGenerarResult["warnin
 
 export function NuevaMinutaWorkspace() {
   const router = useRouter();
-  const [workspaceMode, setWorkspaceMode] = useState<"marked" | "reverse-builder">("marked");
+  const [workspaceMode, setWorkspaceMode] = useState<"marked" | "assisted-tagging">("marked");
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -3780,8 +3780,8 @@ export function NuevaMinutaWorkspace() {
         </div>
       )}
 
-      {workspaceMode === "reverse-builder" && (
-        <ReverseTemplateBuilderPanel onBackToMarkedFlow={() => setWorkspaceMode("marked")} />
+      {workspaceMode === "assisted-tagging" && (
+        <AssistedTaggingPanel onBackToMarkedFlow={() => setWorkspaceMode("marked")} />
       )}
 
       {/* ── PASO 1 ── */}
@@ -3792,13 +3792,13 @@ export function NuevaMinutaWorkspace() {
               <div>
                 <p className="text-sm font-bold text-ink">Crear plantilla inteligente</p>
                 <p className="mt-1 text-xs leading-5 text-muted">
-                  Construye candidatos de campos desde una minuta ya diligenciada, sin generar plantilla todavia.
+                  Pre-etiqueta una minuta elaborada con variables en rojo y guardala en biblioteca tras aprobacion.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setWorkspaceMode("reverse-builder");
+                  setWorkspaceMode("assisted-tagging");
                   setError(null);
                   setMarkedGenerationWarning(null);
                 }}
