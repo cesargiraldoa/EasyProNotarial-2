@@ -66,6 +66,7 @@ def _serialize_job(job: AssistedTaggingJob, request: Request | None = None) -> d
         "template_id": job.template_id,
         "onlyoffice_path": onlyoffice_path,
         "download_url": download_url,
+        "approved_docx_uploaded": bool(job.approved_docx_storage_path),
         "warnings": _json_list(job.warnings_json),
         "error_message": job.error_message,
         "fields": [
@@ -127,12 +128,39 @@ def get_job(job_id: int, request: Request, db: Session = Depends(get_db), curren
 
 
 @router.post("/jobs/{job_id}/approve")
-def approve_job(job_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def approve_job(
+    job_id: int,
+    request: Request,
+    confirm_no_changes: bool = Form(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     job = _load_job(db, job_id, current_user)
     if job.status not in {"human_review", "pretagged"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El job no esta listo para aprobar.")
     try:
-        service.approve_job(db, job, user_id=current_user.id)
+        service.approve_job(db, job, user_id=current_user.id, confirm_no_changes=confirm_no_changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    db.commit()
+    return _serialize_job(_load_job(db, job.id, current_user), request)
+
+
+@router.post("/jobs/{job_id}/approved-docx")
+async def upload_approved_docx(
+    job_id: int,
+    request: Request,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = _load_job(db, job_id, current_user)
+    if job.status not in {"human_review", "pretagged"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El job no esta en revision humana.")
+    if not archivo.filename or not archivo.filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El archivo aprobado debe ser un DOCX valido.")
+    try:
+        service.upload_approved_docx(db, job, filename=archivo.filename, content=await archivo.read())
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     db.commit()

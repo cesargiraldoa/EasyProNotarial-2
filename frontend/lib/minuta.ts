@@ -241,6 +241,7 @@ export type AssistedTaggingJob = {
   template_id?: number | null;
   onlyoffice_path?: string | null;
   download_url?: string | null;
+  approved_docx_uploaded: boolean;
   warnings: string[];
   error_message?: string | null;
   fields: AssistedTaggingField[];
@@ -417,10 +418,27 @@ export async function getAssistedTaggingJob(jobId: number): Promise<AssistedTagg
   return response.json() as Promise<AssistedTaggingJob>;
 }
 
-export async function approveAssistedTaggingJob(jobId: number): Promise<AssistedTaggingJob> {
+export async function uploadApprovedAssistedTaggingDocx(jobId: number, file: File): Promise<AssistedTaggingJob> {
+  const form = new FormData();
+  form.append("archivo", file);
+  const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}/approved-docx`), {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  return response.json() as Promise<AssistedTaggingJob>;
+}
+
+export async function approveAssistedTaggingJob(jobId: number, confirmNoChanges = false): Promise<AssistedTaggingJob> {
+  const form = new FormData();
+  form.append("confirm_no_changes", confirmNoChanges ? "true" : "false");
   const response = await fetch(buildApiUrl(`/api/v1/minutas/assisted-tagging/jobs/${jobId}/approve`), {
     method: "POST",
     headers: authHeaders(),
+    body: form,
     cache: "no-store",
     credentials: "include",
   });

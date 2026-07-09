@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections import Counter
 
 from app.services.minuta.assisted_tagging.models import DocxStructure, TaggingFieldProposal, TaggingValidationResult
 
@@ -11,6 +12,34 @@ def normalize_code(value: str) -> str:
     ascii_value = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     code = re.sub(r"[^a-zA-Z0-9]+", "_", ascii_value.lower()).strip("_")
     return code[:80] or "campo"
+
+
+SECTION_PREFIXES = {
+    "personas": "campo_persona",
+    "inmueble": "campo_inmueble",
+    "valores": "campo_valor",
+    "fechas": "campo_fecha",
+    "notaria": "campo_notaria",
+    "acto": "campo_acto",
+    "general": "campo_humano",
+}
+
+
+def _code_exposes_value(code: str, text: str) -> bool:
+    if re.search(r"\d{5,}", code):
+        return True
+    code_tokens = {token for token in code.split("_") if len(token) >= 3}
+    value_tokens = {token for token in normalize_code(text).split("_") if len(token) >= 3}
+    if not code_tokens or not value_tokens:
+        return False
+    overlap = code_tokens & value_tokens
+    return len(overlap) >= 2 or (len(overlap) == 1 and len(next(iter(overlap))) >= 8)
+
+
+def controlled_code_for_section(section: str, counters: Counter[str]) -> str:
+    prefix = SECTION_PREFIXES.get(normalize_code(section or "general"), "campo_humano")
+    counters[prefix] += 1
+    return f"{prefix}_{counters[prefix]}"
 
 
 class TaggingResponseValidator:
@@ -24,6 +53,7 @@ class TaggingResponseValidator:
 
         used_codes: set[str] = set()
         used_texts: set[str] = set()
+        controlled_counters: Counter[str] = Counter()
         for item in raw_fields:
             if not isinstance(item, dict):
                 continue
@@ -37,7 +67,10 @@ class TaggingResponseValidator:
                 continue
             used_texts.add(text.upper())
 
-            base_code = normalize_code(str(item.get("field_code") or item.get("label") or text))
+            section = str(item.get("section") or "general").strip() or "general"
+            base_code = normalize_code(str(item.get("field_code") or item.get("label") or ""))
+            if not base_code or _code_exposes_value(base_code, text):
+                base_code = controlled_code_for_section(section, controlled_counters)
             code = base_code
             suffix = 2
             while code in used_codes:
@@ -56,7 +89,7 @@ class TaggingResponseValidator:
                     field_code=code,
                     label=str(item.get("label") or code.replace("_", " ").title()).strip(),
                     text=text,
-                    section=str(item.get("section") or "general").strip() or "general",
+                    section=section,
                     confidence=confidence,
                     block_id=str(item.get("block_id") or "") or None,
                     reason=str(item.get("reason") or "") or None,

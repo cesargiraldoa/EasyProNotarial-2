@@ -45,11 +45,11 @@ def _field_code(label: str) -> str:
 
 def _label_from_text(text: str, kind: str, index: int) -> str:
     if kind == "nombre":
-        return f"Nombre {index}"
+        return f"Nombre comprador {index}"
     if kind == "documento":
-        return f"Documento {index}"
+        return f"Documento comprador {index}"
     if kind == "valor":
-        return f"Valor {index}"
+        return "Valor venta" if index == 1 else f"Valor {index}"
     if kind == "fecha":
         return f"Fecha {index}"
     if kind == "matricula":
@@ -60,19 +60,27 @@ def _label_from_text(text: str, kind: str, index: int) -> str:
 class LlmTaggingClient:
     def propose(self, structure: DocxStructure, document_type: str) -> dict:
         api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
-        if api_key:
-            try:
-                return self._propose_with_openai(structure, document_type)
-            except Exception:
-                return self._deterministic_proposal(structure)
-        return self._deterministic_proposal(structure)
+        allow_fallback = (os.environ.get("ASSISTED_TAGGING_ALLOW_FALLBACK") or "").strip().lower() == "true"
+        model = os.environ.get("ASSISTED_TAGGING_MODEL", "gpt-4o-mini")
+        if not api_key:
+            if allow_fallback:
+                return self._fallback(structure, "OPENAI_API_KEY no configurada.", model)
+            raise RuntimeError("OPENAI_API_KEY no configurada. El fallback local requiere ASSISTED_TAGGING_ALLOW_FALLBACK=true.")
+        try:
+            payload = self._propose_with_openai(structure, document_type, model)
+            payload["_meta"] = {"llm_mode": "openai", "model": model}
+            return payload
+        except Exception as exc:
+            if allow_fallback:
+                return self._fallback(structure, f"Error llamando al LLM: {exc}", model)
+            raise RuntimeError(f"Error llamando al LLM y fallback no permitido: {exc}") from exc
 
-    def _propose_with_openai(self, structure: DocxStructure, document_type: str) -> dict:
+    def _propose_with_openai(self, structure: DocxStructure, document_type: str, model: str) -> dict:
         from openai import OpenAI
 
         client = OpenAI()
         response = client.chat.completions.create(
-            model=os.environ.get("ASSISTED_TAGGING_MODEL", "gpt-4o-mini"),
+            model=model,
             messages=build_prompt(structure, document_type),
             response_format={"type": "json_object"},
             temperature=0.1,
@@ -82,6 +90,15 @@ class LlmTaggingClient:
         if not isinstance(parsed, dict):
             return {"fields": []}
         return parsed
+
+    def _fallback(self, structure: DocxStructure, cause: str, model: str) -> dict:
+        payload = self._deterministic_proposal(structure)
+        payload["_meta"] = {
+            "llm_mode": "fallback",
+            "cause": cause,
+            "model_not_used": model,
+        }
+        return payload
 
     def _deterministic_proposal(self, structure: DocxStructure) -> dict:
         proposals: list[TaggingFieldProposal] = []

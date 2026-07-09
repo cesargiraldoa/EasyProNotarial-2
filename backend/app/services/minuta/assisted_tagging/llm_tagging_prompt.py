@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from app.services.minuta.assisted_tagging.models import DocxStructure
 
 
@@ -38,5 +40,5 @@ def build_prompt(structure: DocxStructure, document_type: str) -> list[dict[str,
     }
     return [
         {"role": "system", "content": MASTER_PROMPT},
-        {"role": "user", "content": str(user_payload)},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
     ]

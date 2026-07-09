@@ -18,6 +18,7 @@ import {
   createAssistedTaggingJob,
   rejectAssistedTaggingJob,
   runAssistedTaggingJob,
+  uploadApprovedAssistedTaggingDocx,
   type AssistedTaggingJob,
 } from "@/lib/minuta";
 
@@ -27,10 +28,14 @@ type Props = {
 
 const DOCUMENT_TYPES = [
   "Compraventa",
+  "Compraventa con hipoteca",
   "Hipoteca",
-  "Cancelacion de hipoteca",
+  "Cancelación de hipoteca",
+  "Salida del país",
   "Poder",
-  "Sucesion",
+  "Registro civil",
+  "Patrimonio de familia",
+  "Sucesión",
   "Otro",
 ];
 
@@ -56,6 +61,8 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
   const [isWorking, setIsWorking] = useState(false);
   const [job, setJob] = useState<AssistedTaggingJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approvedFile, setApprovedFile] = useState<File | null>(null);
+  const [confirmNoChanges, setConfirmNoChanges] = useState(false);
 
   function selectFile(nextFile: File) {
     if (!nextFile.name.toLowerCase().endsWith(".docx")) {
@@ -82,6 +89,8 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
       const created = await createAssistedTaggingJob(file, documentType);
       const processed = await runAssistedTaggingJob(created.id);
       setJob(processed);
+      setApprovedFile(null);
+      setConfirmNoChanges(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No fue posible etiquetar la minuta.");
     } finally {
@@ -94,9 +103,24 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
     setIsWorking(true);
     setError(null);
     try {
-      setJob(await approveAssistedTaggingJob(job.id));
+      setJob(await approveAssistedTaggingJob(job.id, confirmNoChanges && !job.approved_docx_uploaded));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No fue posible aprobar la plantilla.");
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function handleUploadApprovedDocx() {
+    if (!job || !approvedFile) return;
+    setIsWorking(true);
+    setError(null);
+    try {
+      const nextJob = await uploadApprovedAssistedTaggingDocx(job.id, approvedFile);
+      setJob(nextJob);
+      setConfirmNoChanges(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No fue posible subir el DOCX aprobado.");
     } finally {
       setIsWorking(false);
     }
@@ -117,6 +141,7 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
 
   const readyForReview = Boolean(job?.onlyoffice_path || job?.download_url);
   const saved = job?.status === "saved_to_library";
+  const canApprove = Boolean(job?.approved_docx_uploaded || confirmNoChanges);
 
   return (
     <div className="space-y-5">
@@ -224,25 +249,79 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
           </div>
 
           {readyForReview && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {job.onlyoffice_path && (
-                <a
-                  href={job.onlyoffice_path}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  <ExternalLink size={16} />
-                  Abrir en OnlyOffice
-                </a>
-              )}
-              {job.download_url && (
-                <a
-                  href={job.download_url}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-line px-4 text-sm font-semibold text-muted hover:border-primary hover:text-primary"
-                >
-                  <Download size={16} />
-                  Descargar DOCX
-                </a>
-              )}
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {job.onlyoffice_path && (
+                  <a
+                    href={job.onlyoffice_path}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white hover:opacity-90"
+                  >
+                    <ExternalLink size={16} />
+                    Abrir en OnlyOffice
+                  </a>
+                )}
+                {job.download_url && (
+                  <a
+                    href={job.download_url}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-line px-4 text-sm font-semibold text-muted hover:border-primary hover:text-primary"
+                  >
+                    <Download size={16} />
+                    Descargar DOCX
+                  </a>
+                )}
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">Aprobacion segura</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800">
+                  EasyPro no puede garantizar desde aqui que OnlyOffice ya sincronizo la ultima edicion. Sube el DOCX corregido/aprobado antes de aprobar, o confirma que no hiciste cambios sobre el pre-etiquetado.
+                </p>
+              </div>
+              <div className="rounded-xl border border-line bg-panel-soft p-3">
+                <label className="grid gap-2 text-xs font-semibold uppercase tracking-wider text-soft">
+                  DOCX corregido/aprobado
+                  <input
+                    type="file"
+                    accept=".docx"
+                    onChange={(event) => {
+                      const nextFile = event.target.files?.[0] ?? null;
+                      setApprovedFile(nextFile);
+                      if (nextFile) setConfirmNoChanges(false);
+                    }}
+                    className="text-sm normal-case tracking-normal text-muted"
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleUploadApprovedDocx}
+                    disabled={!approvedFile || isWorking}
+                    className={[
+                      "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold",
+                      approvedFile && !isWorking ? "bg-primary text-white hover:opacity-90" : "cursor-not-allowed bg-surface-alt text-soft",
+                    ].join(" ")}
+                  >
+                    {isWorking && approvedFile ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    Subir aprobado
+                  </button>
+                  {job.approved_docx_uploaded && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                      <CheckCircle2 size={14} />
+                      DOCX aprobado cargado
+                    </span>
+                  )}
+                </div>
+                {!job.approved_docx_uploaded && (
+                  <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted">
+                    <input
+                      type="checkbox"
+                      checked={confirmNoChanges}
+                      onChange={(event) => setConfirmNoChanges(event.target.checked)}
+                      className="mt-1"
+                    />
+                    Confirmo que no hice cambios en Word ni OnlyOffice y que puedo aprobar el DOCX pre-etiquetado original.
+                  </label>
+                )}
+              </div>
             </div>
           )}
 
@@ -279,8 +358,8 @@ export function AssistedTaggingPanel({ onBackToMarkedFlow }: Props) {
               <button
                 type="button"
                 onClick={handleApprove}
-                disabled={isWorking}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                disabled={isWorking || !canApprove}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isWorking ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                 Aprobar y guardar
