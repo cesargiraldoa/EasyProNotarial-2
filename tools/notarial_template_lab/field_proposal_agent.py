@@ -10,7 +10,15 @@ from tools.notarial_template_lab.models import (
     FieldProposal,
     ProposalOccurrence,
 )
-from tools.notarial_template_lab.prompt_contracts import FIELD_PROPOSAL_SYSTEM_PROMPT, compact_document_map
+from tools.notarial_template_lab.prompt_contracts import (
+    DEFAULT_MAX_BLOCK_CHARS,
+    DEFAULT_MAX_BLOCKS_PER_BATCH,
+    DEFAULT_SAFE_PAYLOAD_TOKENS,
+    FIELD_PROPOSAL_SYSTEM_PROMPT,
+    assert_payload_within_limit,
+    build_field_proposal_batches,
+    with_document_profile,
+)
 
 
 VALID_PROPOSAL_TYPES = {"project_field", "document_field", "derived_field", "review_required", "fixed_text"}
@@ -21,13 +29,43 @@ class FieldProposalAgent:
     def __init__(self, llm_client: JSONLLMClient):
         self.llm_client = llm_client
 
-    def run(self, document_map: DocumentMap, document_profile: DocumentProfile) -> list[FieldProposal]:
-        payload = {
-            "document_map": compact_document_map(document_map),
-            "document_profile": document_profile.__dict__,
-        }
-        raw = self.llm_client.complete_json(FIELD_PROPOSAL_SYSTEM_PROMPT, payload)
-        return normalize_field_proposals(raw, document_map)
+    def build_payloads(
+        self,
+        document_map: DocumentMap,
+        document_profile: DocumentProfile,
+        max_blocks_per_batch: int = DEFAULT_MAX_BLOCKS_PER_BATCH,
+        max_block_chars: int = DEFAULT_MAX_BLOCK_CHARS,
+    ) -> list[dict]:
+        return [
+            with_document_profile(payload, document_profile.__dict__)
+            for payload in build_field_proposal_batches(
+                document_map,
+                max_blocks_per_batch=max_blocks_per_batch,
+                max_block_chars=max_block_chars,
+            )
+        ]
+
+    def run(
+        self,
+        document_map: DocumentMap,
+        document_profile: DocumentProfile,
+        max_blocks_per_batch: int = DEFAULT_MAX_BLOCKS_PER_BATCH,
+        max_block_chars: int = DEFAULT_MAX_BLOCK_CHARS,
+        max_estimated_tokens: int = DEFAULT_SAFE_PAYLOAD_TOKENS,
+    ) -> list[FieldProposal]:
+        payloads = self.build_payloads(
+            document_map,
+            document_profile,
+            max_blocks_per_batch=max_blocks_per_batch,
+            max_block_chars=max_block_chars,
+        )
+        proposals: list[FieldProposal] = []
+        for payload in payloads:
+            batch_index = payload.get("batch", {}).get("index", "?")
+            assert_payload_within_limit(payload, max_estimated_tokens, f"field batch {batch_index}")
+            raw = self.llm_client.complete_json(FIELD_PROPOSAL_SYSTEM_PROMPT, payload)
+            proposals.extend(normalize_field_proposals(raw, document_map))
+        return dedupe_field_proposals(proposals)
 
 
 def normalize_field_proposals(raw: dict, document_map: DocumentMap) -> list[FieldProposal]:
@@ -70,6 +108,22 @@ def normalize_field_proposals(raw: dict, document_map: DocumentMap) -> list[Fiel
         )
 
     return proposals
+
+
+def dedupe_field_proposals(proposals: list[FieldProposal]) -> list[FieldProposal]:
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[FieldProposal] = []
+    for proposal in proposals:
+        if proposal.occurrences:
+            location = proposal.occurrences[0].location
+        else:
+            location = ""
+        key = (proposal.field_key, proposal.value, location)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(proposal)
+    return deduped
 
 
 def normalize_occurrences(raw_occurrences: list[dict], value: str, block_lookup: dict) -> list[ProposalOccurrence]:

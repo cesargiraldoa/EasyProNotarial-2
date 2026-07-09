@@ -20,16 +20,18 @@ from tools.notarial_template_lab.human_review import apply_human_review, load_re
 from tools.notarial_template_lab.models import FieldProposal, ProposalOccurrence
 from tools.notarial_template_lab.prompt_contracts import compact_document_map
 from tools.notarial_template_lab.roundtrip_validator import RoundtripValidator
-from tools.notarial_template_lab.run_lab import run_lab
+from tools.notarial_template_lab.run_lab import LabLLMExecutionError, run_lab
 from tools.notarial_template_lab.template_draft_writer import TemplateDraftWriter
 
 
 class FakeLLMClient:
     def __init__(self):
         self.calls = []
+        self.payload_sizes = []
 
     def complete_json(self, system_prompt: str, payload: dict) -> dict:
         self.calls.append((system_prompt, payload))
+        self.payload_sizes.append(len(json.dumps(payload, ensure_ascii=False)))
         if "Contrato JSON" in system_prompt and "document_type" in system_prompt:
             return {
                 "document_type": "escritura_publica",
@@ -43,8 +45,9 @@ class FakeLLMClient:
                 "confidence": 0.7,
                 "evidence": [{"block_id": "block_x", "location": "body/paragraph 1", "reason": "Bloque sintetico."}],
             }
-        document_map = payload["document_map"]
-        target_block = next(block for block in document_map["blocks"] if "matricula inmobiliaria" in block["text"])
+        target_block = next((block for block in payload["blocks"] if "matricula inmobiliaria" in block["text"]), None)
+        if target_block is None:
+            return {"proposals": []}
         value = "123-4567890"
         start = target_block["text"].index(value)
         return {
@@ -83,6 +86,80 @@ class FakeLLMClient:
                     "evidence": [],
                     "reason": "Debe normalizarse como review_required.",
                     "apply_strategy": "all_occurrences",
+                },
+            ]
+        }
+
+
+class DuplicateBatchLLMClient:
+    def __init__(self):
+        self.calls = []
+
+    def complete_json(self, system_prompt: str, payload: dict) -> dict:
+        self.calls.append((system_prompt, payload))
+        if "Contrato JSON" in system_prompt and "document_type" in system_prompt:
+            return {
+                "document_type": "escritura_publica",
+                "recommended_mode": "documento_individual",
+                "acts_detected": [],
+                "structural_sections": [],
+                "parties_summary": [],
+                "property_summary": {},
+                "money_summary": [],
+                "risk_notes": [],
+                "confidence": 0.5,
+                "evidence": [],
+            }
+        blocks = payload.get("blocks") or []
+        if not blocks:
+            return {"proposals": []}
+        block = blocks[0]
+        value = block["text"][: min(12, len(block["text"]))]
+        if not value:
+            return {"proposals": []}
+        return {
+            "proposals": [
+                {
+                    "field_key": "campo_repetido",
+                    "label": "Campo repetido",
+                    "marker": "{{campo_repetido}}",
+                    "value": value,
+                    "proposal_type": "document_field",
+                    "role": None,
+                    "scope": None,
+                    "confidence": 0.9,
+                    "occurrences": [
+                        {
+                            "block_id": block["block_id"],
+                            "location": block["location"],
+                            "start": 0,
+                            "end": len(value),
+                        }
+                    ],
+                    "evidence": ["Duplicado sintetico."],
+                    "reason": "Test de deduplicacion.",
+                    "apply_strategy": "selected_occurrences",
+                },
+                {
+                    "field_key": "campo_repetido",
+                    "label": "Campo repetido",
+                    "marker": "{{campo_repetido}}",
+                    "value": value,
+                    "proposal_type": "document_field",
+                    "role": None,
+                    "scope": None,
+                    "confidence": 0.9,
+                    "occurrences": [
+                        {
+                            "block_id": block["block_id"],
+                            "location": block["location"],
+                            "start": 0,
+                            "end": len(value),
+                        }
+                    ],
+                    "evidence": ["Duplicado sintetico."],
+                    "reason": "Test de deduplicacion.",
+                    "apply_strategy": "selected_occurrences",
                 },
             ]
         }
@@ -237,6 +314,27 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertIn("location", money)
             self.assertIsInstance(money["start"], int)
             self.assertIsInstance(money["end"], int)
+            self.assertIn("reduction_stats", compact)
+            self.assertNotIn("runs", compact["blocks"][0])
+
+    def test_compact_document_map_reduces_large_simulated_document(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "large.docx"
+            doc = Document()
+            irrelevant = "Texto operativo sin senales notariales " * 60
+            for _ in range(40):
+                doc.add_paragraph(irrelevant)
+            doc.add_paragraph("El inmueble tiene matricula inmobiliaria 123-4567890 y precio $98.765.432.")
+            doc.save(source)
+
+            document_map = DocxStructuralExtractor().extract(source)
+            compact = compact_document_map(document_map, max_blocks=5, max_block_chars=90)
+            compact_text = "\n".join(block["text"] for block in compact["blocks"])
+
+            self.assertLess(compact["reduction_stats"]["selected_chars"], compact["reduction_stats"]["original_chars"])
+            self.assertLessEqual(len(compact["blocks"]), 5)
+            self.assertIn("123-4567890", compact_text)
+            self.assertNotIn(irrelevant.strip(), compact_text)
 
     def test_llm_agents_parse_and_normalize_json(self):
         with TemporaryDirectory() as tmp:
@@ -253,6 +351,30 @@ class NotarialTemplateLabTests(unittest.TestCase):
             self.assertEqual(proposals[0].apply_strategy, "selected_occurrences")
             self.assertEqual(proposals[1].proposal_type, "review_required")
             self.assertEqual(proposals[1].apply_strategy, "review_required")
+
+    def test_field_proposal_agent_processes_batches_dedupes_and_preserves_locations(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "multi_batch.docx"
+            doc = Document()
+            for index in range(6):
+                doc.add_paragraph(f"COMPRADOR GENERICO {index} correo usuario{index}@example.org.")
+            doc.save(source)
+            document_map = DocxStructuralExtractor().extract(source)
+            client = DuplicateBatchLLMClient()
+
+            profile = DocumentProfilerAgent(client).run(document_map, max_blocks=6, max_block_chars=120)
+            proposals = FieldProposalAgent(client).run(
+                document_map,
+                profile,
+                max_blocks_per_batch=2,
+                max_block_chars=120,
+            )
+            field_calls = [call for call in client.calls if "propuesta de campos" in call[0]]
+
+            self.assertGreater(len(field_calls), 1)
+            self.assertEqual(len(proposals), len(field_calls))
+            self.assertTrue(all(item.occurrences[0].block_id for item in proposals))
+            self.assertTrue(all(item.occurrences[0].location for item in proposals))
 
     def test_proposal_without_block_id_is_not_replaceable(self):
         with TemporaryDirectory() as tmp:
@@ -295,12 +417,45 @@ class NotarialTemplateLabTests(unittest.TestCase):
             artifacts_root = Path(tmp) / "artifacts"
             self._build_docx(source)
 
-            result = run_lab(source, artifacts_root, use_llm=True, llm_client=FakeLLMClient())
+            client = FakeLLMClient()
+            result = run_lab(
+                source,
+                artifacts_root,
+                use_llm=True,
+                llm_client=client,
+                llm_max_blocks_per_batch=2,
+                llm_max_block_chars=160,
+                llm_debug_payloads=True,
+            )
             artifacts_dir = Path(result["artifacts_dir"])
 
             self.assertTrue((artifacts_dir / "02_document_profile.json").exists())
             self.assertTrue((artifacts_dir / "03_field_proposals_llm.json").exists())
+            self.assertTrue((artifacts_dir / "02_llm_profile_payload.json").exists())
+            self.assertTrue((artifacts_dir / "03_llm_field_payload_batch_001.json").exists())
             self.assertGreaterEqual(result["total_llm_proposals"], 1)
+            self.assertLess(max(client.payload_sizes), 20000)
+
+    def test_run_lab_with_llm_aborts_before_api_when_payload_is_too_large(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "synthetic.docx"
+            artifacts_root = Path(tmp) / "artifacts"
+            self._build_docx(source)
+            client = FakeLLMClient()
+
+            with self.assertRaises(LabLLMExecutionError) as raised:
+                run_lab(
+                    source,
+                    artifacts_root,
+                    use_llm=True,
+                    llm_client=client,
+                    llm_max_blocks_per_batch=2,
+                    llm_max_block_chars=160,
+                    llm_max_estimated_tokens=1,
+                )
+
+            self.assertIn("payload too large, reduce batch size", str(raised.exception))
+            self.assertEqual(client.calls, [])
 
     def test_human_review_confirmed_exact_location_replaces_and_renames_marker(self):
         with TemporaryDirectory() as tmp:

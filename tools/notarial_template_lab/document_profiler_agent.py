@@ -2,15 +2,37 @@ from __future__ import annotations
 
 from tools.notarial_template_lab.llm_client import JSONLLMClient
 from tools.notarial_template_lab.models import DocumentMap, DocumentProfile
-from tools.notarial_template_lab.prompt_contracts import DOCUMENT_PROFILER_SYSTEM_PROMPT, compact_document_map
+from tools.notarial_template_lab.prompt_contracts import (
+    DEFAULT_MAX_BLOCK_CHARS,
+    DEFAULT_MAX_BLOCKS,
+    DEFAULT_SAFE_PAYLOAD_TOKENS,
+    DOCUMENT_PROFILER_SYSTEM_PROMPT,
+    assert_payload_within_limit,
+    build_profile_payload,
+)
 
 
 class DocumentProfilerAgent:
     def __init__(self, llm_client: JSONLLMClient):
         self.llm_client = llm_client
 
-    def run(self, document_map: DocumentMap) -> DocumentProfile:
-        payload = {"document_map": compact_document_map(document_map)}
+    def build_payload(
+        self,
+        document_map: DocumentMap,
+        max_blocks: int = DEFAULT_MAX_BLOCKS,
+        max_block_chars: int = DEFAULT_MAX_BLOCK_CHARS,
+    ) -> dict:
+        return build_profile_payload(document_map, max_blocks=max_blocks, max_block_chars=max_block_chars)
+
+    def run(
+        self,
+        document_map: DocumentMap,
+        max_blocks: int = DEFAULT_MAX_BLOCKS,
+        max_block_chars: int = DEFAULT_MAX_BLOCK_CHARS,
+        max_estimated_tokens: int = DEFAULT_SAFE_PAYLOAD_TOKENS,
+    ) -> DocumentProfile:
+        payload = self.build_payload(document_map, max_blocks=max_blocks, max_block_chars=max_block_chars)
+        assert_payload_within_limit(payload, max_estimated_tokens, "profile")
         raw = self.llm_client.complete_json(DOCUMENT_PROFILER_SYSTEM_PROMPT, payload)
         return normalize_document_profile(raw)
 
