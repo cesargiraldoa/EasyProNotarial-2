@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import tempfile
+import threading
 import unittest
 import zipfile
 from io import BytesIO
@@ -13,6 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.routes import notarial_document_intelligence as route_module
 from app.api.routes.notarial_document_intelligence import get_ingestion_service, router as intelligence_router
 from app.core.deps import get_current_user, get_db
 from app.models.base import Base
@@ -29,9 +32,11 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentEvidence,
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
+    NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialEmbeddingVersion,
 )
+from app.models.notary import Notary
 from app.services.notarial_document_intelligence.contracts import (
     BatchStatus,
     DocumentProcessingStatus,
@@ -41,13 +46,16 @@ from app.services.notarial_document_intelligence.contracts import (
 from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
 from app.services.notarial_document_intelligence.parser import NotarialDocumentParser
 from app.services.notarial_document_intelligence.storage import NotarialIntelligenceStorage
+from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 
 
 TABLES = [
+    Notary.__table__,
     NotarialDocumentBatch.__table__,
     NotarialDocumentFamily.__table__,
     NotarialDocument.__table__,
     NotarialDocumentBatchItem.__table__,
+    NotarialDocumentParseRun.__table__,
     NotarialDocumentSection.__table__,
     NotarialDocumentBlock.__table__,
     NotarialDocumentEntity.__table__,
@@ -85,11 +93,26 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.Session = sessionmaker(bind=self.engine)
         self.tmp = tempfile.TemporaryDirectory()
         self.storage = NotarialIntelligenceStorage(local_root=Path(self.tmp.name) / "storage", use_supabase=False)
+        self.notary_id = 1
+        self._seed_notaries()
 
     def tearDown(self):
         Base.metadata.drop_all(self.engine, tables=TABLES)
         self.engine.dispose()
         self.tmp.cleanup()
+
+    def _seed_notaries(self):
+        db = self.Session()
+        try:
+            db.add_all(
+                [
+                    _notary(1, "notaria-uno"),
+                    _notary(2, "notaria-dos"),
+                ]
+            )
+            db.commit()
+        finally:
+            db.close()
 
     def test_parser_extracts_paragraphs_tables_and_stable_locations(self):
         parsed = NotarialDocumentParser().parse_bytes(build_docx_bytes(), filename="minuta.docx")
@@ -104,11 +127,19 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.assertIn("APARTAMENTO: 804", texts)
         self.assertTrue(parsed.parser_version.startswith("python-docx:"))
 
+    @unittest.skipUnless(importlib.util.find_spec("unstructured"), "unstructured no esta instalado en el entorno local")
+    def test_parser_reconciles_unstructured_semantics_when_available(self):
+        parsed = NotarialDocumentParser().parse_bytes(build_docx_bytes(title="COMPRAVENTA INMUEBLE"), filename="minuta.docx")
+
+        self.assertTrue(parsed.metadata["unstructured"]["enabled"])
+        self.assertGreater(parsed.metadata["unstructured"]["reconciled_blocks"], 0)
+        self.assertTrue(any(block.parser_source == "python-docx+unstructured" for block in parsed.blocks))
+
     def test_ingestion_stores_private_file_and_reuses_existing_document_by_hash(self):
         db = self.Session()
         try:
             content = build_docx_bytes()
-            result = NotarialDocumentIngestionService(db, storage=self.storage).ingest_batch(
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
                 IngestBatchRequest(
                     name="Lote idempotente",
                     documents=[
@@ -143,7 +174,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                 for index in range(1, 201)
             ]
 
-            result = NotarialDocumentIngestionService(db, storage=self.storage).ingest_batch(
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
                 IngestBatchRequest(name="Lote sintetico 200", source_type="synthetic", documents=documents)
             )
 
@@ -159,7 +190,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
     def test_queue_and_process_batch_is_recoverable_by_batch_id(self):
         db = self.Session()
         try:
-            service = NotarialDocumentIngestionService(db, storage=self.storage)
+            service = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage)
             queued = service.queue_batch(
                 IngestBatchRequest(
                     name="Lote async",
@@ -182,6 +213,102 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertEqual(db.query(NotarialDocumentBlock).count(), 6)
             statuses = [item.status for item in db.query(NotarialDocumentBatchItem).order_by(NotarialDocumentBatchItem.item_index).all()]
             self.assertEqual(statuses, ["processed", "processed"])
+        finally:
+            db.close()
+
+    def test_same_hash_is_deduplicated_per_notary_without_cross_tenant_leak(self):
+        content = build_docx_bytes(apartment="1301")
+        db = self.Session()
+        try:
+            first = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="Notaria 1", documents=[DocumentUpload(filename="mismo.docx", content=content)])
+            )
+            second = NotarialDocumentIngestionService(db, notary_id=2, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="Notaria 2", documents=[DocumentUpload(filename="mismo.docx", content=content)])
+            )
+
+            self.assertEqual(first.unique_documents, 1)
+            self.assertEqual(second.unique_documents, 1)
+            self.assertEqual(db.query(NotarialDocument).count(), 2)
+            self.assertNotEqual(first.documents[0].document_id, second.documents[0].document_id)
+            self.assertIn("notary_1", first.documents[0].storage_path)
+            self.assertIn("notary_2", second.documents[0].storage_path)
+        finally:
+            db.close()
+
+    def test_vector_store_filters_by_notary_and_orders_by_distance_in_sqlite_fallback(self):
+        db = self.Session()
+        try:
+            version = NotarialEmbeddingVersion(version_key="test-3d", provider="test", model_name="mini", dimensions=3)
+            db.add(version)
+            db.flush()
+            store = NotarialVectorStore(db, dimensions=3)
+            db.add_all(
+                [
+                    NotarialDocumentEmbedding(
+                        notary_id=1,
+                        embedding_version_id=version.id,
+                        source_type="block",
+                        source_id=1,
+                        content_hash="a" * 64,
+                        embedding_dimensions=3,
+                        embedding=store.encode_vector([1.0, 0.0, 0.0]),
+                    ),
+                    NotarialDocumentEmbedding(
+                        notary_id=1,
+                        embedding_version_id=version.id,
+                        source_type="block",
+                        source_id=2,
+                        content_hash="b" * 64,
+                        embedding_dimensions=3,
+                        embedding=store.encode_vector([0.0, 1.0, 0.0]),
+                    ),
+                    NotarialDocumentEmbedding(
+                        notary_id=2,
+                        embedding_version_id=version.id,
+                        source_type="block",
+                        source_id=3,
+                        content_hash="c" * 64,
+                        embedding_dimensions=3,
+                        embedding=store.encode_vector([1.0, 0.0, 0.0]),
+                    ),
+                ]
+            )
+            db.commit()
+
+            results = store.search(1, [0.9, 0.1, 0.0], embedding_version_id=version.id, limit=10)
+
+            self.assertEqual([item.source_id for item in results], [1, 2])
+            self.assertTrue(results[0].distance < results[1].distance)
+        finally:
+            db.close()
+
+    def test_vector_store_rejects_incompatible_dimensions(self):
+        db = self.Session()
+        try:
+            store = NotarialVectorStore(db, dimensions=3)
+            with self.assertRaises(ValueError):
+                store.encode_vector([1.0, 0.0])
+        finally:
+            db.close()
+
+    def test_reparse_keeps_previous_parse_run_and_switches_active_on_success(self):
+        db = self.Session()
+        try:
+            service = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage)
+            result = service.ingest_batch(
+                IngestBatchRequest(name="Versionado", documents=[DocumentUpload(filename="version.docx", content=build_docx_bytes(apartment="1401"))])
+            )
+            document_id = result.documents[0].document_id
+            Path(result.documents[0].storage_path).write_bytes(build_docx_bytes(apartment="1402", include_table=False))
+
+            reparsed = service.reparse_document(document_id)
+
+            self.assertEqual(reparsed.block_count, 2)
+            runs = db.query(NotarialDocumentParseRun).filter(NotarialDocumentParseRun.document_id == document_id).order_by(NotarialDocumentParseRun.parse_version).all()
+            self.assertEqual([run.parse_version for run in runs], [1, 2])
+            self.assertEqual([run.is_active for run in runs], [False, True])
+            self.assertEqual(db.query(NotarialDocumentBlock).filter(NotarialDocumentBlock.document_id == document_id).count(), 6)
         finally:
             db.close()
 
@@ -212,13 +339,36 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["documents"][0]["filename"], "minuta_http.docx")
 
+    def test_http_async_ingest_returns_accepted_batch_contract(self):
+        original_task = route_module.process_queued_document_batch_task
+
+        class FakeTask:
+            @staticmethod
+            def delay(batch_id: int, notary_id: int):
+                return type("FakeAsyncResult", (), {"id": f"task-{batch_id}-{notary_id}"})()
+
+        route_module.process_queued_document_batch_task = FakeTask()
+        self.addCleanup(lambda: setattr(route_module, "process_queued_document_batch_task", original_task))
+        client = self._build_api_client()
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote async HTTP", "source_type": "test", "async_processing": "true"},
+            files=[("files", ("async-http.docx", build_docx_bytes(apartment="1901"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertEqual(payload["status"], "queued")
+        self.assertEqual(payload["task_id"], f"task-{payload['batch_id']}-1")
+        self.assertIn(f"/notarial-intelligence/batches/{payload['batch_id']}", payload["status_url"])
+
     def test_http_ingests_zip_without_persisting_zip(self):
         client = self._build_api_client()
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as archive:
             archive.writestr("lote/minuta-1.docx", build_docx_bytes(apartment="1001"))
             archive.writestr("lote/minuta-2.docx", build_docx_bytes(apartment="1002"))
-            archive.writestr("lote/ignorar.txt", b"no docx")
 
         response = client.post(
             "/api/v1/notarial-intelligence/batches/ingest",
@@ -233,6 +383,63 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(payload["error_documents"], 0)
         stored_files = list((Path(self.tmp.name) / "storage").rglob("*"))
         self.assertFalse(any(path.name == "lote.zip" for path in stored_files))
+
+    def test_http_rejects_unsupported_zip_entry(self):
+        client = self._build_api_client()
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("lote/minuta.docx", build_docx_bytes(apartment="1003"))
+            archive.writestr("lote/ignorar.txt", b"no docx")
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote ZIP inseguro", "source_type": "zip"},
+            files=[("files", ("lote.zip", zip_buffer.getvalue(), "application/zip"))],
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Entrada no soportada", response.json()["detail"])
+
+    def test_http_rejects_unsafe_zip_path(self):
+        client = self._build_api_client()
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("../minuta.docx", build_docx_bytes(apartment="1004"))
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote ZIP ruta insegura", "source_type": "zip"},
+            files=[("files", ("lote.zip", zip_buffer.getvalue(), "application/zip"))],
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Ruta insegura", response.json()["detail"])
+
+    def test_http_rejects_zip_bomb_ratio(self):
+        client = self._build_api_client()
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("lote/minuta.docx", b"0" * 1024 * 1024)
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote ZIP bomb", "source_type": "zip"},
+            files=[("files", ("lote.zip", zip_buffer.getvalue(), "application/zip"))],
+        )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("ZIP bomb", response.json()["detail"])
+
+    def test_http_rejects_invalid_docx(self):
+        client = self._build_api_client()
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "DOCX invalido", "source_type": "test"},
+            files=[("files", ("minuta.docx", b"no es docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("DOCX invalido", response.json()["detail"])
 
     def test_http_reparse_document_rebuilds_blocks_from_storage(self):
         client = self._build_api_client()
@@ -263,7 +470,11 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             texts = [
                 row.text
                 for row in db.query(NotarialDocumentBlock)
-                .filter(NotarialDocumentBlock.document_id == document["document_id"])
+                .join(NotarialDocumentParseRun, NotarialDocumentParseRun.id == NotarialDocumentBlock.parse_run_id)
+                .filter(
+                    NotarialDocumentBlock.document_id == document["document_id"],
+                    NotarialDocumentParseRun.is_active.is_(True),
+                )
                 .all()
             ]
             self.assertIn("APARTAMENTO: 2202", texts)
@@ -271,7 +482,72 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         finally:
             db.close()
 
-    def _build_api_client(self) -> TestClient:
+    def test_http_blocks_cross_notary_batch_and_reparse_access(self):
+        client_1 = self._build_api_client(notary_id=1)
+        response = client_1.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Privado", "source_type": "test"},
+            files=[("files", ("privado.docx", build_docx_bytes(apartment="1501"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        client_2 = self._build_api_client(notary_id=2)
+        detail = client_2.get(f"/api/v1/notarial-intelligence/batches/{payload['batch_id']}")
+        reparse = client_2.post(f"/api/v1/notarial-intelligence/documents/{payload['documents'][0]['document_id']}/reparse")
+
+        self.assertEqual(detail.status_code, 404)
+        self.assertEqual(reparse.status_code, 404)
+
+    def test_concurrent_same_hash_creates_one_document_and_two_batch_items(self):
+        content = build_docx_bytes(apartment="1601")
+        db_path = Path(self.tmp.name) / "concurrency.db"
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False, "timeout": 30},
+        )
+        Base.metadata.create_all(engine, tables=TABLES)
+        Session = sessionmaker(bind=engine)
+        seed = Session()
+        try:
+            seed.add_all([_notary(1, "notaria-uno-concurrente"), _notary(2, "notaria-dos-concurrente")])
+            seed.commit()
+        finally:
+            seed.close()
+
+        barrier = threading.Barrier(2)
+        errors: list[BaseException] = []
+
+        def ingest_one(name: str) -> None:
+            session = Session()
+            try:
+                barrier.wait(timeout=5)
+                NotarialDocumentIngestionService(session, notary_id=1, storage=self.storage).queue_batch(
+                    IngestBatchRequest(name=name, documents=[DocumentUpload(filename=f"{name}.docx", content=content)])
+                )
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                session.close()
+
+        threads = [threading.Thread(target=ingest_one, args=(f"concurrente-{index}",)) for index in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertEqual(errors, [])
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        db = Session()
+        try:
+            self.assertEqual(db.query(NotarialDocument).filter(NotarialDocument.notary_id == 1).count(), 1)
+            self.assertEqual(db.query(NotarialDocumentBatchItem).filter(NotarialDocumentBatchItem.notary_id == 1).count(), 2)
+        finally:
+            db.close()
+            engine.dispose()
+
+    def _build_api_client(self, notary_id: int | None = None) -> TestClient:
+        active_notary_id = notary_id or self.notary_id
         app = FastAPI()
         app.include_router(intelligence_router, prefix="/api/v1")
 
@@ -285,14 +561,33 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         def override_service():
             session = self.Session()
             try:
-                yield NotarialDocumentIngestionService(session, storage=self.storage)
+                yield NotarialDocumentIngestionService(session, notary_id=active_notary_id, storage=self.storage)
             finally:
                 session.close()
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_ingestion_service] = override_service
-        app.dependency_overrides[get_current_user] = lambda: object()
-        return TestClient(app)
+        app.dependency_overrides[get_current_user] = lambda: _user(active_notary_id)
+        client = TestClient(app)
+        self.addCleanup(client.close)
+        return client
+
+
+def _user(notary_id: int):
+    return type("UserStub", (), {"default_notary_id": notary_id})()
+
+
+def _notary(notary_id: int, slug: str) -> Notary:
+    return Notary(
+        id=notary_id,
+        slug=slug,
+        catalog_identity_key=f"{slug}-identity",
+        commercial_name=slug,
+        legal_name=slug,
+        municipality="Medellin",
+        notary_label=slug,
+        city="Medellin",
+    )
 
 
 if __name__ == "__main__":
