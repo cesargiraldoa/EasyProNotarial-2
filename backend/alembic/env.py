@@ -46,10 +46,13 @@ def run_migrations_online() -> None:
         if connection.dialect.name == "postgresql":
             connection.execute(text("create table if not exists alembic_version (version_num varchar(255) not null)"))
             connection.execute(text("alter table alembic_version alter column version_num type varchar(255)"))
+            connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
+        if connection.in_transaction():
+            connection.commit()
 
 
 if context.is_offline_mode():
