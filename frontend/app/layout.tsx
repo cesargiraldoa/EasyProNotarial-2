@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 
 export const metadata: Metadata = {
   title: "Ecosistema Notarial",
-  description: "Base multinotaría para operación notarial premium.",
+  description: "Base multinotaria para operacion notarial premium.",
 };
 
 export default function RootLayout({
