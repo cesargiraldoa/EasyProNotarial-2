@@ -1,11 +1,48 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 from app.models.base import Base, TimestampMixin
+
+try:
+    from pgvector.sqlalchemy import Vector as PGVector
+except ImportError:  # pragma: no cover - optional outside PostgreSQL deployments
+    PGVector = None
+
+
+class EmbeddingVectorType(TypeDecorator):
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, dimensions: int = 384) -> None:
+        super().__init__()
+        self.dimensions = dimensions
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql" and PGVector is not None:
+            return dialect.type_descriptor(PGVector(self.dimensions))
+        return dialect.type_descriptor(Text())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if dialect.name == "postgresql" and PGVector is not None:
+            if isinstance(value, str):
+                return json.loads(value)
+            return value
+        if isinstance(value, str):
+            return value
+        return json.dumps([float(item) for item in value], separators=(",", ":"))
+
+    def process_result_value(self, value, dialect):
+        if value is None or isinstance(value, str):
+            return value
+        return json.dumps([float(item) for item in value], separators=(",", ":"))
 
 
 class NotarialDocumentBatch(Base, TimestampMixin):
@@ -269,7 +306,7 @@ class NotarialDocumentEmbedding(Base, TimestampMixin):
     source_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False, default=384)
-    embedding: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding: Mapped[str | None] = mapped_column(EmbeddingVectorType(384), nullable=True)
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
