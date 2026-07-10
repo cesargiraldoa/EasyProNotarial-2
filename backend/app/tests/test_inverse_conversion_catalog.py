@@ -85,8 +85,103 @@ class InverseConversionCatalogTests(unittest.TestCase):
         by_raw = {alias.raw_field_code: alias for alias in aliases}
         self.assertEqual(by_raw["PRECIO_VENTA"].canonical_field_code, "VALOR_VENTA")
         self.assertEqual(by_raw["EN_NUMEROS_VALOR_DE_LA_VENTA"].canonical_field_code, "VALOR_VENTA")
-        self.assertIn(by_raw["VALOR_ACTO"].status, {"suggested", "conflict"})
-        self.assertEqual(by_raw["VALOR_ACTO"].canonical_field_code, "VALOR_VENTA")
+        self.assertNotEqual(by_raw["VALOR_ACTO"].canonical_field_code, "VALOR_VENTA")
+
+    def test_tipo_documento_comprador_is_not_grouped_with_numero_documento_comprador(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "TIPO_DOCUMENTO_COMPRADOR": 8,
+                "NUMERO_DOCUMENTO_COMPRADOR": 14,
+            }
+        )
+
+        self.assertNotEqual(by_raw["TIPO_DOCUMENTO_COMPRADOR"].canonical_field_code, "NUMERO_DOCUMENTO_COMPRADOR")
+
+    def test_tipo_de_documento_otorgante_is_not_grouped_with_numero_documento_otorgante(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "TIPO_DE_DOCUMENTO_OTORGANTE": 16,
+                "NUMERO_DOCUMENTO_OTORGANTE": 19,
+            }
+        )
+
+        self.assertNotEqual(by_raw["TIPO_DE_DOCUMENTO_OTORGANTE"].canonical_field_code, "NUMERO_DOCUMENTO_OTORGANTE")
+
+    def test_municipio_expedicion_documento_is_not_grouped_with_numero_documento(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "MUNICIPIO_DE_EXPEDICION_DOCUMENTO_COMPRADOR": 2,
+                "NUMERO_DOCUMENTO_COMPRADOR": 14,
+            }
+        )
+
+        self.assertNotEqual(
+            by_raw["MUNICIPIO_DE_EXPEDICION_DOCUMENTO_COMPRADOR"].canonical_field_code,
+            "NUMERO_DOCUMENTO_COMPRADOR",
+        )
+
+    def test_fecha_nacimiento_is_not_grouped_with_municipio_nacimiento(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "FECHA_NACIMIENTO_DEL_MENOR": 1,
+                "MUNICIPIO_NACIMIENTO_DEL_MENOR": 1,
+            }
+        )
+
+        self.assertNotEqual(by_raw["FECHA_NACIMIENTO_DEL_MENOR"].canonical_field_code, "MUNICIPIO_NACIMIENTO_DEL_MENOR")
+        self.assertNotEqual(by_raw["MUNICIPIO_NACIMIENTO_DEL_MENOR"].canonical_field_code, "FECHA_NACIMIENTO_DEL_MENOR")
+
+    def test_date_parts_are_not_grouped_together(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "DIA_ELABORACION_ESCRITURA": 10,
+                "MES_ELABORACION_ESCRITURA": 11,
+                "ANO_ELABORACION_ESCRITURA": 6,
+            }
+        )
+
+        self.assertNotEqual(by_raw["DIA_ELABORACION_ESCRITURA"].canonical_field_code, "MES_ELABORACION_ESCRITURA")
+        self.assertNotEqual(by_raw["DIA_ELABORACION_ESCRITURA"].canonical_field_code, "ANO_ELABORACION_ESCRITURA")
+        self.assertNotEqual(by_raw["MES_ELABORACION_ESCRITURA"].canonical_field_code, "ANO_ELABORACION_ESCRITURA")
+
+    def test_numero_escritura_letters_and_numbers_are_not_direct_aliases(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "NUMERO_ESCRITURA_EN_LETRAS": 7,
+                "NUMERO_ESCRITURA_EN_NUMEROS": 7,
+            }
+        )
+
+        self.assertNotEqual(by_raw["NUMERO_ESCRITURA_EN_LETRAS"].canonical_field_code, "NUMERO_ESCRITURA_EN_NUMEROS")
+        self.assertNotEqual(by_raw["NUMERO_ESCRITURA_EN_NUMEROS"].canonical_field_code, "NUMERO_ESCRITURA_EN_LETRAS")
+
+    def test_buyer_ordinals_are_not_collapsed_automatically(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "NOMBRE_COMPRADOR": 22,
+                "NOMBRE_COMPRADOR_1": 34,
+                "NOMBRE_COMPRADOR_2": 23,
+            }
+        )
+
+        self.assertEqual(by_raw["NOMBRE_COMPRADOR_1"].canonical_field_code, "NOMBRE_COMPRADOR_1")
+        self.assertEqual(by_raw["NOMBRE_COMPRADOR_2"].canonical_field_code, "NOMBRE_COMPRADOR_2")
+        self.assertNotEqual(by_raw["NOMBRE_COMPRADOR_1"].canonical_field_code, "NOMBRE_COMPRADOR")
+        self.assertNotEqual(by_raw["NOMBRE_COMPRADOR_2"].canonical_field_code, "NOMBRE_COMPRADOR")
+
+    def test_safe_sale_value_aliases_still_point_to_valor_venta(self):
+        by_raw = self._aliases_by_raw(
+            {
+                "VALOR_DE_LA_VENTA_EN_NUMEROS": 10,
+                "EN_NUMEROS_VALOR_DE_LA_VENTA": 9,
+                "VALOR_VENTA": 4,
+            }
+        )
+
+        self.assertEqual(by_raw["VALOR_DE_LA_VENTA_EN_NUMEROS"].canonical_field_code, "VALOR_VENTA")
+        self.assertEqual(by_raw["EN_NUMEROS_VALOR_DE_LA_VENTA"].canonical_field_code, "VALOR_VENTA")
+        self.assertNotEqual(by_raw["VALOR_DE_LA_VENTA_EN_NUMEROS"].status, "approved")
+        self.assertNotEqual(by_raw["EN_NUMEROS_VALOR_DE_LA_VENTA"].status, "approved")
 
     def test_importer_tolerates_bad_document_and_continues(self):
         with TemporaryDirectory() as tmp_dir:
@@ -161,6 +256,9 @@ class InverseConversionCatalogTests(unittest.TestCase):
             if compiled.search(path.read_text(encoding="utf-8")):
                 return True
         return False
+
+    def _aliases_by_raw(self, frequency: dict[str, int]):
+        return {alias.raw_field_code: alias for alias in FieldAliasBuilder().build(frequency)}
 
 
 if __name__ == "__main__":
