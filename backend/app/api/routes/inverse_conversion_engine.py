@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.services.minuta.inverse_conversion_catalog.field_code_normalizer import FieldCodeNormalizer
+from app.services.minuta.inverse_conversion_catalog.models import FieldAlias, FieldDefinition
 from app.services.minuta.inverse_conversion_engine.llm_contracts import EngineFinalResult
 from app.services.minuta.inverse_conversion_engine.models import EngineOptions
 from app.services.minuta.inverse_conversion_engine.service import InverseConversionEngineService
@@ -56,6 +58,7 @@ def analyze_inverse_conversion(payload: AnalyzeRequest, db: Session = Depends(ge
 async def generate_marked_docx(
     archivo: UploadFile = File(..., description="Archivo .docx original diligenciado"),
     candidates: str = Form(..., description="Candidatos revisados en JSON"),
+    db: Session = Depends(get_db),
 ):
     if not archivo.filename or not archivo.filename.lower().endswith(".docx"):
         raise HTTPException(
@@ -76,6 +79,7 @@ async def generate_marked_docx(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Debes aceptar al menos un candidato antes de generar el DOCX marcado.",
         )
+    allowed_field_codes, field_aliases, ambiguous_field_aliases = _load_writer_catalog(db)
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -87,6 +91,9 @@ async def generate_marked_docx(
                 destination_path=output_path,
                 original_filename=archivo.filename,
                 candidates=reviewed_candidates,
+                allowed_field_codes=allowed_field_codes,
+                field_aliases=field_aliases,
+                ambiguous_field_aliases=ambiguous_field_aliases,
             )
             output_bytes = result.output_path.read_bytes()
     except HTTPException:
@@ -121,3 +128,34 @@ def _parse_marked_candidates(raw_candidates: str) -> list[MarkedCandidate]:
             detail="El listado de candidatos debe ser un arreglo.",
         )
     return [MarkedCandidate.from_dict(item) for item in payload if isinstance(item, dict)]
+
+
+def _load_writer_catalog(db: Session) -> tuple[set[str], dict[str, str], dict[str, set[str]]]:
+    normalizer = FieldCodeNormalizer()
+    allowed_statuses = ("draft", "suggested", "approved")
+    definitions = (
+        db.query(FieldDefinition.field_code)
+        .filter(FieldDefinition.status.in_(allowed_statuses))
+        .all()
+    )
+    allowed = {normalizer.normalize(row.field_code) for row in definitions if normalizer.normalize(row.field_code)}
+    aliases: dict[str, str] = {}
+    ambiguous_aliases: dict[str, set[str]] = {}
+    if allowed:
+        alias_rows = (
+            db.query(FieldAlias.raw_field_code, FieldAlias.canonical_field_code)
+            .filter(FieldAlias.status.in_(allowed_statuses))
+            .all()
+        )
+        alias_targets: dict[str, set[str]] = {}
+        for row in alias_rows:
+            raw = normalizer.normalize(row.raw_field_code)
+            canonical = normalizer.normalize(row.canonical_field_code)
+            if raw and canonical in allowed:
+                alias_targets.setdefault(raw, set()).add(canonical)
+        for raw, targets in alias_targets.items():
+            if len(targets) == 1:
+                aliases[raw] = next(iter(targets))
+            else:
+                ambiguous_aliases[raw] = targets
+    return allowed, aliases, ambiguous_aliases

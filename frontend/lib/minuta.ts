@@ -201,6 +201,7 @@ export type ReverseTemplateCandidate = {
   id: string;
   text: string;
   suggested_key: string;
+  canonical_field_code?: string;
   label: string;
   section: string;
   type: string;
