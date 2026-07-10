@@ -4,7 +4,9 @@ import { useRef, useState, type DragEvent } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   CheckCircle2,
+  Download,
   FileSearch,
   FileText,
   Loader2,
@@ -14,6 +16,8 @@ import {
 
 import {
   analyzeReverseTemplateSingle,
+  generateReverseTemplateMarkedDocx,
+  type MarkedDocxDownload,
   type ReverseTemplateAnalyzeResult,
   type ReverseTemplateCandidate,
 } from "@/lib/minuta";
@@ -40,7 +44,27 @@ function candidateContext(candidate: ReverseTemplateCandidate) {
   return [first.before, candidate.text, first.after].filter(Boolean).join(" ");
 }
 
-function CandidateRow({ candidate }: { candidate: ReverseTemplateCandidate }) {
+function statusClasses(status: string) {
+  if (status === "accepted") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-line bg-panel-soft text-muted";
+}
+
+function statusLabel(status: string) {
+  if (status === "accepted") return "Aceptado";
+  if (status === "rejected") return "Rechazado";
+  return "Pendiente";
+}
+
+function CandidateRow({
+  candidate,
+  onAccept,
+  onReject,
+}: {
+  candidate: ReverseTemplateCandidate;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
   return (
     <div className="rounded-xl border border-line bg-surface p-4">
       <div className="grid gap-3 md:grid-cols-[1.1fr_1fr_0.8fr_0.7fr]">
@@ -71,8 +95,8 @@ function CandidateRow({ candidate }: { candidate: ReverseTemplateCandidate }) {
           <span className="rounded-full border border-line bg-panel-soft px-2.5 py-1 text-xs font-semibold text-muted">
             {candidate.occurrences} ocurr.
           </span>
-          <span className="rounded-full border border-line bg-panel-soft px-2.5 py-1 text-xs font-semibold text-muted">
-            {candidate.status}
+          <span className={["rounded-full border px-2.5 py-1 text-xs font-semibold", statusClasses(candidate.status)].join(" ")}>
+            {statusLabel(candidate.status)}
           </span>
         </div>
       </div>
@@ -82,6 +106,34 @@ function CandidateRow({ candidate }: { candidate: ReverseTemplateCandidate }) {
       {candidate.contexts[0]?.location && (
         <p className="mt-2 text-[11px] text-soft">{candidate.contexts[0].location}</p>
       )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onAccept}
+          className={[
+            "inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-all",
+            candidate.status === "accepted"
+              ? "bg-emerald-600 text-white"
+              : "border border-emerald-200 text-emerald-700 hover:bg-emerald-50",
+          ].join(" ")}
+        >
+          <Check size={14} />
+          Aceptar
+        </button>
+        <button
+          type="button"
+          onClick={onReject}
+          className={[
+            "inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-all",
+            candidate.status === "rejected"
+              ? "bg-rose-600 text-white"
+              : "border border-rose-200 text-rose-700 hover:bg-rose-50",
+          ].join(" ")}
+        >
+          <X size={14} />
+          Rechazar
+        </button>
+      </div>
     </div>
   );
 }
@@ -91,8 +143,12 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<ReverseTemplateAnalyzeResult | null>(null);
+  const [markedDocx, setMarkedDocx] = useState<MarkedDocxDownload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const acceptedCount = result?.candidates.filter((candidate) => candidate.status === "accepted").length ?? 0;
+  const highConfidenceCount = result?.candidates.filter((candidate) => candidate.confidence >= 0.8).length ?? 0;
 
   function selectFile(nextFile: File) {
     if (!nextFile.name.toLowerCase().endsWith(".docx")) {
@@ -101,6 +157,7 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
     }
     setFile(nextFile);
     setResult(null);
+    setMarkedDocx(null);
     setError(null);
   }
 
@@ -118,6 +175,7 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
     try {
       const payload = await analyzeReverseTemplateSingle(file);
       setResult(payload);
+      setMarkedDocx(null);
     } catch (err) {
       const message = err instanceof Error && err.message
         ? err.message
@@ -126,6 +184,61 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
     } finally {
       setIsAnalyzing(false);
     }
+  }
+
+  function updateCandidateStatus(candidateId: string, status: "accepted" | "rejected") {
+    setMarkedDocx(null);
+    setResult((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        candidates: current.candidates.map((candidate) =>
+          candidate.id === candidateId ? { ...candidate, status } : candidate,
+        ),
+      };
+    });
+  }
+
+  function acceptHighConfidence() {
+    setMarkedDocx(null);
+    setResult((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        candidates: current.candidates.map((candidate) =>
+          candidate.confidence >= 0.8 ? { ...candidate, status: "accepted" } : candidate,
+        ),
+      };
+    });
+  }
+
+  async function handleGenerateMarkedDocx() {
+    if (!file || !result || acceptedCount === 0) return;
+    setError(null);
+    setIsGenerating(true);
+    setMarkedDocx(null);
+    try {
+      setMarkedDocx(await generateReverseTemplateMarkedDocx(file, result.candidates));
+    } catch (err) {
+      const message = err instanceof Error && err.message
+        ? err.message
+        : "No fue posible generar el DOCX marcado.";
+      setError(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  function handleDownloadMarkedDocx() {
+    if (!markedDocx) return;
+    const url = URL.createObjectURL(markedDocx.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = markedDocx.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
@@ -250,6 +363,7 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
             onClick={() => {
               setFile(null);
               setResult(null);
+              setMarkedDocx(null);
               setError(null);
               if (inputRef.current) inputRef.current.value = "";
             }}
@@ -289,10 +403,76 @@ export function ReverseTemplateBuilderPanel({ onBackToMarkedFlow }: Props) {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-line bg-panel p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Revision de candidatos</p>
+                <p className="mt-1 text-xs text-soft">
+                  {acceptedCount} aceptados Â· {highConfidenceCount} de alta confianza
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={acceptHighConfidence}
+                  disabled={highConfidenceCount === 0}
+                  className={[
+                    "inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold",
+                    highConfidenceCount > 0
+                      ? "border border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      : "cursor-not-allowed bg-panel-soft text-soft",
+                  ].join(" ")}
+                >
+                  <Check size={14} />
+                  Aceptar todos alta confianza
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateMarkedDocx}
+                  disabled={acceptedCount === 0 || isGenerating}
+                  className={[
+                    "inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold",
+                    acceptedCount > 0 && !isGenerating
+                      ? "bg-primary text-white hover:opacity-90"
+                      : "cursor-not-allowed bg-panel-soft text-soft",
+                  ].join(" ")}
+                >
+                  {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                  {isGenerating ? "Generando..." : "Generar DOCX marcado"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadMarkedDocx}
+                  disabled={!markedDocx}
+                  className={[
+                    "inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold",
+                    markedDocx
+                      ? "border border-primary text-primary hover:bg-panel-highlight"
+                      : "cursor-not-allowed bg-panel-soft text-soft",
+                  ].join(" ")}
+                >
+                  <Download size={14} />
+                  Descargar DOCX marcado
+                </button>
+              </div>
+            </div>
+            {markedDocx && (
+              <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <CheckCircle2 size={13} />
+                Documento marcado listo
+              </p>
+            )}
+          </div>
+
           <div className="space-y-3">
             {result.candidates.length > 0 ? (
               result.candidates.map((candidate) => (
-                <CandidateRow key={candidate.id} candidate={candidate} />
+                <CandidateRow
+                  key={candidate.id}
+                  candidate={candidate}
+                  onAccept={() => updateCandidateStatus(candidate.id, "accepted")}
+                  onReject={() => updateCandidateStatus(candidate.id, "rejected")}
+                />
               ))
             ) : (
               <div className="rounded-2xl border border-line bg-panel-soft p-5 text-sm text-muted">
