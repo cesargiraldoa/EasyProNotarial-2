@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
@@ -41,6 +41,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("create table if not exists alembic_version (version_num varchar(255) not null)"))
+            connection.execute(text("alter table alembic_version alter column version_num type varchar(255)"))
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
