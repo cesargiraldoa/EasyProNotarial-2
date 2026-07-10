@@ -67,10 +67,152 @@ jobs:
         working-directory: backend
         run: |
           python - <<'PY'
-          import app.models  # noqa: F401
-          from app.db.session import engine
-          from app.models.base import Base
-          Base.metadata.create_all(bind=engine)
+          from sqlalchemy import create_engine, text
+          import os
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          statements = [
+              """
+              create table if not exists roles (
+                  id serial primary key,
+                  code varchar(50) not null unique,
+                  name varchar(80) not null unique,
+                  scope varchar(30) not null default 'notary',
+                  description varchar(255) not null default '',
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists users (
+                  id serial primary key,
+                  email varchar(120) not null unique,
+                  full_name varchar(160) not null,
+                  password_hash varchar(255) not null,
+                  is_active boolean not null default true,
+                  default_notary_id integer null,
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists notaries (
+                  id serial primary key,
+                  slug varchar(80) not null unique,
+                  catalog_identity_key varchar(255) not null unique,
+                  commercial_name varchar(120) not null,
+                  legal_name varchar(160) not null,
+                  department varchar(80) not null default 'Antioquia',
+                  municipality varchar(120) not null,
+                  notary_label varchar(160) not null,
+                  logo_url varchar(255) null,
+                  primary_color varchar(20) not null default '#0D2E5D',
+                  secondary_color varchar(20) not null default '#4D5B7C',
+                  base_color varchar(20) not null default '#F4F7FB',
+                  accent_color varchar(20) not null default '#50D690',
+                  city varchar(80) not null,
+                  address varchar(255) null,
+                  phone text null,
+                  email varchar(120) null,
+                  current_notary_name varchar(160) null,
+                  business_hours text null,
+                  institutional_data text not null default '',
+                  commercial_status varchar(40) not null default 'prospecto',
+                  commercial_owner varchar(120) null,
+                  commercial_owner_user_id integer null,
+                  main_contact_name varchar(160) null,
+                  main_contact_title varchar(120) null,
+                  commercial_phone text null,
+                  commercial_email varchar(120) null,
+                  last_management_at timestamptz null,
+                  next_management_at timestamptz null,
+                  commercial_notes text null,
+                  priority varchar(20) not null default 'media',
+                  lead_source varchar(120) null,
+                  potential varchar(40) null,
+                  internal_observations text null,
+                  is_active boolean not null default true,
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists role_assignments (
+                  id serial primary key,
+                  user_id integer not null,
+                  role_id integer not null,
+                  notary_id integer null,
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists persons (
+                  id serial primary key,
+                  document_type varchar(40) not null,
+                  document_number varchar(40) not null,
+                  full_name varchar(160) not null,
+                  sex varchar(20) null,
+                  nationality varchar(80) null,
+                  marital_status varchar(40) null,
+                  profession varchar(120) null,
+                  municipality varchar(120) null,
+                  is_transient boolean not null default false,
+                  phone varchar(40) null,
+                  address varchar(255) null,
+                  email varchar(120) null,
+                  metadata_json text not null default '{}',
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists cases (
+                  id serial primary key,
+                  notary_id integer not null,
+                  template_id integer null,
+                  created_by_user_id integer null,
+                  case_type varchar(80) not null,
+                  act_type varchar(120) not null,
+                  consecutive integer not null,
+                  year integer not null,
+                  internal_case_number varchar(40) null,
+                  official_deed_number varchar(40) null,
+                  official_deed_year integer null,
+                  current_state varchar(50) not null,
+                  current_owner_user_id integer null,
+                  client_user_id integer null,
+                  protocolist_user_id integer null,
+                  approver_user_id integer null,
+                  titular_notary_user_id integer null,
+                  substitute_notary_user_id integer null,
+                  requires_client_review boolean not null default false,
+                  final_signed_uploaded boolean not null default false,
+                  approved_at timestamptz null,
+                  approved_by_user_id integer null,
+                  approved_by_role_code varchar(80) null,
+                  approved_document_version_id integer null,
+                  metadata_json text not null default '{}',
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+              """
+              create table if not exists case_participants (
+                  id serial primary key,
+                  case_id integer not null,
+                  person_id integer not null,
+                  role_code varchar(80) not null,
+                  role_label varchar(120) not null,
+                  snapshot_json text not null default '{}',
+                  created_at timestamptz not null default current_timestamp,
+                  updated_at timestamptz not null default current_timestamp
+              )
+              """,
+          ]
+          with engine.begin() as conn:
+              for statement in statements:
+                  conn.execute(text(statement))
           PY
 
       - name: Alembic upgrade on PostgreSQL pgvector
