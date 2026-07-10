@@ -135,7 +135,7 @@ export function UserProfileWorkspace() {
       <section className="ep-card rounded-[2rem] p-6 sm:p-7">
         <p className="text-xs uppercase tracking-[0.2em] text-secondary">Perfil</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">{user.full_name}</h1>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-secondary">Perfil base de operación para validar sesión, roles activos y contexto notarial dentro de EasyPro 2.</p>
+        <p className="mt-3 max-w-2xl text-base leading-7 text-secondary">Perfil base de operación para validar sesión, roles activos y contexto notarial dentro de Ecosistema Notarial.</p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="ep-card-muted rounded-[1.5rem] p-5">

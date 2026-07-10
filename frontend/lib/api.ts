@@ -404,7 +404,7 @@ function normalizeApiError(error: unknown, fallbackMessage = "No fue posible com
     const normalized = message.toLowerCase();
 
     if (!message || normalized === "failed to fetch" || normalized.includes("networkerror") || normalized.includes("load failed")) {
-      return new Error("No fue posible conectarse con el servidor. Verifica que el backend de Easy Pro esté arriba.");
+      return new Error("No fue posible conectarse con el servidor. Verifica que el backend de Ecosistema Notarial esté arriba.");
     }
 
     if (normalized.includes("unexpected end of json input") || normalized.includes("json")) {

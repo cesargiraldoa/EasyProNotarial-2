@@ -16,14 +16,14 @@ type AppShellProps = {
 };
 
 function buildUserInitials(name?: string | null) {
-  if (!name) return "EP";
+  if (!name) return "EN";
   return (
     name
       .split(" ")
       .filter(Boolean)
       .slice(0, 2)
       .map((item) => item[0]?.toUpperCase())
-      .join("") || "EP"
+      .join("") || "EN"
   );
 }
 
@@ -97,7 +97,7 @@ export function AppShell({ children }: AppShellProps) {
     router.refresh();
   }
 
-  const userName = currentUser?.full_name ?? "Operación EasyPro";
+  const userName = currentUser?.full_name ?? "Operación Ecosistema Notarial";
   const userSubtitle = currentUser?.role_codes?.[0] ?? currentUser?.roles?.[0] ?? "Sesión activa";
   const normalizedRoles = Array.from(new Set([...(currentUser?.role_codes ?? []), ...(currentUser?.roles ?? [])].map((role) => role.toLowerCase())));
   const recognizedRoles = new Set(["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]);
@@ -183,7 +183,7 @@ export function AppShell({ children }: AppShellProps) {
             <div className={cn("flex items-center gap-4", isSidebarCollapsed && "justify-center")}>
               <LogoBadge initials={defaultBranding.logoInitials} compact />
               <div className={cn("min-w-0", isSidebarCollapsed && "hidden")}>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/80">EasyPro 2</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary/80">Ecosistema Notarial</p>
                 <p className="mt-1 text-xs text-secondary">{defaultBranding.officeLabel}</p>
               </div>
             </div>

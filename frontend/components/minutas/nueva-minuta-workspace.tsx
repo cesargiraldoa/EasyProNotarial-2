@@ -1954,7 +1954,7 @@ function MarkedFieldsForm({
               className="ep-input w-full rounded-2xl px-4 py-3 text-sm transition-all"
             />
             <p className="text-[11px] text-soft leading-tight">
-              Si lo dejas vacío, EasyPro usará el nombre actual por defecto.
+              Si lo dejas vacío, Ecosistema Notarial usará el nombre actual por defecto.
             </p>
           </label>
         </div>
@@ -3112,7 +3112,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     targetId: "tour-btn-generar",
     titulo: "Genera la escritura",
-    texto: "EasyPro reemplaza los datos, aplica concordancia de género y abre el .docx final en el editor. ¡Listo para firmar!",
+    texto: "Ecosistema Notarial reemplaza los datos, aplica concordancia de género y abre el .docx final en el editor. ¡Listo para firmar!",
   },
 ];
 

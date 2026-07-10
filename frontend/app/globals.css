@@ -3,33 +3,33 @@
 @tailwind utilities;
 
 :root {
-  --ink: 20 32 56;
-  --text-muted: 82 96 130;
-  --text-soft: 112 126 158;
-  --surface: 245 248 252;
-  --surface-alt: 236 242 249;
-  --shell: 250 252 255;
+  --ink: 16 20 24;
+  --text-muted: 96 106 118;
+  --text-soft: 138 148 160;
+  --surface: 244 246 249;
+  --surface-alt: 232 237 243;
+  --shell: 249 250 252;
   --panel: 255 255 255;
   --panel-strong: 247 250 253;
   --panel-soft: 241 246 251;
-  --panel-highlight: 232 240 250;
+  --panel-highlight: 243 234 219;
   --overlay: 255 255 255 / 0.78;
-  --primary: 13 46 93;
-  --secondary: 82 96 130;
-  --accent: 80 214 144;
-  --line: 223 231 242;
-  --line-strong: 206 217 232;
+  --primary: 16 20 24;
+  --secondary: 96 106 118;
+  --accent: 216 155 69;
+  --line: 222 226 232;
+  --line-strong: 203 187 164;
   --input: 255 255 255;
   --input-border: 214 224 238;
-  --input-focus: 13 46 93;
+  --input-focus: 216 155 69;
   --success-bg: 235 250 241;
   --warning-bg: 255 246 221;
   --critical-bg: 255 236 240;
-  --shadow-panel: 0 18px 45px rgba(11, 30, 58, 0.08);
-  --shadow-soft: 0 10px 30px rgba(18, 38, 63, 0.08);
+  --shadow-panel: 0 18px 45px rgba(16, 20, 24, 0.1);
+  --shadow-soft: 0 10px 30px rgba(16, 20, 24, 0.08);
 
   /* Primary light — hover states */
-  --primary-light: #3B6FCF;
+  --primary-light: #242a33;
 
   /* Estados semánticos completos */
   --error: #FFECF0;
@@ -45,25 +45,25 @@
 }
 
 [data-theme="dark"] {
-  --ink: 234 240 252;
-  --text-muted: 171 184 212;
-  --text-soft: 130 147 182;
-  --surface: 8 14 24;
-  --surface-alt: 12 20 34;
-  --shell: 16 24 40;
-  --panel: 19 29 47;
-  --panel-strong: 24 36 58;
-  --panel-soft: 28 42 68;
-  --panel-highlight: 20 44 84;
-  --overlay: 16 24 40 / 0.86;
-  --primary: 139 180 255;
-  --secondary: 171 184 212;
-  --accent: 100 218 155;
-  --line: 49 66 99;
-  --line-strong: 63 83 121;
-  --input: 23 35 57;
-  --input-border: 66 86 122;
-  --input-focus: 139 180 255;
+  --ink: 255 255 255;
+  --text-muted: 215 222 232;
+  --text-soft: 154 166 178;
+  --surface: 16 20 24;
+  --surface-alt: 23 28 34;
+  --shell: 16 20 24;
+  --panel: 23 28 34;
+  --panel-strong: 36 42 51;
+  --panel-soft: 29 35 43;
+  --panel-highlight: 77 55 29;
+  --overlay: 16 20 24 / 0.86;
+  --primary: 247 207 138;
+  --secondary: 215 222 232;
+  --accent: 216 155 69;
+  --line: 58 61 67;
+  --line-strong: 120 93 56;
+  --input: 16 20 24;
+  --input-border: 92 80 63;
+  --input-focus: 216 155 69;
   --success-bg: 20 63 45;
   --warning-bg: 74 56 17;
   --critical-bg: 78 30 42;
@@ -71,7 +71,7 @@
   --shadow-soft: 0 16px 38px rgba(2, 7, 18, 0.36);
 
   /* Primary light — hover states dark */
-  --primary-light: #4A80E0;
+  --primary-light: #f0b968;
 
   /* Estados semánticos dark */
   --error: #2A0D0D;
@@ -97,7 +97,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, rgba(var(--panel-highlight), 0.18) 0%, transparent 26%), linear-gradient(180deg, rgb(var(--surface)) 0%, rgb(var(--surface-alt)) 100%);
+  background: linear-gradient(180deg, rgb(var(--surface)) 0%, rgb(var(--surface-alt)) 100%);
   color: rgb(var(--ink));
   font-family: var(--font-jakarta), "Segoe UI", "Helvetica Neue", sans-serif;
   text-rendering: optimizeLegibility;
@@ -144,7 +144,7 @@ a {
 }
 
 ::selection {
-  background: rgba(80, 214, 144, 0.28);
+  background: rgba(216, 155, 69, 0.3);
 }
 
 @layer components {
@@ -271,7 +271,7 @@ a {
   }
 
   .ep-login-shell {
-    background: radial-gradient(circle at top left, rgba(var(--panel-highlight), 0.28) 0%, transparent 26%), linear-gradient(135deg, rgb(var(--surface)) 0%, rgb(var(--surface-alt)) 52%, rgba(var(--accent), 0.08) 100%);
+    background: linear-gradient(135deg, rgb(var(--surface)) 0%, rgb(var(--surface-alt)) 58%, rgba(var(--accent), 0.1) 100%);
   }
 
   .ep-badge-success {

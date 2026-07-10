@@ -12,9 +12,9 @@
 export const defaultBranding: NotaryBranding = {
   commercialName: "Ecosistema Notarial",
   legalName: "Plataforma notarial digital",
-  primaryColor: "13 46 93",
-  secondaryColor: "77 91 124",
-  accentColor: "80 214 144",
+  primaryColor: "16 20 24",
+  secondaryColor: "96 106 118",
+  accentColor: "216 155 69",
   logoInitials: "EN",
   officeLabel: "Sede principal",
   city: "Colombia",
