@@ -25,6 +25,7 @@ from app.services.minuta.inverse_conversion_catalog.models import (
 )
 from app.services.minuta.inverse_conversion_engine.graph import build_inverse_conversion_graph
 from app.services.minuta.inverse_conversion_engine.models import (
+    EngineCandidate,
     EngineOptions,
     InverseConversionCandidateRow,
     InverseConversionEmbedding,
@@ -137,6 +138,45 @@ class InverseConversionEngineTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "completed")
         self.assertTrue(any(candidate.canonical_field_code == "NUMERO_MATRICULA" for candidate in result.candidates))
+
+    def test_analyze_marker_accepts_langgraph_dict_state(self):
+        candidate = EngineCandidate(
+            raw_marker="NUMERO_MATRICULA",
+            candidate_field_code="NUMERO_MATRICULA",
+            canonical_field_code="NUMERO_MATRICULA",
+            confidence_score=0.91,
+            status="needs_human_review",
+            evidence={"source": "test"},
+            warnings=("review_required:Manual review required",),
+            requires_human_review=True,
+        )
+
+        def run_as_dict(state):
+            return {
+                **state.__dict__,
+                "validated_candidates": [candidate.to_dict()],
+                "warnings": ["llm_disabled"],
+                "errors": [],
+                "requires_human_review": True,
+                "final_result": {"metadata": {"source": "mock_langgraph"}},
+            }
+
+        with mock.patch(
+            "app.services.minuta.inverse_conversion_engine.service.InverseConversionOrchestrator.run",
+            side_effect=run_as_dict,
+        ):
+            result = InverseConversionEngineService(self.db).analyze_marker(
+                "NUMERO_MATRICULA",
+                "MATRICULA:",
+                "DEL INMUEBLE",
+                options=EngineOptions(use_llm=False, persist_audit=False),
+            )
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(len(result.candidates), 1)
+        self.assertEqual(result.candidates[0].canonical_field_code, "NUMERO_MATRICULA")
+        self.assertIn("llm_disabled", result.warnings)
+        self.assertEqual(result.metadata["source"], "mock_langgraph")
 
     def test_analyze_text_works_without_llm(self):
         result = InverseConversionEngineService(self.db).analyze_text(

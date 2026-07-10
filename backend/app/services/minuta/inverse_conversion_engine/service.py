@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import fields
 from typing import Any
 
 from sqlalchemy import text
@@ -71,11 +72,28 @@ class InverseConversionEngineService:
     def _run(self, state: InverseConversionState, options: EngineOptions) -> EngineFinalResult:
         try:
             final_state = InverseConversionOrchestrator(self.db, options).run(state)
+            final_state = self._normalize_state(final_state)
         except Exception as exc:
             if options.persist_audit:
                 self.audit.finish_run(state.run_id, "error", str(exc))
             raise
         return self._to_final_result(final_state)
+
+    @staticmethod
+    def _normalize_state(value: InverseConversionState | dict[str, Any]) -> InverseConversionState:
+        if isinstance(value, InverseConversionState):
+            return value
+        if isinstance(value, dict):
+            # LangGraph may return the typed state as a plain dict after graph execution.
+            state_fields = {field.name for field in fields(InverseConversionState)}
+            data = {key: state_value for key, state_value in value.items() if key in state_fields}
+            candidates = data.get("validated_candidates")
+            if isinstance(candidates, list):
+                data["validated_candidates"] = [
+                    EngineCandidate(**candidate) if isinstance(candidate, dict) else candidate for candidate in candidates
+                ]
+            return InverseConversionState(**data)
+        raise TypeError(f"Unsupported inverse conversion state type: {type(value).__name__}")
 
     @staticmethod
     def _to_final_result(state: InverseConversionState) -> EngineFinalResult:
