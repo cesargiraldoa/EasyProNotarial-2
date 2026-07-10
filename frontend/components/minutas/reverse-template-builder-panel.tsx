@@ -65,6 +65,8 @@ function CandidateRow({
   onAccept: () => void;
   onReject: () => void;
 }) {
+  const technicalCode = candidate.canonical_field_code || candidate.suggested_key;
+  const markerPreview = technicalCode ? `{{${technicalCode}}}` : "";
   return (
     <div className="rounded-xl border border-line bg-surface p-4">
       <div className="grid gap-3 md:grid-cols-[1.1fr_1fr_0.8fr_0.7fr]">
@@ -75,12 +77,12 @@ function CandidateRow({
           </p>
         </div>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-soft">Etiqueta sugerida</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-soft">Codigo propuesto</p>
           <p className="mt-1 truncate text-sm text-ink" title={candidate.label}>
             {candidate.label}
           </p>
-          <p className="truncate text-xs text-soft" title={candidate.suggested_key}>
-            {candidate.suggested_key}
+          <p className="truncate text-xs text-soft" title={markerPreview || technicalCode}>
+            {markerPreview || technicalCode}
           </p>
         </div>
         <div className="min-w-0">

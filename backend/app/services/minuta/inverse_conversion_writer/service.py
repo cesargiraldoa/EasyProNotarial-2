@@ -16,10 +16,14 @@ class InverseConversionMarkedDocxService:
         destination_path: str | Path,
         original_filename: str,
         candidates: list[MarkedCandidate],
+        allowed_field_codes: set[str] | None = None,
+        field_aliases: dict[str, str] | None = None,
     ) -> MarkedDocxWriteResult:
         return self.writer.write(
             source_path=source_path,
             destination_path=destination_path,
             candidates=candidates,
             output_filename=marked_docx_filename(original_filename),
+            allowed_field_codes=allowed_field_codes,
+            field_aliases=field_aliases,
         )

@@ -25,6 +25,7 @@ class MarkedCandidate:
     id: str
     text: str
     suggested_key: str
+    canonical_field_code: str = ""
     label: str = ""
     status: str = "pending"
     confidence: float = 0.0
@@ -42,8 +43,14 @@ class MarkedCandidate:
         )
         return cls(
             id=str(payload.get("id") or ""),
-            text=str(payload.get("text") or ""),
-            suggested_key=str(payload.get("suggested_key") or ""),
+            text=str(payload.get("text") or payload.get("detected_text") or ""),
+            suggested_key=str(
+                payload.get("suggested_key")
+                or payload.get("candidate_field_code")
+                or payload.get("canonical_field_code")
+                or ""
+            ),
+            canonical_field_code=str(payload.get("canonical_field_code") or ""),
             label=str(payload.get("label") or ""),
             status=str(payload.get("status") or "pending"),
             confidence=float(payload.get("confidence") or 0.0),
