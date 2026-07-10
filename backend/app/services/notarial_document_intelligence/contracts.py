@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BatchStatus(str, Enum):
     INITIALIZED = "initialized"
+    QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     ERROR = "error"

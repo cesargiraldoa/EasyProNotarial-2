@@ -33,6 +33,7 @@ from app.models.notarial_document_intelligence import (
     NotarialEmbeddingVersion,
 )
 from app.services.notarial_document_intelligence.contracts import (
+    BatchStatus,
     DocumentProcessingStatus,
     DocumentUpload,
     IngestBatchRequest,
@@ -152,6 +153,35 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertEqual(db.query(NotarialDocument).count(), 200)
             self.assertEqual(db.query(NotarialDocumentBatchItem).count(), 200)
             self.assertGreaterEqual(db.query(NotarialDocumentBlock).count(), 500)
+        finally:
+            db.close()
+
+    def test_queue_and_process_batch_is_recoverable_by_batch_id(self):
+        db = self.Session()
+        try:
+            service = NotarialDocumentIngestionService(db, storage=self.storage)
+            queued = service.queue_batch(
+                IngestBatchRequest(
+                    name="Lote async",
+                    source_type="api_async",
+                    documents=[
+                        DocumentUpload(filename="async-1.docx", content=build_docx_bytes(apartment="1201")),
+                        DocumentUpload(filename="async-2.docx", content=build_docx_bytes(apartment="1202", include_table=False)),
+                    ],
+                )
+            )
+
+            self.assertEqual(queued.status, BatchStatus.QUEUED)
+            self.assertEqual(queued.total_documents, 2)
+            self.assertEqual(db.query(NotarialDocumentBlock).count(), 0)
+
+            processed = service.process_queued_batch(queued.batch_id)
+
+            self.assertEqual(processed.status, BatchStatus.COMPLETED)
+            self.assertEqual(processed.error_documents, 0)
+            self.assertEqual(db.query(NotarialDocumentBlock).count(), 6)
+            statuses = [item.status for item in db.query(NotarialDocumentBatchItem).order_by(NotarialDocumentBatchItem.item_index).all()]
+            self.assertEqual(statuses, ["processed", "processed"])
         finally:
             db.close()
 

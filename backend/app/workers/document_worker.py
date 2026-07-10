@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from app.db.session import SessionLocal
-from app.services.notarial_document_intelligence.contracts import DocumentUpload, IngestBatchRequest
 from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
 from app.workers.celery_app import celery_app
 
 
 def ingest_document_batch(payload: dict) -> dict:
+    from app.services.notarial_document_intelligence.contracts import DocumentUpload, IngestBatchRequest
+
     request = IngestBatchRequest(
         name=str(payload.get("name") or "Lote documental"),
         source_type=str(payload.get("source_type") or "worker"),
@@ -31,10 +32,24 @@ def ingest_document_batch(payload: dict) -> dict:
         db.close()
 
 
+def process_queued_document_batch(batch_id: int) -> dict:
+    db = SessionLocal()
+    try:
+        result = NotarialDocumentIngestionService(db).process_queued_batch(batch_id)
+        return result.model_dump(mode="json")
+    finally:
+        db.close()
+
+
 if celery_app is not None:
     ingest_document_batch_task = celery_app.task(
         name="notarial_document_intelligence.document.ingest_batch",
         queue="notarial-documental",
     )(ingest_document_batch)
+    process_queued_document_batch_task = celery_app.task(
+        name="notarial_document_intelligence.document.process_queued_batch",
+        queue="notarial-documental",
+    )(process_queued_document_batch)
 else:
     ingest_document_batch_task = ingest_document_batch
+    process_queued_document_batch_task = process_queued_document_batch

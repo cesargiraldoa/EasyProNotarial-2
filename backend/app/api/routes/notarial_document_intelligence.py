@@ -20,7 +20,7 @@ from app.models.notarial_document_intelligence import (
 from app.models.user import User
 from app.services.notarial_document_intelligence.contracts import DocumentUpload, IngestBatchRequest, IngestBatchResult
 from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
-from app.workers.document_worker import ingest_document_batch_task
+from app.workers.document_worker import process_queued_document_batch_task
 
 
 router = APIRouter(prefix="/notarial-intelligence", tags=["notarial-document-intelligence"])
@@ -84,25 +84,11 @@ async def ingest_batch(
 
     request = IngestBatchRequest(name=name, source_type=source_type, documents=uploads)
     if async_processing:
-        if not hasattr(ingest_document_batch_task, "delay"):
+        if not hasattr(process_queued_document_batch_task, "delay"):
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
-        payload = {
-            "name": request.name,
-            "source_type": request.source_type,
-            "metadata": request.metadata,
-            "documents": [
-                {
-                    "filename": document.filename,
-                    "content_hex": document.content.hex(),
-                    "content_type": document.content_type,
-                    "source_path": document.source_path,
-                    "metadata": document.metadata,
-                }
-                for document in request.documents
-            ],
-        }
-        task = ingest_document_batch_task.delay(payload)
-        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"task_id": task.id})
+        queued = service.queue_batch(request)
+        task = process_queued_document_batch_task.delay(queued.batch_id)
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"batch_id": queued.batch_id, "task_id": task.id})
 
     return service.ingest_batch(request)
 

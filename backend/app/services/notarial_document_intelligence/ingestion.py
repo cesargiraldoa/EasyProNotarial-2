@@ -91,6 +91,129 @@ class NotarialDocumentIngestionService:
             warnings=warnings,
         )
 
+    def queue_batch(self, request: IngestBatchRequest) -> IngestBatchResult:
+        batch = NotarialDocumentBatch(
+            batch_key=f"batch_{uuid.uuid4().hex}",
+            name=request.name,
+            source_type=request.source_type,
+            status=BatchStatus.QUEUED.value,
+            metadata_json=_json(request.metadata),
+            started_at=_now(),
+        )
+        self.db.add(batch)
+        self.db.flush()
+
+        summaries: list[IngestedDocumentSummary] = []
+        unique_documents = 0
+        duplicate_documents = 0
+        error_documents = 0
+        warnings: list[str] = []
+
+        for item_index, upload in enumerate(request.documents, start=1):
+            try:
+                with self.db.begin_nested():
+                    summary = self._queue_document(batch.id, item_index, upload)
+                summaries.append(summary)
+                if summary.reused_existing_document:
+                    duplicate_documents += 1
+                else:
+                    unique_documents += 1
+            except Exception as exc:
+                error_documents += 1
+                warnings.append(f"{upload.filename}: {type(exc).__name__}")
+
+        batch.total_documents = len(request.documents)
+        batch.unique_documents = unique_documents
+        batch.duplicate_documents = duplicate_documents
+        batch.error_documents = error_documents
+        if error_documents:
+            batch.status = BatchStatus.ERROR.value
+            batch.error_message = f"{error_documents} document(s) failed while queuing ingestion."
+            batch.finished_at = _now()
+        self.db.commit()
+
+        return IngestBatchResult(
+            batch_id=batch.id,
+            batch_key=batch.batch_key,
+            status=BatchStatus(batch.status),
+            total_documents=batch.total_documents,
+            unique_documents=batch.unique_documents,
+            duplicate_documents=batch.duplicate_documents,
+            error_documents=batch.error_documents,
+            documents=summaries,
+            warnings=warnings,
+        )
+
+    def process_queued_batch(self, batch_id: int) -> IngestBatchResult:
+        batch = self.db.get(NotarialDocumentBatch, batch_id)
+        if batch is None:
+            raise ValueError(f"Batch {batch_id} not found.")
+        if batch.status not in {BatchStatus.QUEUED.value, BatchStatus.ERROR.value, BatchStatus.RUNNING.value}:
+            raise ValueError(f"Batch {batch_id} is not queued for processing.")
+
+        batch.status = BatchStatus.RUNNING.value
+        batch.error_message = None
+        self.db.commit()
+
+        summaries: list[IngestedDocumentSummary] = []
+        warnings: list[str] = []
+        error_documents = 0
+        rows = (
+            self.db.query(NotarialDocumentBatchItem, NotarialDocument)
+            .join(NotarialDocument, NotarialDocument.id == NotarialDocumentBatchItem.document_id)
+            .filter(NotarialDocumentBatchItem.batch_id == batch_id)
+            .order_by(NotarialDocumentBatchItem.item_index.asc())
+            .all()
+        )
+        for item, document in rows:
+            try:
+                if document.processing_status == DocumentProcessingStatus.STORED.value:
+                    summary = self.reparse_document(document.id, commit=False)
+                    item.status = "processed"
+                else:
+                    block_count = self.db.query(NotarialDocumentBlock).filter(NotarialDocumentBlock.document_id == document.id).count()
+                    summary = IngestedDocumentSummary(
+                        document_id=document.id,
+                        filename=document.filename,
+                        content_hash=document.content_hash,
+                        status=DocumentProcessingStatus(document.processing_status),
+                        block_count=block_count,
+                        storage_path=document.storage_path,
+                        reused_existing_document=True,
+                    )
+                    item.status = "reused"
+                summaries.append(summary)
+                warnings.extend(summary.warnings)
+                self.db.commit()
+            except Exception as exc:
+                self.db.rollback()
+                error_documents += 1
+                item.status = "error"
+                document.processing_status = DocumentProcessingStatus.ERROR.value
+                document.error_message = str(exc)
+                warnings.append(f"{document.filename}: {type(exc).__name__}")
+                self.db.commit()
+
+        batch = self.db.get(NotarialDocumentBatch, batch_id)
+        batch.error_documents = error_documents
+        batch.status = BatchStatus.ERROR.value if error_documents else BatchStatus.COMPLETED.value
+        batch.finished_at = _now()
+        if error_documents:
+            batch.error_message = f"{error_documents} document(s) failed during queued processing."
+        self.db.commit()
+
+        return IngestBatchResult(
+            batch_id=batch.id,
+            batch_key=batch.batch_key,
+            status=BatchStatus(batch.status),
+            total_documents=batch.total_documents,
+            unique_documents=batch.unique_documents,
+            duplicate_documents=batch.duplicate_documents,
+            error_documents=batch.error_documents,
+            documents=summaries,
+            warnings=warnings,
+        )
+
     def _ingest_document(self, batch_id: int, item_index: int, upload: DocumentUpload) -> IngestedDocumentSummary:
         stored = self.storage.store_document(upload.filename, upload.content, upload.content_type)
         existing = self.db.query(NotarialDocument).filter(NotarialDocument.content_hash == stored.content_hash).first()
@@ -167,7 +290,46 @@ class NotarialDocumentIngestionService:
             warnings=parsed.warnings,
         )
 
-    def reparse_document(self, document_id: int) -> IngestedDocumentSummary:
+    def _queue_document(self, batch_id: int, item_index: int, upload: DocumentUpload) -> IngestedDocumentSummary:
+        stored = self.storage.store_document(upload.filename, upload.content, upload.content_type)
+        existing = self.db.query(NotarialDocument).filter(NotarialDocument.content_hash == stored.content_hash).first()
+        if existing is not None:
+            self._link_batch_item(batch_id, item_index, upload, stored, existing.id, "reused")
+            block_count = self.db.query(NotarialDocumentBlock).filter(NotarialDocumentBlock.document_id == existing.id).count()
+            return IngestedDocumentSummary(
+                document_id=existing.id,
+                filename=existing.filename,
+                content_hash=existing.content_hash,
+                status=DocumentProcessingStatus(existing.processing_status),
+                block_count=block_count,
+                storage_path=existing.storage_path,
+                reused_existing_document=True,
+            )
+
+        document = NotarialDocument(
+            content_hash=stored.content_hash,
+            filename=stored.filename,
+            storage_path=stored.storage_path,
+            storage_backend=stored.storage_backend,
+            content_type=stored.content_type,
+            file_size_bytes=stored.file_size_bytes,
+            processing_status=DocumentProcessingStatus.STORED.value,
+            metadata_json=_json({"upload": upload.metadata, "source_path": upload.source_path}),
+        )
+        self.db.add(document)
+        self.db.flush()
+        self._link_batch_item(batch_id, item_index, upload, stored, document.id, "queued")
+        return IngestedDocumentSummary(
+            document_id=document.id,
+            filename=document.filename,
+            content_hash=document.content_hash,
+            status=DocumentProcessingStatus.STORED,
+            block_count=0,
+            storage_path=document.storage_path,
+            reused_existing_document=False,
+        )
+
+    def reparse_document(self, document_id: int, commit: bool = True) -> IngestedDocumentSummary:
         document = self.db.get(NotarialDocument, document_id)
         if document is None:
             raise ValueError(f"Document {document_id} not found.")
@@ -217,7 +379,10 @@ class NotarialDocumentIngestionService:
         document.processing_status = DocumentProcessingStatus.PARSED.value
         document.metadata_json = _json({"reparse": parsed.metadata, "warnings": parsed.warnings})
         document.error_message = None
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
 
         return IngestedDocumentSummary(
             document_id=document.id,
