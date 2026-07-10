@@ -226,16 +226,17 @@ def validate_reparse(storage: NotarialIntelligenceStorage) -> None:
         Path(document.storage_path).write_bytes(build_docx_bytes("3999"))
         service = NotarialDocumentIngestionService(db, notary_id=1, storage=storage)
         parse_run = service.queue_reparse_document(document.id)
+        parse_run_id = parse_run.id
         publication = service.get_publication_for_target("reparse", parse_run.id)
         task_id = service.publish_task_publication(publication.id, reparse_document_task.delay)
         assert task_id
     finally:
         db.close()
-    wait_for_parse_run(parse_run.id)
+    wait_for_parse_run(parse_run_id)
 
     db = SessionLocal()
     try:
-        run = db.get(NotarialDocumentParseRun, parse_run.id)
+        run = db.get(NotarialDocumentParseRun, parse_run_id)
         assert run is not None and run.is_active is True
         metadata = json.loads(run.metadata_json or "{}")
         assert "unstructured" in metadata
