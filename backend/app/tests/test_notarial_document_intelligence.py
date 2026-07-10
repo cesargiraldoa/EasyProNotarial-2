@@ -35,6 +35,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentFamilyMember,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
+    NotarialTaskPublication,
     NotarialEmbeddingVersion,
 )
 from app.models.notary import Notary
@@ -48,6 +49,7 @@ from app.services.notarial_document_intelligence.contracts import (
 from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService, TransientDocumentProcessingError
 from app.services.notarial_document_intelligence.parser import NotarialDocumentParser
 from app.services.notarial_document_intelligence.storage import NotarialIntelligenceStorage
+from app.services.notarial_document_intelligence import storage as storage_module
 from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 
 
@@ -58,6 +60,7 @@ TABLES = [
     NotarialDocument.__table__,
     NotarialDocumentBatchItem.__table__,
     NotarialDocumentParseRun.__table__,
+    NotarialTaskPublication.__table__,
     NotarialDocumentSection.__table__,
     NotarialDocumentBlock.__table__,
     NotarialDocumentEntity.__table__,
@@ -390,8 +393,81 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         db = self.Session()
         try:
             batch = db.query(NotarialDocumentBatch).one()
+            publication = db.query(NotarialTaskPublication).one()
             self.assertEqual(batch.status, BatchStatus.PUBLICATION_FAILED.value)
             self.assertIn("publication_failed", batch.error_message)
+            self.assertEqual(publication.status, "publication_failed")
+            self.assertEqual(publication.attempts, 1)
+            self.assertIn("broker offline", publication.last_error)
+        finally:
+            db.close()
+
+    def test_http_reconcile_republishes_failed_batch_without_duplicates(self):
+        original_task = route_module.process_queued_document_batch_task
+
+        class FailingTask:
+            @staticmethod
+            def delay(batch_id: int, notary_id: int):
+                raise ConnectionError("broker offline")
+
+        class SuccessfulTask:
+            @staticmethod
+            def delay(batch_id: int, notary_id: int):
+                return type("FakeAsyncResult", (), {"id": f"retry-{batch_id}-{notary_id}"})()
+
+        route_module.process_queued_document_batch_task = FailingTask()
+        self.addCleanup(lambda: setattr(route_module, "process_queued_document_batch_task", original_task))
+        client = self._build_api_client()
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Reconcile batch", "source_type": "test", "async_processing": "true"},
+            files=[("files", ("reconcile.docx", build_docx_bytes(apartment="1903"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+        self.assertEqual(response.status_code, 503)
+
+        route_module.process_queued_document_batch_task = SuccessfulTask()
+        reconciled = client.post("/api/v1/notarial-intelligence/publications/reconcile")
+
+        self.assertEqual(reconciled.status_code, 200)
+        self.assertEqual(reconciled.json()["dispatched"], 1)
+        db = self.Session()
+        try:
+            publication = db.query(NotarialTaskPublication).one()
+            self.assertEqual(publication.status, "published")
+            self.assertEqual(publication.attempts, 2)
+            self.assertEqual(publication.task_id, "retry-1-1")
+            self.assertEqual(db.query(NotarialDocument).count(), 1)
+            self.assertEqual(db.query(NotarialDocumentBatchItem).count(), 1)
+        finally:
+            db.close()
+
+    def test_reconcile_recovers_publishing_window_without_duplicating_records(self):
+        db = self.Session()
+        try:
+            service = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage)
+            queued = service.queue_batch(
+                IngestBatchRequest(name="Ventana publishing", documents=[DocumentUpload(filename="window.docx", content=build_docx_bytes(apartment="1904"))])
+            )
+            publication = service.get_publication_for_target("batch", queued.batch_id)
+            publication.status = "publishing"
+            publication.attempts = 1
+            db.commit()
+
+            def fake_delay(batch_id: int, notary_id: int):
+                return type("FakeAsyncResult", (), {"id": f"recovered-{batch_id}-{notary_id}"})()
+
+            results = service.dispatch_recoverable_publications(
+                {"notarial_document_intelligence.document.process_queued_batch": fake_delay}
+            )
+
+            self.assertEqual(results[0]["status"], "published")
+            db.refresh(publication)
+            self.assertEqual(publication.task_id, "recovered-1-1")
+            self.assertEqual(publication.attempts, 2)
+            self.assertEqual(db.query(NotarialDocumentBatch).count(), 1)
+            self.assertEqual(db.query(NotarialDocument).count(), 1)
+            self.assertEqual(db.query(NotarialDocumentBatchItem).count(), 1)
         finally:
             db.close()
 
@@ -581,8 +657,40 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
 
             self.assertEqual(result.status, BatchStatus.ERROR)
             run = db.query(NotarialDocumentParseRun).one()
+            document = db.query(NotarialDocument).one()
             self.assertEqual(run.status, "error")
             self.assertIn("documento deterministico invalido", run.error_message)
+            self.assertEqual(document.processing_status, DocumentProcessingStatus.ERROR.value)
+            self.assertIn("last_reparse_error", document.metadata_json)
+        finally:
+            db.close()
+
+    def test_failed_reparse_preserves_existing_active_parse_and_document_status(self):
+        class FailingParser(NotarialDocumentParser):
+            def parse_bytes(self, content: bytes, filename: str) -> ParsedDocument:
+                raise ValueError("nuevo reparse invalido")
+
+        db = self.Session()
+        try:
+            service = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage)
+            result = service.ingest_batch(
+                IngestBatchRequest(name="Activo previo", documents=[DocumentUpload(filename="activo.docx", content=build_docx_bytes(apartment="1851"))])
+            )
+            document_id = result.documents[0].document_id
+            active_before = db.query(NotarialDocumentParseRun).filter(NotarialDocumentParseRun.document_id == document_id, NotarialDocumentParseRun.is_active.is_(True)).one()
+            failing_service = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage, parser=FailingParser())
+
+            with self.assertRaises(Exception):
+                failing_service.reparse_document(document_id)
+
+            document = db.get(NotarialDocument, document_id)
+            active_after = db.query(NotarialDocumentParseRun).filter(NotarialDocumentParseRun.document_id == document_id, NotarialDocumentParseRun.is_active.is_(True)).one()
+            failed_run = db.query(NotarialDocumentParseRun).filter(NotarialDocumentParseRun.document_id == document_id, NotarialDocumentParseRun.status == "error").one()
+            self.assertEqual(document.processing_status, DocumentProcessingStatus.PARSED.value)
+            self.assertEqual(active_after.id, active_before.id)
+            self.assertFalse(failed_run.is_active)
+            self.assertIn("nuevo reparse invalido", failed_run.error_message)
+            self.assertIn("last_reparse_failed_at", document.metadata_json)
         finally:
             db.close()
 
@@ -638,10 +746,35 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         db = self.Session()
         try:
             failed_run = db.query(NotarialDocumentParseRun).order_by(NotarialDocumentParseRun.parse_version.desc()).first()
+            document = db.get(NotarialDocument, document_id)
             self.assertEqual(failed_run.status, "error")
             self.assertIn("publication_failed", failed_run.error_message)
+            self.assertEqual(document.processing_status, DocumentProcessingStatus.PARSED.value)
+            self.assertIn("last_reparse_error", document.metadata_json)
         finally:
             db.close()
+
+    def test_supabase_path_upload_uses_file_stream_helper(self):
+        original_upload = storage_module._upload_path_to_supabase
+        captured = {}
+
+        def fake_upload(bucket, object_key, source_path, content_type):
+            captured["bucket"] = bucket
+            captured["object_key"] = object_key
+            captured["source_path"] = Path(source_path)
+            captured["content_type"] = content_type
+
+        storage_module._upload_path_to_supabase = fake_upload
+        self.addCleanup(lambda: setattr(storage_module, "_upload_path_to_supabase", original_upload))
+        source = Path(self.tmp.name) / "supabase-stream.docx"
+        source.write_bytes(build_docx_bytes(apartment="1852"))
+        storage = NotarialIntelligenceStorage(local_root=Path(self.tmp.name) / "unused", use_supabase=True)
+
+        result = storage.store_document_path(1, "supabase-stream.docx", source, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+        self.assertEqual(result.storage_backend, "supabase")
+        self.assertEqual(captured["source_path"], source)
+        self.assertIn("/notary_1/documents/", captured["object_key"])
 
     def test_concurrent_reparse_queue_assigns_unique_parse_versions(self):
         content = build_docx_bytes(apartment="1651")
