@@ -155,7 +155,7 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
             sa.Column("role_id", sa.Integer(), sa.ForeignKey("roles.id"), nullable=False),
             sa.Column("module_code", sa.String(length=80), nullable=False),
-            sa.Column("can_access", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.Column("can_access", sa.Boolean(), nullable=False, server_default=sa.text("false")),
             sa.UniqueConstraint("role_id", "module_code", name="uq_role_permissions"),
         )
         inspector = sa.inspect(bind)
