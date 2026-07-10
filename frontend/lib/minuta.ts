@@ -222,6 +222,11 @@ export type ReverseTemplateAnalyzeResult = {
   };
 };
 
+export type MarkedDocxDownload = {
+  blob: Blob;
+  filename: string;
+};
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function authHeaders(): Headers {
@@ -352,6 +357,27 @@ export async function analyzeReverseTemplateSingle(file: File): Promise<ReverseT
   });
   if (!response.ok) await handleError(response);
   return response.json() as Promise<ReverseTemplateAnalyzeResult>;
+}
+
+export async function generateReverseTemplateMarkedDocx(
+  file: File,
+  candidates: ReverseTemplateCandidate[],
+): Promise<MarkedDocxDownload> {
+  const form = new FormData();
+  form.append("archivo", file);
+  form.append("candidates", JSON.stringify(candidates));
+  const response = await fetch(buildApiUrl("/api/v1/inverse-conversion/generate-marked-docx"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!response.ok) await handleError(response);
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : `${file.name.replace(/\.docx$/i, "")} - marcado.docx`;
+  return { blob: await response.blob(), filename };
 }
 
 export async function generateMarkedTemplate(
