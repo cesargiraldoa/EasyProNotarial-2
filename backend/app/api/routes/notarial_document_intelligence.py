@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import zipfile
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, require_permission
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
     NotarialDocumentBatch,
@@ -20,9 +21,9 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentParseRun,
 )
 from app.models.user import User
-from app.services.notarial_document_intelligence.contracts import AcceptedBatchResponse, BatchStatus, DocumentUpload, IngestBatchRequest, IngestBatchResult
+from app.services.notarial_document_intelligence.contracts import AcceptedBatchResponse, AcceptedReparseResponse, BatchStatus, DocumentUpload, IngestBatchRequest, IngestBatchResult
 from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
-from app.workers.document_worker import process_queued_document_batch_task
+from app.workers.document_worker import process_queued_document_batch_task, reparse_document_task
 
 
 router = APIRouter(prefix="/notarial-intelligence", tags=["notarial-document-intelligence"])
@@ -60,11 +61,17 @@ class BatchDetailResponse(BaseModel):
     metadata: dict[str, Any]
 
 
-class ReparseDocumentResponse(BaseModel):
+class ParseRunDetailResponse(BaseModel):
     document_id: int
+    parse_run_id: int
+    parse_version: int
     status: str
-    block_count: int
-    warnings: list[str]
+    is_active: bool
+    parser_name: str
+    parser_version: str
+    error_message: str | None
+    warnings: list[Any]
+    metadata: dict[str, Any]
 
 
 def _current_notary_id(current_user: User) -> int:
@@ -93,7 +100,7 @@ async def ingest_batch(
     files: list[UploadFile] = File(...),
     response: Response = None,
     service: NotarialDocumentIngestionService = Depends(get_ingestion_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("notarial_intelligence.ingest", scoped_to_default_notary=True)),
 ):
     notary_id = _current_notary_id(current_user)
     with tempfile.TemporaryDirectory(prefix="easypro2-notarial-upload-") as tmp_dir:
@@ -108,7 +115,9 @@ async def ingest_batch(
             try:
                 task = process_queued_document_batch_task.delay(queued.batch_id, notary_id)
             except Exception as exc:
+                service.mark_batch_publication_failed(queued.batch_id, str(exc))
                 raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No fue posible publicar la tarea documental.") from exc
+            service.mark_batch_published(queued.batch_id, task.id)
             response.status_code = status.HTTP_202_ACCEPTED
             return AcceptedBatchResponse(
                 batch_id=queued.batch_id,
@@ -125,7 +134,7 @@ async def ingest_batch(
 def get_batch_detail(
     batch_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
 ):
     notary_id = _current_notary_id(current_user)
     batch = (
@@ -177,32 +186,101 @@ def get_batch_detail(
         duplicate_documents=batch.duplicate_documents,
         error_documents=batch.error_documents,
         documents=documents,
-        metadata={},
+        metadata=_json_object(batch.metadata_json),
     )
 
 
-@router.post("/documents/{document_id}/reparse", response_model=ReparseDocumentResponse)
+@router.get("/documents/{document_id}/parse-runs/{parse_run_id}", response_model=ParseRunDetailResponse)
+def get_parse_run_detail(
+    document_id: int,
+    parse_run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
+):
+    notary_id = _current_notary_id(current_user)
+    parse_run = (
+        db.query(NotarialDocumentParseRun)
+        .filter(
+            NotarialDocumentParseRun.id == parse_run_id,
+            NotarialDocumentParseRun.document_id == document_id,
+            NotarialDocumentParseRun.notary_id == notary_id,
+        )
+        .first()
+    )
+    if parse_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parse run no encontrado.")
+    return ParseRunDetailResponse(
+        document_id=document_id,
+        parse_run_id=parse_run.id,
+        parse_version=parse_run.parse_version,
+        status=parse_run.status,
+        is_active=parse_run.is_active,
+        parser_name=parse_run.parser_name,
+        parser_version=parse_run.parser_version,
+        error_message=parse_run.error_message,
+        warnings=_json_list(parse_run.warnings_json),
+        metadata=_json_object(parse_run.metadata_json),
+    )
+
+
+def _json_object(raw: str | None) -> dict[str, Any]:
+    try:
+        payload = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _json_list(raw: str | None) -> list[Any]:
+    try:
+        payload = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+@router.post(
+    "/documents/{document_id}/reparse",
+    response_model=AcceptedReparseResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def reparse_document(
     document_id: int,
+    response: Response = None,
     service: NotarialDocumentIngestionService = Depends(get_ingestion_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
 ):
-    _current_notary_id(current_user)
+    notary_id = _current_notary_id(current_user)
     try:
-        result = service.reparse_document(document_id)
+        service.get_document_for_notary(document_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return ReparseDocumentResponse(
-        document_id=result.document_id,
-        status=result.status.value,
-        block_count=result.block_count,
-        warnings=result.warnings,
+    if not hasattr(reparse_document_task, "delay"):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
+    try:
+        parse_run = service.queue_reparse_document(document_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    try:
+        task = reparse_document_task.delay(document_id, notary_id, parse_run.id)
+    except Exception as exc:
+        service.mark_parse_run_publication_failed(parse_run.id, str(exc))
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No fue posible publicar el reparse documental.") from exc
+    if response is not None:
+        response.status_code = status.HTTP_202_ACCEPTED
+    return AcceptedReparseResponse(
+        document_id=document_id,
+        parse_run_id=parse_run.id,
+        task_id=task.id,
+        status=parse_run.status,
+        status_url=f"{get_settings().api_v1_prefix}/notarial-intelligence/documents/{document_id}/parse-runs/{parse_run.id}",
     )
 
 
 async def _read_uploads(files: list[UploadFile], tmp_dir: Path) -> list[DocumentUpload]:
     uploads: list[DocumentUpload] = []
     total_bytes = 0
+    total_uncompressed_bytes = 0
     for file in files:
         filename = file.filename or ""
         spooled_path, size = await _spool_upload(file, tmp_dir)
@@ -214,9 +292,13 @@ async def _read_uploads(files: list[UploadFile], tmp_dir: Path) -> list[Document
         if filename.lower().endswith(".zip"):
             if size > MAX_ZIP_COMPRESSED_BYTES:
                 raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="ZIP demasiado grande.")
-            uploads.extend(_extract_docx_from_zip(filename, spooled_path, tmp_dir))
+            zip_uploads, total_uncompressed_bytes = _extract_docx_from_zip(filename, spooled_path, tmp_dir, total_uncompressed_bytes)
+            uploads.extend(zip_uploads)
         elif filename.lower().endswith(".docx"):
             _validate_docx_file(spooled_path)
+            total_uncompressed_bytes += size
+            if total_uncompressed_bytes > MAX_ZIP_UNCOMPRESSED_BYTES:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="El lote excede el tamano descomprimido maximo permitido.")
             uploads.append(DocumentUpload(filename=Path(filename).name, file_path=str(spooled_path), content_type=file.content_type or DOCX_MEDIA_TYPE))
         else:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Archivo no soportado: {filename}")
@@ -240,11 +322,10 @@ async def _spool_upload(file: UploadFile, tmp_dir: Path) -> tuple[Path, int]:
     return target, size
 
 
-def _extract_docx_from_zip(zip_filename: str, zip_path: Path, tmp_dir: Path) -> list[DocumentUpload]:
+def _extract_docx_from_zip(zip_filename: str, zip_path: Path, tmp_dir: Path, current_uncompressed_bytes: int) -> tuple[list[DocumentUpload], int]:
     uploads: list[DocumentUpload] = []
     try:
         with zipfile.ZipFile(zip_path) as archive:
-            total_uncompressed = 0
             for info in archive.infolist():
                 if info.flag_bits & 0x1:
                     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ZIP cifrado no permitido.")
@@ -253,14 +334,24 @@ def _extract_docx_from_zip(zip_filename: str, zip_path: Path, tmp_dir: Path) -> 
                     continue
                 if not safe_name.lower().endswith(".docx"):
                     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Entrada no soportada en ZIP: {safe_name}")
-                total_uncompressed += info.file_size
-                if total_uncompressed > MAX_ZIP_UNCOMPRESSED_BYTES:
-                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="ZIP bomb detectado: contenido descomprimido excede el limite.")
+                if info.file_size > MAX_FILE_BYTES:
+                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Entrada DOCX demasiado grande dentro del ZIP.")
+                current_uncompressed_bytes += info.file_size
+                if current_uncompressed_bytes > MAX_ZIP_UNCOMPRESSED_BYTES:
+                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="ZIP bomb detectado: contenido descomprimido excede el limite global del lote.")
                 if info.compress_size and (info.file_size / max(info.compress_size, 1)) > MAX_ZIP_COMPRESSION_RATIO:
                     raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="ZIP bomb detectado: ratio de compresion inseguro.")
                 target = tmp_dir / f"zip_{len(uploads)}_{safe_name}"
                 with archive.open(info) as source, target.open("wb") as destination:
-                    shutil.copyfileobj(source, destination, CHUNK_SIZE)
+                    copied = 0
+                    while True:
+                        chunk = source.read(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        copied += len(chunk)
+                        if copied > MAX_FILE_BYTES:
+                            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Entrada DOCX demasiado grande dentro del ZIP.")
+                        destination.write(chunk)
                 _validate_docx_file(target)
                 uploads.append(
                     DocumentUpload(
@@ -272,7 +363,7 @@ def _extract_docx_from_zip(zip_filename: str, zip_path: Path, tmp_dir: Path) -> 
                 )
     except zipfile.BadZipFile as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ZIP invalido.") from exc
-    return uploads
+    return uploads, current_uncompressed_bytes
 
 
 def _safe_zip_docx_name(raw_name: str) -> str:

@@ -13,6 +13,7 @@ class BatchStatus(str, Enum):
     COMPLETED = "completed"
     PARTIAL_ERROR = "partial_error"
     ERROR = "error"
+    PUBLICATION_FAILED = "publication_failed"
 
 
 class DocumentProcessingStatus(str, Enum):
@@ -95,6 +96,14 @@ class AcceptedBatchResponse(BaseModel):
     batch_key: str
     task_id: str
     status: BatchStatus
+    status_url: str
+
+
+class AcceptedReparseResponse(BaseModel):
+    document_id: int
+    parse_run_id: int
+    task_id: str
+    status: str
     status_url: str
 
 
