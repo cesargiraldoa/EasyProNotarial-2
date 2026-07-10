@@ -70,8 +70,7 @@ def _ensure_vector_extension(bind) -> bool:
     exists = bind.execute(sa.text("select exists (select 1 from pg_extension where extname = 'vector')")).scalar()
     if exists:
         return True
-    with op.get_context().autocommit_block():
-        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     return bool(bind.execute(sa.text("select exists (select 1 from pg_extension where extname = 'vector')")).scalar())
 
 
