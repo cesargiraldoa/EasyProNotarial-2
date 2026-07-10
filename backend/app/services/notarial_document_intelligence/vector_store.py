@@ -57,13 +57,13 @@ class NotarialVectorStore:
         document_id: int | None,
     ) -> list[VectorSearchResult]:
         sql = """
-            select id, source_type, source_id, embedding <-> cast(:query_vector as vector) as distance
+            select id, source_type, source_id, embedding <=> cast(:query_vector as vector) as distance
             from notarial_document_embeddings
             where notary_id = :notary_id
               and embedding_version_id = :embedding_version_id
               and (:document_id is null or document_id = :document_id)
               and embedding is not null
-            order by embedding <-> cast(:query_vector as vector)
+            order by embedding <=> cast(:query_vector as vector)
             limit :limit
         """
         rows = self.db.execute(

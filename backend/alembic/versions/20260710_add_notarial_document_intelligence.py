@@ -26,11 +26,22 @@ class VectorType(UserDefinedType):
         return f"vector({self.dimensions})"
 
 
-BATCH_STATUSES = ("initialized", "queued", "running", "completed", "partial_error", "error")
+BATCH_STATUSES = ("initialized", "queued", "running", "completed", "partial_error", "error", "publication_failed")
 DOCUMENT_STATUSES = ("stored", "parsed", "reused", "error", "unsupported")
-PARSE_RUN_STATUSES = ("running", "completed", "error")
+PARSE_RUN_STATUSES = ("queued", "running", "completed", "error")
 REVIEW_STATUSES = ("pending", "accepted", "rejected", "blocked")
 EMBEDDING_DIMENSIONS = 384
+NOTARIAL_INTELLIGENCE_MODULE = "notarial_intelligence"
+NOTARIAL_INTELLIGENCE_ROLE_ACCESS = {
+    "super_admin": True,
+    "admin_notary": True,
+    "notary": True,
+    "notary_titular": True,
+    "notary_suplente": True,
+    "approver": True,
+    "protocolist": True,
+    "client": False,
+}
 
 
 def _table_exists(inspector: sa.Inspector, table_name: str) -> bool:
@@ -67,6 +78,46 @@ def _embedding_type(bind, vector_enabled: bool) -> sa.types.TypeEngine:
     if bind.dialect.name == "postgresql" and vector_enabled:
         return VectorType(EMBEDDING_DIMENSIONS)
     return sa.Text()
+
+
+def _seed_notarial_intelligence_permissions(bind, inspector: sa.Inspector) -> None:
+    if not _table_exists(inspector, "roles") or not _table_exists(inspector, "role_permissions"):
+        return
+
+    roles = sa.table(
+        "roles",
+        sa.column("id", sa.Integer),
+        sa.column("code", sa.String),
+    )
+    role_permissions = sa.table(
+        "role_permissions",
+        sa.column("id", sa.Integer),
+        sa.column("role_id", sa.Integer),
+        sa.column("module_code", sa.String),
+        sa.column("can_access", sa.Boolean),
+    )
+    role_rows = bind.execute(sa.select(roles.c.id, roles.c.code)).all()
+    role_ids_by_code = {row.code: row.id for row in role_rows}
+    for role_code, can_access in NOTARIAL_INTELLIGENCE_ROLE_ACCESS.items():
+        role_id = role_ids_by_code.get(role_code)
+        if role_id is None:
+            continue
+        existing = bind.execute(
+            sa.select(role_permissions.c.id).where(
+                role_permissions.c.role_id == role_id,
+                role_permissions.c.module_code == NOTARIAL_INTELLIGENCE_MODULE,
+            )
+        ).first()
+        if existing is None:
+            bind.execute(
+                sa.insert(role_permissions).values(
+                    role_id=role_id,
+                    module_code=NOTARIAL_INTELLIGENCE_MODULE,
+                    can_access=can_access,
+                )
+            )
+        else:
+            bind.execute(sa.update(role_permissions).where(role_permissions.c.id == existing.id).values(can_access=can_access))
 
 
 def _create_index_if_missing(
@@ -428,13 +479,21 @@ def upgrade() -> None:
             "ix_notarial_embeddings_embedding_hnsw",
             ["embedding"],
             postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_l2_ops"},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
         )
+
+    _seed_notarial_intelligence_permissions(bind, sa.inspect(bind))
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
+    if _table_exists(inspector, "role_permissions"):
+        role_permissions = sa.table(
+            "role_permissions",
+            sa.column("module_code", sa.String),
+        )
+        bind.execute(sa.delete(role_permissions).where(role_permissions.c.module_code == NOTARIAL_INTELLIGENCE_MODULE))
     for table_name in (
         "notarial_document_decisions",
         "notarial_document_evidences",

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+from sqlalchemy.exc import DisconnectionError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
@@ -28,6 +33,21 @@ from app.services.notarial_document_intelligence.contracts import (
 from app.services.notarial_document_intelligence.parser import NotarialDocumentParser
 from app.services.notarial_document_intelligence.storage import NotarialIntelligenceStorage, StoredDocumentResult
 from app.services.storage import download_storage_bytes
+
+
+_PARSE_VERSION_LOCKS: dict[tuple[int, int], threading.Lock] = {}
+_PARSE_VERSION_LOCKS_GUARD = threading.Lock()
+
+
+class PermanentDocumentProcessingError(Exception):
+    """A deterministic document or validation failure that must not be retried by Celery."""
+
+
+class TransientDocumentProcessingError(Exception):
+    """An infrastructure failure that can be retried safely by Celery."""
+
+
+TRANSIENT_PROCESSING_ERRORS = (TransientDocumentProcessingError, OperationalError, DisconnectionError, TimeoutError, ConnectionError)
 
 
 class NotarialDocumentIngestionService:
@@ -75,11 +95,12 @@ class NotarialDocumentIngestionService:
         batch = self.db.get(NotarialDocumentBatch, batch_id)
         if batch is None or batch.notary_id != self.notary_id:
             raise ValueError(f"Batch {batch_id} not found.")
-        if batch.status not in {BatchStatus.QUEUED.value, BatchStatus.PARTIAL_ERROR.value, BatchStatus.ERROR.value, BatchStatus.RUNNING.value}:
+        if batch.status not in {BatchStatus.QUEUED.value, BatchStatus.PUBLICATION_FAILED.value, BatchStatus.PARTIAL_ERROR.value, BatchStatus.ERROR.value, BatchStatus.RUNNING.value}:
             raise ValueError(f"Batch {batch_id} is not queued for processing.")
 
         batch.status = BatchStatus.RUNNING.value
         batch.error_message = None
+        batch.finished_at = None
         self.db.commit()
 
         summaries: list[IngestedDocumentSummary] = []
@@ -102,6 +123,9 @@ class NotarialDocumentIngestionService:
                 summaries.append(summary)
                 warnings.extend(summary.warnings)
                 self.db.commit()
+            except TransientDocumentProcessingError:
+                self.db.rollback()
+                raise
             except Exception as exc:
                 self.db.rollback()
                 item = self.db.get(NotarialDocumentBatchItem, item.id)
@@ -122,13 +146,57 @@ class NotarialDocumentIngestionService:
         self.db.commit()
         return self._batch_result(batch, summaries, warnings)
 
-    def reparse_document(self, document_id: int, commit: bool = True) -> IngestedDocumentSummary:
+    def queue_reparse_document(self, document_id: int) -> NotarialDocumentParseRun:
+        document = self.get_document_for_notary(document_id)
+        parse_run = self._create_parse_run(document.id, self.parser.parser_name, "pending", status="queued")
+        self.db.commit()
+        return parse_run
+
+    def get_document_for_notary(self, document_id: int) -> NotarialDocument:
+        document = self.db.get(NotarialDocument, document_id)
+        if document is None or document.notary_id != self.notary_id:
+            raise ValueError(f"Document {document_id} not found.")
+        return document
+
+    def mark_batch_publication_failed(self, batch_id: int, error_message: str) -> None:
+        batch = self.db.get(NotarialDocumentBatch, batch_id)
+        if batch is None or batch.notary_id != self.notary_id:
+            return
+        batch.status = BatchStatus.PUBLICATION_FAILED.value
+        batch.error_message = f"publication_failed: {error_message}"
+        batch.metadata_json = _merge_json(batch.metadata_json, {"celery": {"publication_status": "failed"}})
+        batch.finished_at = _now()
+        self.db.commit()
+
+    def mark_batch_published(self, batch_id: int, task_id: str) -> None:
+        batch = self.db.get(NotarialDocumentBatch, batch_id)
+        if batch is None or batch.notary_id != self.notary_id:
+            return
+        batch.metadata_json = _merge_json(batch.metadata_json, {"celery": {"publication_status": "published", "task_id": task_id}})
+        self.db.commit()
+
+    def mark_parse_run_publication_failed(self, parse_run_id: int, error_message: str) -> None:
+        parse_run = self.db.get(NotarialDocumentParseRun, parse_run_id)
+        if parse_run is None or parse_run.notary_id != self.notary_id:
+            return
+        parse_run.status = "error"
+        parse_run.error_message = f"publication_failed: {error_message}"
+        parse_run.finished_at = _now()
+        document = self.db.get(NotarialDocument, parse_run.document_id)
+        if document is not None:
+            document.processing_status = DocumentProcessingStatus.ERROR.value
+            document.error_message = parse_run.error_message
+        self.db.commit()
+
+    def reparse_document(self, document_id: int, commit: bool = True, parse_run_id: int | None = None) -> IngestedDocumentSummary:
         document = self.db.get(NotarialDocument, document_id)
         if document is None or document.notary_id != self.notary_id:
             raise ValueError(f"Document {document_id} not found.")
 
-        parse_run = self._create_parse_run(document.id, self.parser.parser_name, "pending")
+        parse_run = self._load_or_create_parse_run(document.id, parse_run_id)
         try:
+            parse_run.status = "running"
+            self.db.flush()
             content = download_storage_bytes(document.storage_path)
             parsed = self.parser.parse_bytes(content, filename=document.filename)
             parse_run.parser_name = parsed.parser_name
@@ -146,12 +214,13 @@ class NotarialDocumentIngestionService:
             parse_run.status = "error"
             parse_run.finished_at = _now()
             parse_run.error_message = str(exc)
+            parse_run.metadata_json = _json({"failure_type": type(exc).__name__})
             document.error_message = str(exc)
-            if commit:
-                self.db.commit()
-            else:
-                self.db.flush()
-            raise
+            document.processing_status = DocumentProcessingStatus.ERROR.value
+            self.db.commit()
+            if _is_transient_error(exc):
+                raise TransientDocumentProcessingError(str(exc)) from exc
+            raise PermanentDocumentProcessingError(str(exc)) from exc
 
         if commit:
             self.db.commit()
@@ -168,6 +237,16 @@ class NotarialDocumentIngestionService:
             reused_existing_document=False,
             warnings=warnings,
         )
+
+    def _load_or_create_parse_run(self, document_id: int, parse_run_id: int | None) -> NotarialDocumentParseRun:
+        if parse_run_id is None:
+            return self._create_parse_run(document_id, self.parser.parser_name, "pending")
+        parse_run = self.db.get(NotarialDocumentParseRun, parse_run_id)
+        if parse_run is None or parse_run.notary_id != self.notary_id or parse_run.document_id != document_id:
+            raise ValueError(f"Parse run {parse_run_id} not found.")
+        if parse_run.status == "completed":
+            raise ValueError(f"Parse run {parse_run_id} is already completed.")
+        return parse_run
 
     def _create_batch(self, request: IngestBatchRequest, status: BatchStatus) -> NotarialDocumentBatch:
         batch = NotarialDocumentBatch(
@@ -288,26 +367,50 @@ class NotarialDocumentIngestionService:
             )
             return existing, False
 
-    def _create_parse_run(self, document_id: int, parser_name: str, parser_version: str) -> NotarialDocumentParseRun:
-        current_version = (
-            self.db.query(NotarialDocumentParseRun.parse_version)
-            .filter(NotarialDocumentParseRun.document_id == document_id, NotarialDocumentParseRun.notary_id == self.notary_id)
-            .order_by(NotarialDocumentParseRun.parse_version.desc())
-            .first()
-        )
-        parse_run = NotarialDocumentParseRun(
-            notary_id=self.notary_id,
-            document_id=document_id,
-            parse_version=((current_version[0] if current_version else 0) + 1),
-            parser_name=parser_name,
-            parser_version=parser_version,
-            status="running",
-            is_active=False,
-            started_at=_now(),
-        )
-        self.db.add(parse_run)
-        self.db.flush()
-        return parse_run
+    def _create_parse_run(self, document_id: int, parser_name: str, parser_version: str, status: str = "running") -> NotarialDocumentParseRun:
+        for _attempt in range(5):
+            try:
+                with self._parse_version_lock(document_id):
+                    current_version = (
+                        self.db.query(NotarialDocumentParseRun.parse_version)
+                        .filter(NotarialDocumentParseRun.document_id == document_id, NotarialDocumentParseRun.notary_id == self.notary_id)
+                        .order_by(NotarialDocumentParseRun.parse_version.desc())
+                        .first()
+                    )
+                    parse_run = NotarialDocumentParseRun(
+                        notary_id=self.notary_id,
+                        document_id=document_id,
+                        parse_version=((current_version[0] if current_version else 0) + 1),
+                        parser_name=parser_name,
+                        parser_version=parser_version,
+                        status=status,
+                        is_active=False,
+                        started_at=_now(),
+                    )
+                    with self.db.begin_nested():
+                        self.db.add(parse_run)
+                        self.db.flush()
+                    return parse_run
+            except IntegrityError:
+                self.db.rollback()
+        raise TransientDocumentProcessingError(f"Could not allocate parse_version for document {document_id}.")
+
+    @contextmanager
+    def _parse_version_lock(self, document_id: int) -> Iterator[None]:
+        bind = self.db.get_bind()
+        if bind.dialect.name == "postgresql":
+            self.db.execute(
+                text("select pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"notarial_parse_run:{self.notary_id}:{document_id}"},
+            )
+            yield
+            return
+
+        key = (self.notary_id, document_id)
+        with _PARSE_VERSION_LOCKS_GUARD:
+            lock = _PARSE_VERSION_LOCKS.setdefault(key, threading.Lock())
+        with lock:
+            yield
 
     def _persist_parsed_blocks(self, document_id: int, parse_run_id: int, parsed: ParsedDocument) -> None:
         section = NotarialDocumentSection(
@@ -430,6 +533,23 @@ class NotarialDocumentIngestionService:
 
 def _json(value: object) -> str:
     return json.dumps(value or {}, ensure_ascii=False, sort_keys=True)
+
+
+def _merge_json(raw: str | None, patch: dict) -> str:
+    try:
+        payload = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    payload.update(patch)
+    return _json(payload)
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    if isinstance(exc, TRANSIENT_PROCESSING_ERRORS):
+        return True
+    if isinstance(exc, HTTPException):
+        return exc.status_code >= 500
+    return False
 
 
 def _now() -> datetime:

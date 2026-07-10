@@ -7,6 +7,8 @@ from app.core.config import get_settings
 from app.services.notarial_document_intelligence.hashing import sha256_bytes, sha256_file
 from app.services.storage import _has_supabase_credentials, _upload_to_supabase, sanitize_storage_filename
 
+MAX_SUPABASE_DOCUMENT_UPLOAD_BYTES = 50 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class StoredDocumentResult:
@@ -49,6 +51,9 @@ class NotarialIntelligenceStorage:
         extension = Path(safe_name).suffix.lower() or ".docx"
         object_key = f"{self.prefix}/notary_{notary_id}/documents/{content_hash[:2]}/{content_hash}{extension}"
         if self.use_supabase:
+            file_size = len(content) if content is not None else Path(source_path).stat().st_size
+            if file_size > MAX_SUPABASE_DOCUMENT_UPLOAD_BYTES:
+                raise ValueError("Supabase upload rejected: document exceeds bounded single-file upload size.")
             payload = content if content is not None else Path(source_path).read_bytes()
             _upload_to_supabase(self.bucket, object_key, payload, content_type)
             return StoredDocumentResult(
@@ -57,7 +62,7 @@ class NotarialIntelligenceStorage:
                 storage_path=f"supabase://{self.bucket}/{object_key}",
                 storage_backend="supabase",
                 content_type=content_type,
-                file_size_bytes=len(payload),
+                file_size_bytes=file_size,
             )
 
         target = self.local_root / f"notary_{notary_id}" / "documents" / content_hash[:2] / f"{content_hash}{extension}"
