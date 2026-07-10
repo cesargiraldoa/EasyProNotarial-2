@@ -27,6 +27,11 @@ class FieldAliasBuilder:
             normalized = self.normalizer.normalize(raw_code)
             canonical, status, confidence = self.normalizer.suggest_canonical(normalized, all_normalized)
             reason = "rule"
+            if canonical != normalized and not self._is_safe_rule_alias(normalized, canonical):
+                canonical = normalized
+                status = "conflict"
+                confidence = min(confidence, 0.65)
+                reason = "blocked_semantic_rule"
             if canonical == normalized:
                 canonical, status, confidence, reason = self._canonical_by_similarity(
                     normalized,
@@ -61,12 +66,14 @@ class FieldAliasBuilder:
             other = self.normalizer.normalize(other_raw)
             if other == normalized:
                 continue
+            if not self.normalizer.can_alias(normalized, other):
+                continue
             other_tokens = self.normalizer.tokens(other)
             token_score = self._jaccard(tokens, other_tokens)
             text_score = SequenceMatcher(None, normalized, other).ratio()
             context_score = self._context_overlap(contexts_by_code.get(normalized, []), contexts_by_code.get(other_raw, []))
             score = (token_score * 0.55) + (text_score * 0.3) + (context_score * 0.15)
-            if score >= 0.55:
+            if score >= 0.72:
                 candidates.append((score, frequency, other))
 
         if not candidates:
@@ -77,6 +84,13 @@ class FieldAliasBuilder:
         ambiguous = len(candidates) > 1 and abs(candidates[0][0] - candidates[1][0]) < 0.08
         canonical = best[2] if best[1] >= field_frequency.get(normalized, 0) else normalized
         return canonical, "conflict" if ambiguous else "suggested", min(best[0], 0.88), "similarity"
+
+    def _is_safe_rule_alias(self, normalized: str, canonical: str) -> bool:
+        if normalized == canonical:
+            return True
+        if canonical == "VALOR_VENTA" and self.normalizer.semantic_category(normalized) == "VALOR_VENTA":
+            return True
+        return self.normalizer.can_alias(normalized, canonical)
 
     @staticmethod
     def _jaccard(left: set[str], right: set[str]) -> float:
