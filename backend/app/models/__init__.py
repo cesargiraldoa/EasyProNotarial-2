@@ -31,6 +31,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentFamilyMember,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
+    NotarialTaskPublication,
     NotarialEmbeddingVersion,
 )
 from app.models.numbering_sequence import NumberingSequence

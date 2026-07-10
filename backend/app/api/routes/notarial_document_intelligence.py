@@ -22,7 +22,12 @@ from app.models.notarial_document_intelligence import (
 )
 from app.models.user import User
 from app.services.notarial_document_intelligence.contracts import AcceptedBatchResponse, AcceptedReparseResponse, BatchStatus, DocumentUpload, IngestBatchRequest, IngestBatchResult
-from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
+from app.services.notarial_document_intelligence.ingestion import (
+    NotarialDocumentIngestionService,
+    TASK_PROCESS_QUEUED_BATCH,
+    TASK_REPARSE_DOCUMENT,
+    TaskPublicationError,
+)
 from app.workers.document_worker import process_queued_document_batch_task, reparse_document_task
 
 
@@ -74,6 +79,11 @@ class ParseRunDetailResponse(BaseModel):
     metadata: dict[str, Any]
 
 
+class PublicationDispatchResponse(BaseModel):
+    dispatched: int
+    results: list[dict[str, Any]]
+
+
 def _current_notary_id(current_user: User) -> int:
     notary_id = getattr(current_user, "default_notary_id", None)
     if notary_id is None:
@@ -113,16 +123,15 @@ async def ingest_batch(
                 raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
             queued = service.queue_batch(request)
             try:
-                task = process_queued_document_batch_task.delay(queued.batch_id, notary_id)
-            except Exception as exc:
-                service.mark_batch_publication_failed(queued.batch_id, str(exc))
+                publication = service.get_publication_for_target("batch", queued.batch_id)
+                task_id = service.publish_task_publication(publication.id, process_queued_document_batch_task.delay)
+            except TaskPublicationError as exc:
                 raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No fue posible publicar la tarea documental.") from exc
-            service.mark_batch_published(queued.batch_id, task.id)
             response.status_code = status.HTTP_202_ACCEPTED
             return AcceptedBatchResponse(
                 batch_id=queued.batch_id,
                 batch_key=queued.batch_key,
-                task_id=task.id,
+                task_id=task_id,
                 status=BatchStatus.QUEUED,
                 status_url=f"{get_settings().api_v1_prefix}/notarial-intelligence/batches/{queued.batch_id}",
             )
@@ -262,19 +271,36 @@ def reparse_document(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     try:
-        task = reparse_document_task.delay(document_id, notary_id, parse_run.id)
-    except Exception as exc:
-        service.mark_parse_run_publication_failed(parse_run.id, str(exc))
+        publication = service.get_publication_for_target("reparse", parse_run.id)
+        task_id = service.publish_task_publication(publication.id, reparse_document_task.delay)
+    except TaskPublicationError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No fue posible publicar el reparse documental.") from exc
     if response is not None:
         response.status_code = status.HTTP_202_ACCEPTED
     return AcceptedReparseResponse(
         document_id=document_id,
         parse_run_id=parse_run.id,
-        task_id=task.id,
+        task_id=task_id,
         status=parse_run.status,
         status_url=f"{get_settings().api_v1_prefix}/notarial-intelligence/documents/{document_id}/parse-runs/{parse_run.id}",
     )
+
+
+@router.post("/publications/reconcile", response_model=PublicationDispatchResponse)
+def reconcile_publications(
+    service: NotarialDocumentIngestionService = Depends(get_ingestion_service),
+    current_user: User = Depends(require_permission("notarial_intelligence.ingest", scoped_to_default_notary=True)),
+):
+    _current_notary_id(current_user)
+    publishers = {}
+    if hasattr(process_queued_document_batch_task, "delay"):
+        publishers[TASK_PROCESS_QUEUED_BATCH] = process_queued_document_batch_task.delay
+    if hasattr(reparse_document_task, "delay"):
+        publishers[TASK_REPARSE_DOCUMENT] = reparse_document_task.delay
+    if not publishers:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
+    results = service.dispatch_recoverable_publications(publishers)
+    return PublicationDispatchResponse(dispatched=len(results), results=results)
 
 
 async def _read_uploads(files: list[UploadFile], tmp_dir: Path) -> list[DocumentUpload]:

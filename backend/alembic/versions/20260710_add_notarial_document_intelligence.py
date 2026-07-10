@@ -29,6 +29,7 @@ class VectorType(UserDefinedType):
 BATCH_STATUSES = ("initialized", "queued", "running", "completed", "partial_error", "error", "publication_failed")
 DOCUMENT_STATUSES = ("stored", "parsed", "reused", "error", "unsupported")
 PARSE_RUN_STATUSES = ("queued", "running", "completed", "error")
+PUBLICATION_STATUSES = ("pending", "publishing", "published", "publication_failed")
 REVIEW_STATUSES = ("pending", "accepted", "rejected", "blocked")
 EMBEDDING_DIMENSIONS = 384
 NOTARIAL_INTELLIGENCE_MODULE = "notarial_intelligence"
@@ -253,6 +254,30 @@ def upgrade() -> None:
         )
         inspector = sa.inspect(bind)
 
+    if not _table_exists(inspector, "notarial_task_publications"):
+        op.create_table(
+            "notarial_task_publications",
+            sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
+            sa.Column("request_key", sa.String(length=180), nullable=False),
+            sa.Column("notary_id", sa.Integer(), sa.ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("target_type", sa.String(length=40), nullable=False),
+            sa.Column("target_id", sa.Integer(), nullable=False),
+            sa.Column("document_id", sa.Integer(), sa.ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True),
+            sa.Column("parse_run_id", sa.Integer(), sa.ForeignKey("notarial_document_parse_runs.id", ondelete="CASCADE"), nullable=True),
+            sa.Column("task_name", sa.String(length=180), nullable=False),
+            sa.Column("task_args_json", sa.Text(), nullable=False, server_default=sa.text("'[]'")),
+            sa.Column("status", sa.String(length=40), nullable=False, server_default=sa.text("'pending'")),
+            sa.Column("attempts", sa.Integer(), nullable=False, server_default=sa.text("0")),
+            sa.Column("last_error", sa.Text(), nullable=True),
+            sa.Column("task_id", sa.String(length=180), nullable=True),
+            sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("metadata_json", sa.Text(), nullable=False, server_default=sa.text("'{}'")),
+            *_timestamps(),
+            sa.CheckConstraint(f"status IN ({_quoted(PUBLICATION_STATUSES)})", name="ck_notarial_task_publications_status"),
+            sa.UniqueConstraint("request_key", name="uq_notarial_task_publications_request_key"),
+        )
+        inspector = sa.inspect(bind)
+
     if not _table_exists(inspector, "notarial_document_sections"):
         op.create_table(
             "notarial_document_sections",
@@ -451,6 +476,9 @@ def upgrade() -> None:
         ("notarial_document_batch_items", "ix_notarial_batch_items_notary_document", ["notary_id", "document_id"], False),
         ("notarial_document_parse_runs", "ix_notarial_parse_runs_notary_document", ["notary_id", "document_id"], False),
         ("notarial_document_parse_runs", "ix_notarial_parse_runs_document_active", ["document_id", "is_active"], False),
+        ("notarial_task_publications", "ix_notarial_task_publications_notary_status", ["notary_id", "status"], False),
+        ("notarial_task_publications", "ix_notarial_task_publications_target", ["target_type", "target_id"], False),
+        ("notarial_task_publications", "ix_notarial_task_publications_parse_run", ["parse_run_id"], False),
         ("notarial_document_sections", "ix_notarial_sections_notary_document", ["notary_id", "document_id"], False),
         ("notarial_document_sections", "ix_notarial_sections_parse_run", ["parse_run_id"], False),
         ("notarial_document_blocks", "ix_notarial_blocks_notary_document", ["notary_id", "document_id"], False),
@@ -505,6 +533,7 @@ def downgrade() -> None:
         "notarial_document_entities",
         "notarial_document_blocks",
         "notarial_document_sections",
+        "notarial_task_publications",
         "notarial_document_parse_runs",
         "notarial_document_batch_items",
         "notarial_documents",

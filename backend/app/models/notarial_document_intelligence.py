@@ -137,6 +137,29 @@ class NotarialDocumentParseRun(Base, TimestampMixin):
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
+class NotarialTaskPublication(Base, TimestampMixin):
+    __tablename__ = "notarial_task_publications"
+    __table_args__ = (
+        UniqueConstraint("request_key", name="uq_notarial_task_publications_request_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    parse_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="CASCADE"), nullable=True, index=True)
+    task_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    task_args_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
 class NotarialDocumentEntity(Base, TimestampMixin):
     __tablename__ = "notarial_document_entities"
 

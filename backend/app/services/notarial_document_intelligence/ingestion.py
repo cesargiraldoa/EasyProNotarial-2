@@ -6,7 +6,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from sqlalchemy import text
 from sqlalchemy.exc import DisconnectionError, IntegrityError, OperationalError
@@ -20,6 +20,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentBlock,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
+    NotarialTaskPublication,
 )
 from app.services.notarial_document_intelligence.contracts import (
     BatchStatus,
@@ -48,6 +49,13 @@ class TransientDocumentProcessingError(Exception):
 
 
 TRANSIENT_PROCESSING_ERRORS = (TransientDocumentProcessingError, OperationalError, DisconnectionError, TimeoutError, ConnectionError)
+TASK_PROCESS_QUEUED_BATCH = "notarial_document_intelligence.document.process_queued_batch"
+TASK_REPARSE_DOCUMENT = "notarial_document_intelligence.document.reparse"
+PUBLICATION_RECOVERABLE_STATUSES = {"pending", "publishing", "publication_failed"}
+
+
+class TaskPublicationError(Exception):
+    """Raised when a task publication intent cannot be delivered to the broker."""
 
 
 class NotarialDocumentIngestionService:
@@ -88,6 +96,15 @@ class NotarialDocumentIngestionService:
             batch.status = BatchStatus.PARTIAL_ERROR.value if summaries else BatchStatus.ERROR.value
             batch.error_message = f"{errors} document(s) failed while queuing ingestion."
             batch.finished_at = _now()
+        else:
+            self._ensure_task_publication(
+                request_key=f"batch:{batch.id}",
+                target_type="batch",
+                target_id=batch.id,
+                task_name=TASK_PROCESS_QUEUED_BATCH,
+                task_args=[batch.id, self.notary_id],
+                metadata={"source": "queue_batch"},
+            )
         self.db.commit()
         return self._batch_result(batch, summaries, warnings)
 
@@ -117,6 +134,10 @@ class NotarialDocumentIngestionService:
             if item.status == "processed":
                 summaries.append(self._summary_for_document(document, reused=True))
                 continue
+            if item.status == "processing":
+                continue
+            item.status = "processing"
+            self.db.commit()
             try:
                 summary = self.reparse_document(document.id, commit=False)
                 item.status = "processed"
@@ -124,7 +145,10 @@ class NotarialDocumentIngestionService:
                 warnings.extend(summary.warnings)
                 self.db.commit()
             except TransientDocumentProcessingError:
-                self.db.rollback()
+                item = self.db.get(NotarialDocumentBatchItem, item.id)
+                if item is not None:
+                    item.status = "queued"
+                    self.db.commit()
                 raise
             except Exception as exc:
                 self.db.rollback()
@@ -149,6 +173,16 @@ class NotarialDocumentIngestionService:
     def queue_reparse_document(self, document_id: int) -> NotarialDocumentParseRun:
         document = self.get_document_for_notary(document_id)
         parse_run = self._create_parse_run(document.id, self.parser.parser_name, "pending", status="queued")
+        self._ensure_task_publication(
+            request_key=f"reparse:{parse_run.id}",
+            target_type="reparse",
+            target_id=parse_run.id,
+            task_name=TASK_REPARSE_DOCUMENT,
+            task_args=[document.id, self.notary_id, parse_run.id],
+            document_id=document.id,
+            parse_run_id=parse_run.id,
+            metadata={"source": "queue_reparse_document"},
+        )
         self.db.commit()
         return parse_run
 
@@ -184,9 +218,79 @@ class NotarialDocumentIngestionService:
         parse_run.finished_at = _now()
         document = self.db.get(NotarialDocument, parse_run.document_id)
         if document is not None:
-            document.processing_status = DocumentProcessingStatus.ERROR.value
             document.error_message = parse_run.error_message
+            document.metadata_json = _merge_json(
+                document.metadata_json,
+                {"last_reparse_error": parse_run.error_message, "last_reparse_failed_at": _now().isoformat()},
+            )
+            if not self._has_active_parse_run(document.id):
+                document.processing_status = DocumentProcessingStatus.ERROR.value
         self.db.commit()
+
+    def publish_task_publication(self, publication_id: int, delay_callable: Callable[..., object]) -> str:
+        publication = self._load_publication(publication_id)
+        if publication.status == "published" and publication.task_id:
+            return publication.task_id
+        if publication.status not in PUBLICATION_RECOVERABLE_STATUSES:
+            raise ValueError(f"Publication {publication_id} cannot be dispatched from status {publication.status}.")
+
+        publication.status = "publishing"
+        publication.attempts += 1
+        publication.last_error = None
+        self.db.commit()
+
+        try:
+            result = delay_callable(*_json_list(publication.task_args_json))
+        except Exception as exc:
+            self._record_publication_failure(publication.id, str(exc))
+            raise TaskPublicationError(str(exc)) from exc
+
+        task_id = str(getattr(result, "id", "") or "")
+        if not task_id:
+            self._record_publication_failure(publication.id, "Celery did not return a task id.")
+            raise TaskPublicationError("Celery did not return a task id.")
+        self._record_publication_success(publication.id, task_id)
+        return task_id
+
+    def dispatch_recoverable_publications(self, publishers: dict[str, Callable[..., object]], limit: int = 50) -> list[dict[str, object]]:
+        publications = (
+            self.db.query(NotarialTaskPublication)
+            .filter(
+                NotarialTaskPublication.notary_id == self.notary_id,
+                NotarialTaskPublication.status.in_(sorted(PUBLICATION_RECOVERABLE_STATUSES)),
+            )
+            .order_by(NotarialTaskPublication.created_at.asc(), NotarialTaskPublication.id.asc())
+            .limit(limit)
+            .all()
+        )
+        results: list[dict[str, object]] = []
+        for publication in publications:
+            publisher = publishers.get(publication.task_name)
+            if publisher is None:
+                self._record_publication_failure(publication.id, f"No publisher registered for {publication.task_name}.")
+                results.append({"publication_id": publication.id, "status": "publication_failed", "error": "publisher_not_registered"})
+                continue
+            try:
+                task_id = self.publish_task_publication(publication.id, publisher)
+                results.append({"publication_id": publication.id, "status": "published", "task_id": task_id})
+            except TaskPublicationError as exc:
+                results.append({"publication_id": publication.id, "status": "publication_failed", "error": str(exc)})
+        return results
+
+    def get_publication_for_target(self, target_type: str, target_id: int) -> NotarialTaskPublication:
+        publication = (
+            self.db.query(NotarialTaskPublication)
+            .filter(
+                NotarialTaskPublication.notary_id == self.notary_id,
+                NotarialTaskPublication.target_type == target_type,
+                NotarialTaskPublication.target_id == target_id,
+            )
+            .order_by(NotarialTaskPublication.id.desc())
+            .first()
+        )
+        if publication is None:
+            raise ValueError(f"Publication for {target_type}:{target_id} not found.")
+        return publication
 
     def reparse_document(self, document_id: int, commit: bool = True, parse_run_id: int | None = None) -> IngestedDocumentSummary:
         document = self.db.get(NotarialDocument, document_id)
@@ -206,7 +310,10 @@ class NotarialDocumentIngestionService:
             document.parser_name = parsed.parser_name
             document.parser_version = parsed.parser_version
             document.processing_status = DocumentProcessingStatus.PARSED.value
-            document.metadata_json = _json({"reparse": parsed.metadata, "warnings": parsed.warnings})
+            document.metadata_json = _merge_json(
+                document.metadata_json,
+                {"reparse": parsed.metadata, "warnings": parsed.warnings, "last_reparse_error": None, "last_reparse_failed_at": None},
+            )
             document.error_message = None
             block_count = len(parsed.blocks)
             warnings = parsed.warnings
@@ -216,7 +323,12 @@ class NotarialDocumentIngestionService:
             parse_run.error_message = str(exc)
             parse_run.metadata_json = _json({"failure_type": type(exc).__name__})
             document.error_message = str(exc)
-            document.processing_status = DocumentProcessingStatus.ERROR.value
+            document.metadata_json = _merge_json(
+                document.metadata_json,
+                {"last_reparse_error": str(exc), "last_reparse_failed_at": _now().isoformat()},
+            )
+            if not self._has_active_parse_run(document.id):
+                document.processing_status = DocumentProcessingStatus.ERROR.value
             self.db.commit()
             if _is_transient_error(exc):
                 raise TransientDocumentProcessingError(str(exc)) from exc
@@ -261,6 +373,48 @@ class NotarialDocumentIngestionService:
         self.db.add(batch)
         self.db.flush()
         return batch
+
+    def _ensure_task_publication(
+        self,
+        request_key: str,
+        target_type: str,
+        target_id: int,
+        task_name: str,
+        task_args: list[object],
+        document_id: int | None = None,
+        parse_run_id: int | None = None,
+        metadata: dict | None = None,
+    ) -> NotarialTaskPublication:
+        existing = (
+            self.db.query(NotarialTaskPublication)
+            .filter(NotarialTaskPublication.request_key == request_key, NotarialTaskPublication.notary_id == self.notary_id)
+            .first()
+        )
+        if existing is not None:
+            return existing
+        publication = NotarialTaskPublication(
+            request_key=request_key,
+            notary_id=self.notary_id,
+            target_type=target_type,
+            target_id=target_id,
+            document_id=document_id,
+            parse_run_id=parse_run_id,
+            task_name=task_name,
+            task_args_json=json.dumps(task_args, ensure_ascii=False),
+            status="pending",
+            metadata_json=_json(metadata or {}),
+        )
+        try:
+            with self.db.begin_nested():
+                self.db.add(publication)
+                self.db.flush()
+            return publication
+        except IntegrityError:
+            return (
+                self.db.query(NotarialTaskPublication)
+                .filter(NotarialTaskPublication.request_key == request_key, NotarialTaskPublication.notary_id == self.notary_id)
+                .one()
+            )
 
     def _handle_batch_documents(
         self,
@@ -494,6 +648,47 @@ class NotarialDocumentIngestionService:
             return 0
         return self.db.query(NotarialDocumentBlock).filter(NotarialDocumentBlock.parse_run_id == active.id).count()
 
+    def _has_active_parse_run(self, document_id: int) -> bool:
+        return (
+            self.db.query(NotarialDocumentParseRun.id)
+            .filter(
+                NotarialDocumentParseRun.notary_id == self.notary_id,
+                NotarialDocumentParseRun.document_id == document_id,
+                NotarialDocumentParseRun.is_active.is_(True),
+                NotarialDocumentParseRun.status == "completed",
+            )
+            .first()
+            is not None
+        )
+
+    def _load_publication(self, publication_id: int) -> NotarialTaskPublication:
+        publication = self.db.get(NotarialTaskPublication, publication_id)
+        if publication is None or publication.notary_id != self.notary_id:
+            raise ValueError(f"Publication {publication_id} not found.")
+        return publication
+
+    def _record_publication_failure(self, publication_id: int, error_message: str) -> None:
+        publication = self._load_publication(publication_id)
+        publication.status = "publication_failed"
+        publication.last_error = error_message
+        if publication.target_type == "batch":
+            self.mark_batch_publication_failed(publication.target_id, error_message)
+        elif publication.target_type == "reparse" and publication.parse_run_id is not None:
+            self.mark_parse_run_publication_failed(publication.parse_run_id, error_message)
+        else:
+            self.db.commit()
+
+    def _record_publication_success(self, publication_id: int, task_id: str) -> None:
+        publication = self._load_publication(publication_id)
+        publication.status = "published"
+        publication.task_id = task_id
+        publication.last_error = None
+        publication.published_at = _now()
+        if publication.target_type == "batch":
+            self.mark_batch_published(publication.target_id, task_id)
+        else:
+            self.db.commit()
+
     def _link_batch_item(
         self,
         batch_id: int,
@@ -542,6 +737,14 @@ def _merge_json(raw: str | None, patch: dict) -> str:
         payload = {}
     payload.update(patch)
     return _json(payload)
+
+
+def _json_list(raw: str | None) -> list:
+    try:
+        payload = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+    return payload if isinstance(payload, list) else []
 
 
 def _is_transient_error(exc: Exception) -> bool:
