@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.services.storage import download_storage_bytes
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
     NotarialDocumentBatch,
@@ -155,6 +156,69 @@ class NotarialDocumentIngestionService:
             )
 
         self._link_batch_item(batch_id, item_index, upload, stored, document.id, "processed")
+        return IngestedDocumentSummary(
+            document_id=document.id,
+            filename=document.filename,
+            content_hash=document.content_hash,
+            status=DocumentProcessingStatus.PARSED,
+            block_count=len(parsed.blocks),
+            storage_path=document.storage_path,
+            reused_existing_document=False,
+            warnings=parsed.warnings,
+        )
+
+    def reparse_document(self, document_id: int) -> IngestedDocumentSummary:
+        document = self.db.get(NotarialDocument, document_id)
+        if document is None:
+            raise ValueError(f"Document {document_id} not found.")
+
+        content = download_storage_bytes(document.storage_path)
+        parsed = self.parser.parse_bytes(content, filename=document.filename)
+
+        self.db.query(NotarialDocumentBlock).filter(NotarialDocumentBlock.document_id == document.id).delete()
+        self.db.query(NotarialDocumentSection).filter(NotarialDocumentSection.document_id == document.id).delete()
+        self.db.flush()
+
+        section = NotarialDocumentSection(
+            document_id=document.id,
+            section_key="document",
+            title="Documento",
+            order_index=1,
+            start_block_index=1 if parsed.blocks else None,
+            end_block_index=len(parsed.blocks) if parsed.blocks else None,
+            classification_status="unknown",
+        )
+        self.db.add(section)
+        self.db.flush()
+
+        for block in parsed.blocks:
+            self.db.add(
+                NotarialDocumentBlock(
+                    document_id=document.id,
+                    section_id=section.id,
+                    block_index=block.block_index,
+                    block_type=block.block_type.value,
+                    location_key=block.location_key,
+                    text=block.text,
+                    text_hash=block.text_hash,
+                    char_start=block.metadata.get("char_start"),
+                    char_end=block.metadata.get("char_end"),
+                    table_index=block.table_index,
+                    row_index=block.row_index,
+                    cell_index=block.cell_index,
+                    paragraph_index=block.paragraph_index,
+                    fixed_variable_label=block.fixed_variable_label.value,
+                    metadata_json=_json(block.metadata),
+                )
+            )
+
+        document.parser_name = parsed.parser_name
+        document.parser_version = parsed.parser_version
+        document.processing_status = DocumentProcessingStatus.PARSED.value
+        document.metadata_json = _json({"reparse": parsed.metadata, "warnings": parsed.warnings})
+        document.error_message = None
+        self.db.commit()
+
         return IngestedDocumentSummary(
             document_id=document.id,
             filename=document.filename,

@@ -15,6 +15,7 @@ from app.modules.templates.router import router as templates_router
 from app.modules.template_builder.router import router as template_builder_router
 from app.modules.users.router import router as users_router
 from app.api.routes.inverse_conversion_engine import router as inverse_conversion_engine_router
+from app.api.routes.notarial_document_intelligence import router as notarial_document_intelligence_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -32,3 +33,4 @@ api_router.include_router(minuta_router)
 api_router.include_router(minutas_router)
 api_router.include_router(billing_router)
 api_router.include_router(inverse_conversion_engine_router)
+api_router.include_router(notarial_document_intelligence_router)

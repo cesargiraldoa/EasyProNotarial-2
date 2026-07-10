@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import zipfile
 from io import BytesIO
 from pathlib import Path
 
 from docx import Document
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.api.routes.notarial_document_intelligence import get_ingestion_service, router as intelligence_router
+from app.core.deps import get_current_user, get_db
 from app.models.base import Base
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
@@ -149,6 +154,115 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertGreaterEqual(db.query(NotarialDocumentBlock).count(), 500)
         finally:
             db.close()
+
+    def test_http_ingests_docx_and_returns_batch_detail(self):
+        client = self._build_api_client()
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote HTTP", "source_type": "test"},
+            files=[
+                (
+                    "files",
+                    (
+                        "minuta-http.docx",
+                        build_docx_bytes(apartment="901"),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total_documents"], 1)
+        self.assertEqual(payload["unique_documents"], 1)
+        self.assertEqual(payload["documents"][0]["block_count"], 4)
+
+        detail = client.get(f"/api/v1/notarial-intelligence/batches/{payload['batch_id']}")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["documents"][0]["filename"], "minuta_http.docx")
+
+    def test_http_ingests_zip_without_persisting_zip(self):
+        client = self._build_api_client()
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as archive:
+            archive.writestr("lote/minuta-1.docx", build_docx_bytes(apartment="1001"))
+            archive.writestr("lote/minuta-2.docx", build_docx_bytes(apartment="1002"))
+            archive.writestr("lote/ignorar.txt", b"no docx")
+
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote ZIP", "source_type": "zip"},
+            files=[("files", ("lote.zip", zip_buffer.getvalue(), "application/zip"))],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total_documents"], 2)
+        self.assertEqual(payload["unique_documents"], 2)
+        self.assertEqual(payload["error_documents"], 0)
+        stored_files = list((Path(self.tmp.name) / "storage").rglob("*"))
+        self.assertFalse(any(path.name == "lote.zip" for path in stored_files))
+
+    def test_http_reparse_document_rebuilds_blocks_from_storage(self):
+        client = self._build_api_client()
+        response = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "Lote reparse", "source_type": "test"},
+            files=[
+                (
+                    "files",
+                    (
+                        "minuta-reparse.docx",
+                        build_docx_bytes(apartment="1101"),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ),
+                )
+            ],
+        )
+        self.assertEqual(response.status_code, 200)
+        document = response.json()["documents"][0]
+        Path(document["storage_path"]).write_bytes(build_docx_bytes(apartment="2202", include_table=False))
+
+        reparse = client.post(f"/api/v1/notarial-intelligence/documents/{document['document_id']}/reparse")
+
+        self.assertEqual(reparse.status_code, 200)
+        self.assertEqual(reparse.json()["block_count"], 2)
+        db = self.Session()
+        try:
+            texts = [
+                row.text
+                for row in db.query(NotarialDocumentBlock)
+                .filter(NotarialDocumentBlock.document_id == document["document_id"])
+                .all()
+            ]
+            self.assertIn("APARTAMENTO: 2202", texts)
+            self.assertNotIn("APARTAMENTO: 1101", texts)
+        finally:
+            db.close()
+
+    def _build_api_client(self) -> TestClient:
+        app = FastAPI()
+        app.include_router(intelligence_router, prefix="/api/v1")
+
+        def override_get_db():
+            session = self.Session()
+            try:
+                yield session
+            finally:
+                session.close()
+
+        def override_service():
+            session = self.Session()
+            try:
+                yield NotarialDocumentIngestionService(session, storage=self.storage)
+            finally:
+                session.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_ingestion_service] = override_service
+        app.dependency_overrides[get_current_user] = lambda: object()
+        return TestClient(app)
 
 
 if __name__ == "__main__":
