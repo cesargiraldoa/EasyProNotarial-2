@@ -1,0 +1,122 @@
+name: Notarial Document Intelligence Real Services
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/notarial-document-intelligence-real.yml"
+      - "docker-compose.yml"
+  workflow_dispatch:
+
+jobs:
+  real-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: easypro2
+          POSTGRES_USER: easypro2
+          POSTGRES_PASSWORD: easypro2
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U easypro2 -d easypro2"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://easypro2:easypro2@127.0.0.1:5432/easypro2
+      REDIS_URL: redis://127.0.0.1:6379/0
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/1
+      SECRET_KEY: ci-not-secret
+      ENVIRONMENT: test
+      PYTHONPATH: ${{ github.workspace }}/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Alembic upgrade on PostgreSQL pgvector
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Verify vector extension and HNSW index
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          import os
+          engine = create_engine(os.environ["DATABASE_URL"])
+          with engine.connect() as conn:
+              assert conn.execute(text("select extname from pg_extension where extname='vector'")).scalar_one() == "vector"
+              idx = conn.execute(text("""
+                  select indexdef
+                  from pg_indexes
+                  where tablename='notarial_document_embeddings'
+                    and indexname='ix_notarial_embeddings_embedding_hnsw'
+              """)).scalar_one()
+              assert "hnsw" in idx.lower()
+              assert "vector_cosine_ops" in idx
+          PY
+
+      - name: Start Celery worker
+        working-directory: backend
+        run: |
+          celery -A app.workers.document_worker:celery_app worker -Q notarial-documental --pool=solo --loglevel=INFO > ../celery-worker.log 2>&1 &
+          echo $! > ../celery-worker.pid
+          python - <<'PY'
+          import subprocess, time
+          deadline = time.time() + 60
+          while time.time() < deadline:
+              result = subprocess.run(
+                  ["celery", "-A", "app.workers.document_worker:celery_app", "inspect", "ping"],
+                  text=True,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+              )
+              if "pong" in result.stdout:
+                  print(result.stdout)
+                  break
+              time.sleep(2)
+          else:
+              raise SystemExit("Celery worker did not respond to ping")
+          PY
+
+      - name: Real service validation
+        working-directory: backend
+        run: python -m app.tests.real_notarial_document_intelligence_check
+
+      - name: Backend test suite
+        working-directory: backend
+        run: python -m pytest app/tests -q
+
+      - name: Celery worker log on failure
+        if: failure()
+        run: cat celery-worker.log || true

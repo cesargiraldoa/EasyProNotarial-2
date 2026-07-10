@@ -1,6 +1,7 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.40
+alembic>=1.13.0
 psycopg2-binary==2.9.10
 pydantic-settings==2.8.1
 python-jose[cryptography]==3.4.0
@@ -13,6 +14,7 @@ python-dotenv
 requests>=2.31.0
 num2words>=0.5.13
 python-multipart>=0.0.7
+pytest>=8.0.0
 langgraph>=0.2.0
 pgvector>=0.3.0
 celery[redis]>=5.4.0
