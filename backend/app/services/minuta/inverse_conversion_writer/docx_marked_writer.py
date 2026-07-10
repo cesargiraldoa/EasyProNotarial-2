@@ -48,15 +48,25 @@ class DocxMarkedWriter:
         output_filename: str | None = None,
         allowed_field_codes: set[str] | None = None,
         field_aliases: dict[str, str] | None = None,
+        ambiguous_field_aliases: dict[str, set[str]] | None = None,
     ) -> MarkedDocxWriteResult:
         accepted = [candidate for candidate in candidates if candidate.is_accepted]
         if not accepted:
             raise ValueError("No hay candidatos aceptados para marcar.")
 
-        prepared_candidates = self._prepare_candidates(accepted, allowed_field_codes or set(), field_aliases or {})
+        prepared_candidates = self._prepare_candidates(
+            accepted,
+            allowed_field_codes or set(),
+            field_aliases or {},
+            ambiguous_field_aliases or {},
+        )
 
         document = Document(str(source_path))
         marked_occurrences = self._mark_candidates(document, prepared_candidates)
+        if marked_occurrences == 0:
+            raise ValueError(
+                "Ningun candidato aceptado pudo ubicarse en el documento con la location y el contexto suministrados."
+            )
 
         destination = Path(destination_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +101,7 @@ class DocxMarkedWriter:
         candidates: list[MarkedCandidate],
         allowed_field_codes: set[str],
         field_aliases: dict[str, str],
+        ambiguous_field_aliases: dict[str, set[str]],
     ) -> list[PreparedCandidate]:
         allowed = {self.normalizer.normalize(code) for code in allowed_field_codes if self.normalizer.normalize(code)}
         if not allowed:
@@ -100,10 +111,15 @@ class DocxMarkedWriter:
             for raw, canonical in field_aliases.items()
             if self.normalizer.normalize(raw) and self.normalizer.normalize(canonical)
         }
+        ambiguous_aliases = {
+            self.normalizer.normalize(raw): {self.normalizer.normalize(canonical) for canonical in canonicals}
+            for raw, canonicals in ambiguous_field_aliases.items()
+            if self.normalizer.normalize(raw)
+        }
 
         prepared: list[PreparedCandidate] = []
         for candidate in self._dedupe_candidates(candidates):
-            code = self._resolve_canonical_code(candidate, allowed, aliases)
+            code = self._resolve_canonical_code(candidate, allowed, aliases, ambiguous_aliases)
             marker = f"{{{{{code}}}}}"
             locations = frozenset(context.location for context in candidate.contexts if context.location)
             prepared.append(PreparedCandidate(candidate=candidate, marker=marker, locations=locations))
@@ -114,6 +130,7 @@ class DocxMarkedWriter:
         candidate: MarkedCandidate,
         allowed_field_codes: set[str],
         field_aliases: dict[str, str],
+        ambiguous_field_aliases: dict[str, set[str]],
     ) -> str:
         explicit = self.normalizer.normalize(candidate.canonical_field_code)
         if explicit:
@@ -123,6 +140,11 @@ class DocxMarkedWriter:
         source = self.normalizer.normalize(candidate.suggested_key)
         if not source:
             raise ValueError(f"El candidato {candidate.id or candidate.text!r} no tiene codigo canonico aprobado.")
+        if source in ambiguous_field_aliases:
+            targets = ", ".join(sorted(ambiguous_field_aliases[source]))
+            raise ValueError(
+                f"Alias ambiguo para {source}: apunta a multiples codigos canonicos permitidos ({targets})."
+            )
 
         for option in (source, field_aliases.get(source), self.normalizer.suggest_canonical(source, allowed_field_codes)[0]):
             normalized = self.normalizer.normalize(option)
@@ -236,6 +258,7 @@ def _inside_existing_curly_marker(text: str, start: int, end: int) -> bool:
 
 
 def _without_overlaps(replacements: list[PlannedReplacement]) -> list[PlannedReplacement]:
+    _raise_on_exact_marker_conflicts(replacements)
     ordered = sorted(replacements, key=lambda item: (item.start, -(item.end - item.start), item.marker))
     accepted: list[PlannedReplacement] = []
     occupied: list[tuple[int, int]] = []
@@ -250,6 +273,22 @@ def _without_overlaps(replacements: list[PlannedReplacement]) -> list[PlannedRep
         occupied.append((replacement.start, replacement.end))
         accepted.append(replacement)
     return sorted(accepted, key=lambda item: item.start)
+
+
+def _raise_on_exact_marker_conflicts(replacements: list[PlannedReplacement]) -> None:
+    by_range: dict[tuple[int, int], list[PlannedReplacement]] = {}
+    for replacement in replacements:
+        by_range.setdefault((replacement.start, replacement.end), []).append(replacement)
+    for (start, end), items in by_range.items():
+        markers = {item.marker for item in items}
+        if len(markers) <= 1:
+            continue
+        candidate_ids = ", ".join(sorted({item.candidate_id or "sin_id" for item in items}))
+        marker_list = ", ".join(sorted(markers))
+        raise ValueError(
+            f"Reemplazo ambiguo: multiples codigos canonicos intentan reemplazar el mismo rango "
+            f"{start}-{end} ({marker_list}) para candidatos {candidate_ids}."
+        )
 
 
 def marked_docx_filename(original_filename: str) -> str:

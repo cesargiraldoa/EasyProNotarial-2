@@ -79,7 +79,7 @@ async def generate_marked_docx(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Debes aceptar al menos un candidato antes de generar el DOCX marcado.",
         )
-    allowed_field_codes, field_aliases = _load_writer_catalog(db)
+    allowed_field_codes, field_aliases, ambiguous_field_aliases = _load_writer_catalog(db)
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -93,6 +93,7 @@ async def generate_marked_docx(
                 candidates=reviewed_candidates,
                 allowed_field_codes=allowed_field_codes,
                 field_aliases=field_aliases,
+                ambiguous_field_aliases=ambiguous_field_aliases,
             )
             output_bytes = result.output_path.read_bytes()
     except HTTPException:
@@ -129,7 +130,7 @@ def _parse_marked_candidates(raw_candidates: str) -> list[MarkedCandidate]:
     return [MarkedCandidate.from_dict(item) for item in payload if isinstance(item, dict)]
 
 
-def _load_writer_catalog(db: Session) -> tuple[set[str], dict[str, str]]:
+def _load_writer_catalog(db: Session) -> tuple[set[str], dict[str, str], dict[str, set[str]]]:
     normalizer = FieldCodeNormalizer()
     allowed_statuses = ("draft", "suggested", "approved")
     definitions = (
@@ -139,15 +140,22 @@ def _load_writer_catalog(db: Session) -> tuple[set[str], dict[str, str]]:
     )
     allowed = {normalizer.normalize(row.field_code) for row in definitions if normalizer.normalize(row.field_code)}
     aliases: dict[str, str] = {}
+    ambiguous_aliases: dict[str, set[str]] = {}
     if allowed:
         alias_rows = (
             db.query(FieldAlias.raw_field_code, FieldAlias.canonical_field_code)
             .filter(FieldAlias.status.in_(allowed_statuses))
             .all()
         )
+        alias_targets: dict[str, set[str]] = {}
         for row in alias_rows:
             raw = normalizer.normalize(row.raw_field_code)
             canonical = normalizer.normalize(row.canonical_field_code)
             if raw and canonical in allowed:
-                aliases[raw] = canonical
-    return allowed, aliases
+                alias_targets.setdefault(raw, set()).add(canonical)
+        for raw, targets in alias_targets.items():
+            if len(targets) == 1:
+                aliases[raw] = next(iter(targets))
+            else:
+                ambiguous_aliases[raw] = targets
+    return allowed, aliases, ambiguous_aliases

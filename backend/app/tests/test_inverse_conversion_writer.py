@@ -221,6 +221,71 @@ class InverseConversionWriterTests(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
+    def test_writer_blocks_exact_range_collision_with_different_canonical_codes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Document()
+            doc.add_paragraph("APARTAMENTO: 804")
+            source = self._save_doc(doc, tmp)
+            output = Path(tmp) / "marked.docx"
+
+            with self.assertRaisesRegex(ValueError, "Reemplazo ambiguo"):
+                DocxMarkedWriter().write(
+                    source,
+                    output,
+                    [
+                        self._candidate("804", "NUMERO_APARTAMENTO", before="APARTAMENTO:"),
+                        self._candidate("804", "VALOR_VENTA", before="APARTAMENTO:"),
+                    ],
+                    allowed_field_codes=ALLOWED_CODES,
+                )
+            self.assertFalse(output.exists())
+
+    def test_writer_blocks_ambiguous_alias_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Document()
+            doc.add_paragraph("UNIDAD: 804")
+            source = self._save_doc(doc, tmp)
+            output = Path(tmp) / "marked.docx"
+            candidate = MarkedCandidate(
+                id="cand-ambiguous-alias",
+                text="804",
+                suggested_key="numero_unidad",
+                canonical_field_code="",
+                label="Numero unidad",
+                status="accepted",
+                confidence=0.9,
+                occurrences=1,
+                contexts=(MarkedCandidateContext(location="paragraph 1", before="UNIDAD:", after=""),),
+            )
+
+            with self.assertRaisesRegex(ValueError, "Alias ambiguo"):
+                DocxMarkedWriter().write(
+                    source,
+                    output,
+                    [candidate],
+                    allowed_field_codes=ALLOWED_CODES,
+                    ambiguous_field_aliases={
+                        "NUMERO_UNIDAD": {"NUMERO_APARTAMENTO", "NUMERO_MATRICULA"},
+                    },
+                )
+            self.assertFalse(output.exists())
+
+    def test_writer_blocks_zero_replacements_for_accepted_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            doc = Document()
+            doc.add_paragraph("APARTAMENTO: 804")
+            source = self._save_doc(doc, tmp)
+            output = Path(tmp) / "marked.docx"
+
+            with self.assertRaisesRegex(ValueError, "Ningun candidato aceptado pudo ubicarse"):
+                DocxMarkedWriter().write(
+                    source,
+                    output,
+                    [self._candidate("999", "NUMERO_APARTAMENTO", before="APARTAMENTO:")],
+                    allowed_field_codes=ALLOWED_CODES,
+                )
+            self.assertFalse(output.exists())
+
     def test_writer_deduplicates_identical_candidates(self):
         with tempfile.TemporaryDirectory() as tmp:
             doc = Document()
@@ -322,7 +387,7 @@ class InverseConversionWriterTests(unittest.TestCase):
         document.save(buffer)
         return buffer.getvalue()
 
-    def _build_endpoint_client(self) -> tuple[TestClient, object]:
+    def _build_endpoint_client(self, extra_aliases: list[tuple[str, str]] | None = None) -> tuple[TestClient, object]:
         engine = create_engine(
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
@@ -331,8 +396,15 @@ class InverseConversionWriterTests(unittest.TestCase):
         Base.metadata.create_all(engine, tables=[FieldDefinition.__table__, FieldAlias.__table__])
         Session = sessionmaker(bind=engine)
         db = Session()
-        db.add(FieldDefinition(field_code="NUMERO_APARTAMENTO", display_name="Numero Apartamento", status="suggested", confidence=0.9))
+        db.add_all(
+            [
+                FieldDefinition(field_code=code, display_name=code.replace("_", " ").title(), status="suggested", confidence=0.9)
+                for code in ALLOWED_CODES
+            ]
+        )
         db.add(FieldAlias(raw_field_code="numero_apartamento", canonical_field_code="NUMERO_APARTAMENTO", frequency=1, status="suggested"))
+        for raw, canonical in extra_aliases or []:
+            db.add(FieldAlias(raw_field_code=raw, canonical_field_code=canonical, frequency=1, status="suggested"))
         db.commit()
 
         app = FastAPI()
@@ -384,6 +456,108 @@ class InverseConversionWriterTests(unittest.TestCase):
                 generated = Path(tmp) / "generated.docx"
                 generated.write_bytes(response.content)
                 self.assertEqual(Document(str(generated)).paragraphs[0].text, "APARTAMENTO: {{NUMERO_APARTAMENTO}}")
+        finally:
+            engine.dispose()
+
+    def test_endpoint_returns_422_for_exact_range_collision(self):
+        client, engine = self._build_endpoint_client()
+        try:
+            candidates = [
+                {
+                    "id": "cand_001",
+                    "text": "804",
+                    "canonical_field_code": "NUMERO_APARTAMENTO",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                },
+                {
+                    "id": "cand_002",
+                    "text": "804",
+                    "canonical_field_code": "VALOR_VENTA",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                },
+            ]
+
+            response = client.post(
+                "/api/v1/inverse-conversion/generate-marked-docx",
+                files={
+                    "archivo": (
+                        "minuta.docx",
+                        self._build_endpoint_docx_bytes(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+                data={"candidates": json.dumps(candidates)},
+            )
+
+            self.assertEqual(response.status_code, 422)
+            self.assertIn("Reemplazo ambiguo", response.json()["detail"])
+        finally:
+            engine.dispose()
+
+    def test_endpoint_returns_422_for_ambiguous_alias(self):
+        client, engine = self._build_endpoint_client(
+            extra_aliases=[
+                ("numero_unidad", "NUMERO_APARTAMENTO"),
+                ("numero_unidad", "NUMERO_MATRICULA"),
+            ]
+        )
+        try:
+            candidates = [
+                {
+                    "id": "cand_001",
+                    "text": "804",
+                    "suggested_key": "numero_unidad",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                }
+            ]
+
+            response = client.post(
+                "/api/v1/inverse-conversion/generate-marked-docx",
+                files={
+                    "archivo": (
+                        "minuta.docx",
+                        self._build_endpoint_docx_bytes(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+                data={"candidates": json.dumps(candidates)},
+            )
+
+            self.assertEqual(response.status_code, 422)
+            self.assertIn("Alias ambiguo", response.json()["detail"])
+        finally:
+            engine.dispose()
+
+    def test_endpoint_returns_422_for_zero_replacements(self):
+        client, engine = self._build_endpoint_client()
+        try:
+            candidates = [
+                {
+                    "id": "cand_001",
+                    "text": "999",
+                    "canonical_field_code": "NUMERO_APARTAMENTO",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                }
+            ]
+
+            response = client.post(
+                "/api/v1/inverse-conversion/generate-marked-docx",
+                files={
+                    "archivo": (
+                        "minuta.docx",
+                        self._build_endpoint_docx_bytes(),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+                },
+                data={"candidates": json.dumps(candidates)},
+            )
+
+            self.assertEqual(response.status_code, 422)
+            self.assertIn("Ningun candidato aceptado pudo ubicarse", response.json()["detail"])
         finally:
             engine.dispose()
 
