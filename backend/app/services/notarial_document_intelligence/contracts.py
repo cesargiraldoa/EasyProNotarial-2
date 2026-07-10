@@ -11,6 +11,7 @@ class BatchStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
+    PARTIAL_ERROR = "partial_error"
     ERROR = "error"
 
 
@@ -37,7 +38,8 @@ class FixedVariableLabel(str, Enum):
 
 class DocumentUpload(BaseModel):
     filename: str
-    content: bytes
+    content: bytes | None = None
+    file_path: str | None = None
     content_type: str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     source_path: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -72,6 +74,11 @@ class ParsedBlock(BaseModel):
     cell_index: int | None = None
     paragraph_index: int | None = None
     fixed_variable_label: FixedVariableLabel = FixedVariableLabel.UNKNOWN
+    semantic_type: str | None = None
+    semantic_title: str | None = None
+    semantic_section: str | None = None
+    parser_source: str = "python-docx"
+    unstructured_category: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -81,6 +88,14 @@ class ParsedDocument(BaseModel):
     blocks: list[ParsedBlock]
     warnings: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AcceptedBatchResponse(BaseModel):
+    batch_id: int
+    batch_key: str
+    task_id: str
+    status: BatchStatus
+    status_url: str
 
 
 class IngestedDocumentSummary(BaseModel):

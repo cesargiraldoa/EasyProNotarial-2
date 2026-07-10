@@ -29,6 +29,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentEvidence,
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
+    NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialEmbeddingVersion,
 )

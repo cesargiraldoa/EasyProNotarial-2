@@ -27,7 +27,7 @@ class NotarialDocumentParser:
         source = Path(source_path)
         blocks = list(_iter_python_docx_blocks(source))
         warnings: list[str] = []
-        unstructured_metadata = self._read_unstructured_metadata(source, warnings)
+        unstructured_metadata = self._read_unstructured_elements(source, blocks, warnings)
         return ParsedDocument(
             parser_name=self.parser_name,
             parser_version=f"python-docx:{_package_version('python-docx')};unstructured:{unstructured_metadata.get('version', 'unavailable')}",
@@ -37,7 +37,7 @@ class NotarialDocumentParser:
         )
 
     @staticmethod
-    def _read_unstructured_metadata(source: Path, warnings: list[str]) -> dict[str, object]:
+    def _read_unstructured_elements(source: Path, blocks: list[ParsedBlock], warnings: list[str]) -> dict[str, object]:
         try:
             from unstructured.partition.docx import partition_docx
         except Exception:
@@ -51,13 +51,25 @@ class NotarialDocumentParser:
             return {"enabled": True, "elements_count": 0, "version": _package_version("unstructured"), "error": str(exc)}
 
         categories: dict[str, int] = {}
+        semantic_elements: list[dict[str, object]] = []
         for element in elements:
             category = type(element).__name__
             categories[category] = categories.get(category, 0) + 1
+            text = str(element).strip()
+            metadata = getattr(element, "metadata", None)
+            semantic_elements.append(
+                {
+                    "category": category,
+                    "text": text,
+                    "metadata": metadata.to_dict() if metadata is not None and hasattr(metadata, "to_dict") else {},
+                }
+            )
+        _reconcile_unstructured_blocks(blocks, semantic_elements)
         return {
             "enabled": True,
             "elements_count": len(elements),
             "categories": categories,
+            "reconciled_blocks": sum(1 for block in blocks if block.parser_source == "python-docx+unstructured"),
             "version": _package_version("unstructured"),
         }
 
@@ -89,6 +101,69 @@ def _iter_python_docx_blocks(source: Path) -> list[ParsedBlock]:
             )
         )
     return blocks
+
+
+def _reconcile_unstructured_blocks(blocks: list[ParsedBlock], semantic_elements: list[dict[str, object]]) -> None:
+    used_indexes: set[int] = set()
+    for block in blocks:
+        normalized_block = _normalize_text(block.text)
+        if not normalized_block:
+            continue
+        best_index: int | None = None
+        best_element: dict[str, object] | None = None
+        for index, element in enumerate(semantic_elements):
+            if index in used_indexes:
+                continue
+            semantic_text = _normalize_text(str(element.get("text") or ""))
+            if not semantic_text:
+                continue
+            if normalized_block == semantic_text or normalized_block in semantic_text or semantic_text in normalized_block:
+                best_index = index
+                best_element = element
+                break
+        if best_index is None or best_element is None:
+            continue
+
+        category = str(best_element.get("category") or "")
+        block.semantic_type = _semantic_type_for_category(category)
+        block.semantic_title = block.text if block.semantic_type == "title" else None
+        block.semantic_section = _probable_section(block.text, block.semantic_type)
+        block.parser_source = "python-docx+unstructured"
+        block.unstructured_category = category
+        block.metadata["unstructured"] = {
+            "category": category,
+            "metadata": best_element.get("metadata") or {},
+        }
+        used_indexes.add(best_index)
+
+
+def _semantic_type_for_category(category: str) -> str:
+    normalized = category.lower()
+    if "title" in normalized:
+        return "title"
+    if "narrative" in normalized:
+        return "narrative"
+    if "list" in normalized:
+        return "list"
+    if "table" in normalized:
+        return "table"
+    if "address" in normalized:
+        return "address"
+    return normalized or "unknown"
+
+
+def _probable_section(text: str, semantic_type: str | None) -> str | None:
+    normalized = text.strip().upper()
+    if semantic_type == "title":
+        return normalized[:160]
+    for marker in ("COMPARECEN", "OBJETO", "INMUEBLE", "PRECIO", "HIPOTECA", "FIRMAS"):
+        if marker in normalized:
+            return marker.lower()
+    return None
+
+
+def _normalize_text(text: str) -> str:
+    return " ".join(text.split()).casefold()
 
 
 def _iter_blocks(parent, prefix: str = "", table_index: int | None = None):

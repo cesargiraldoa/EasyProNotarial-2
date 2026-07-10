@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: easypro2-postgres
     environment:
       POSTGRES_DB: ${EASYPRO2_POSTGRES_DB:-easypro2}
