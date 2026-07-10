@@ -96,7 +96,7 @@ export function LoginPanel() {
                   id="email"
                   name="email"
                   type="email"
-                  defaultValue="superadmin@easypro.co"
+                  placeholder="usuario@notaria.com"
                   className="w-full rounded-md border border-[#d89b45]/22 bg-[#101418] px-4 py-3 text-white placeholder:text-[#9aa6b2] transition focus:border-[#d89b45] focus:outline-none focus:ring-2 focus:ring-[#d89b45]/22"
                 />
               </div>
@@ -109,7 +109,7 @@ export function LoginPanel() {
                   id="password"
                   name="password"
                   type="password"
-                  defaultValue="ChangeMe123!"
+                  placeholder="Ingresa tu contraseña"
                   className="w-full rounded-md border border-[#d89b45]/22 bg-[#101418] px-4 py-3 text-white placeholder:text-[#9aa6b2] transition focus:border-[#d89b45] focus:outline-none focus:ring-2 focus:ring-[#d89b45]/22"
                 />
               </div>
@@ -123,7 +123,7 @@ export function LoginPanel() {
                   className="mt-1 h-4 w-4 rounded border-[#d89b45]/35 bg-transparent"
                 />
                 <span className="text-xs leading-5 text-[#9aa6b2]">
-                  He leido y acepto la <span className="font-medium text-[#f7cf8a]">politica de tratamiento de datos</span> y autorizo el uso institucional de la plataforma.
+                  He leído y acepto la <span className="font-medium text-[#f7cf8a]">política de tratamiento de datos</span> y autorizo el uso institucional de la plataforma.
                 </span>
               </label>
 
