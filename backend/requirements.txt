@@ -15,3 +15,6 @@ num2words>=0.5.13
 python-multipart>=0.0.7
 langgraph>=0.2.0
 pgvector>=0.3.0
+celery[redis]>=5.4.0
+redis>=5.0.0
+unstructured[docx]>=0.16.0

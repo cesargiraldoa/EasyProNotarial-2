@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480
     openai_api_key: str = ""
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = ""
+    celery_result_backend: str = ""
+    notarial_intelligence_storage_bucket: str = "documentos"
+    notarial_intelligence_storage_prefix: str = "notarial-intelligence"
+    notarial_intelligence_local_storage_dir: str = str(BASE_DIR / "storage" / "notarial-intelligence")
     gari_billing_base_url: str = ""
     gari_billing_internal_key: str = ""
     gari_billing_timeout_seconds: int = 30

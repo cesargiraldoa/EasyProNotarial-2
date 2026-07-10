@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base, TimestampMixin
+
+
+class NotarialDocumentBatch(Base, TimestampMixin):
+    __tablename__ = "notarial_document_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False, default="manual")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="initialized", index=True)
+    total_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unique_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duplicate_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class NotarialDocument(Base, TimestampMixin):
+    __tablename__ = "notarial_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    filename: Mapped[str] = mapped_column(String(260), nullable=False, index=True)
+    storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    storage_backend: Mapped[str] = mapped_column(String(40), nullable=False, default="local")
+    content_type: Mapped[str] = mapped_column(String(160), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parser_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(40), nullable=False, default="stored", index=True)
+    document_type: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    document_subtype: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    notary_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    project_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    bank_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    family_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_families.id", ondelete="SET NULL"), nullable=True, index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class NotarialDocumentBatchItem(Base):
+    __tablename__ = "notarial_document_batch_items"
+    __table_args__ = (
+        UniqueConstraint("batch_id", "item_index", name="uq_notarial_document_batch_items_batch_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(260), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="processed")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NotarialDocumentSection(Base, TimestampMixin):
+    __tablename__ = "notarial_document_sections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    section_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    start_block_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_block_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    classification_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentBlock(Base, TimestampMixin):
+    __tablename__ = "notarial_document_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    section_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_sections.id", ondelete="SET NULL"), nullable=True, index=True)
+    block_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    block_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    location_key: Mapped[str] = mapped_column(String(260), nullable=False, index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    char_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    char_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    table_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    row_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cell_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paragraph_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fixed_variable_label: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentEntity(Base, TimestampMixin):
+    __tablename__ = "notarial_document_entities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    block_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="CASCADE"), nullable=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    canonical_field_code: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    role: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="deterministic")
+    requires_human_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentFamily(Base, TimestampMixin):
+    __tablename__ = "notarial_document_families"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    family_key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(240), nullable=False)
+    document_type: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    notary_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    project_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    bank_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="suggested")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentFamilyMember(Base):
+    __tablename__ = "notarial_document_family_members"
+    __table_args__ = (
+        UniqueConstraint("family_id", "document_id", name="uq_notarial_family_members_family_document"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    family_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_families.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="deterministic")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NotarialDocumentCluster(Base, TimestampMixin):
+    __tablename__ = "notarial_document_clusters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cluster_key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(240), nullable=False)
+    cluster_type: Mapped[str] = mapped_column(String(80), nullable=False, default="document")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="suggested")
+    algorithm: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentClusterMember(Base):
+    __tablename__ = "notarial_document_cluster_members"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "document_id", name="uq_notarial_cluster_members_cluster_document"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    cluster_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_clusters.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NotarialEmbeddingVersion(Base, TimestampMixin):
+    __tablename__ = "notarial_embedding_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version_key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True, index=True)
+    provider: Mapped[str] = mapped_column(String(120), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="shadow")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentEmbedding(Base, TimestampMixin):
+    __tablename__ = "notarial_document_embeddings"
+    __table_args__ = (
+        UniqueConstraint("embedding_version_id", "source_type", "source_id", name="uq_notarial_embeddings_version_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    embedding_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_embedding_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    embedding: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentEvidence(Base, TimestampMixin):
+    __tablename__ = "notarial_document_evidences"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    block_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="CASCADE"), nullable=True, index=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_entities.id", ondelete="CASCADE"), nullable=True, index=True)
+    evidence_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="deterministic")
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialDocumentDecision(Base, TimestampMixin):
+    __tablename__ = "notarial_document_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    block_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="CASCADE"), nullable=True, index=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_entities.id", ondelete="CASCADE"), nullable=True, index=True)
+    decision_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    deterministic_decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    llm_decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    hybrid_decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    human_decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

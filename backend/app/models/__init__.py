@@ -16,6 +16,22 @@ from app.models.legal_entity_representative import LegalEntityRepresentative
 from app.models.notary import Notary
 from app.models.notary_commercial_activity import NotaryCommercialActivity
 from app.models.notary_crm_audit_log import NotaryCrmAuditLog
+from app.models.notarial_document_intelligence import (
+    NotarialDocument,
+    NotarialDocumentBatch,
+    NotarialDocumentBatchItem,
+    NotarialDocumentBlock,
+    NotarialDocumentCluster,
+    NotarialDocumentClusterMember,
+    NotarialDocumentDecision,
+    NotarialDocumentEmbedding,
+    NotarialDocumentEntity,
+    NotarialDocumentEvidence,
+    NotarialDocumentFamily,
+    NotarialDocumentFamilyMember,
+    NotarialDocumentSection,
+    NotarialEmbeddingVersion,
+)
 from app.models.numbering_sequence import NumberingSequence
 from app.models.person import Person
 from app.models.role import Role
