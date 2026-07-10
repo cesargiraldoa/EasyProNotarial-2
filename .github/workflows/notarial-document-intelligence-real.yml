@@ -63,6 +63,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      - name: Bootstrap legacy base schema
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import app.models  # noqa: F401
+          from app.db.session import engine
+          from app.models.base import Base
+          Base.metadata.create_all(bind=engine)
+          PY
+
       - name: Alembic upgrade on PostgreSQL pgvector
         working-directory: backend
         run: alembic upgrade head
