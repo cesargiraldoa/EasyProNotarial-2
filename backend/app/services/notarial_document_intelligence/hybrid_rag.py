@@ -53,7 +53,7 @@ class NotarialHybridRagService:
             blocks = self._candidate_blocks(notary_id, document_type=None, semantic_type=semantic_type, exclude_document_id=exclude_document_id)
         lexical = {block.id: _lexical_score(query, block.text) for block in blocks}
         structural = {block.id: _structural_score(block, semantic_type=semantic_type) for block in blocks}
-        vector = self._vector_scores(notary_id, query, blocks)
+        vector = self._vector_scores(notary_id, query, blocks, exclude_document_id=exclude_document_id)
         hits = [
             HybridRagHit(
                 block_id=block.id,
@@ -129,7 +129,7 @@ class NotarialHybridRagService:
             query = query.filter(NotarialDocumentBlock.document_id != exclude_document_id)
         return query.order_by(NotarialDocumentBlock.document_id.asc(), NotarialDocumentBlock.block_index.asc()).all()
 
-    def _vector_scores(self, notary_id: int, query: str, blocks: list[NotarialDocumentBlock]) -> dict[int, float]:
+    def _vector_scores(self, notary_id: int, query: str, blocks: list[NotarialDocumentBlock], *, exclude_document_id: int | None) -> dict[int, float]:
         if not blocks:
             return {}
         version = (
@@ -145,10 +145,20 @@ class NotarialHybridRagService:
         if version is None:
             return {}
         query_vector = self.embedding_service.provider.encode([query])[0]
+        candidate_block_ids = [block.id for block in blocks]
+        candidate_block_id_set = set(candidate_block_ids)
         if self.db.get_bind().dialect.name == "postgresql":
             store = NotarialVectorStore(self.db, dimensions=version.dimensions)
-            rows = store.search(notary_id, query_vector, embedding_version_id=version.id, limit=max(len(blocks), 20))
-            return {row.source_id: max(0.0, 1.0 - row.distance) for row in rows}
+            rows = store.search(
+                notary_id,
+                query_vector,
+                embedding_version_id=version.id,
+                limit=max(len(blocks), 20),
+                source_type="block",
+                source_ids=candidate_block_ids,
+                exclude_document_id=exclude_document_id,
+            )
+            return {row.source_id: max(0.0, 1.0 - row.distance) for row in rows if row.source_id in candidate_block_id_set}
         query_encoded = self.embedding_service.vector_store.encode_vector(query_vector)
         query_values = json.loads(query_encoded)
         embeddings = (
@@ -156,13 +166,14 @@ class NotarialHybridRagService:
             .filter(
                 NotarialDocumentEmbedding.embedding_version_id == version.id,
                 NotarialDocumentEmbedding.source_type == "block",
-                NotarialDocumentEmbedding.source_id.in_([block.id for block in blocks]),
+                NotarialDocumentEmbedding.source_id.in_(candidate_block_ids),
             )
             .all()
         )
         scores = {}
         for row in embeddings:
-            scores[row.source_id] = max(0.0, 1.0 - _cosine_distance(query_values, json.loads(row.embedding or "[]")))
+            if row.source_id in candidate_block_id_set:
+                scores[row.source_id] = max(0.0, 1.0 - _cosine_distance(query_values, json.loads(row.embedding or "[]")))
         return scores
 
 

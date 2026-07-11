@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.models.notarial_document_intelligence import NotarialDocumentEmbedding
@@ -41,11 +41,33 @@ class NotarialVectorStore:
         embedding_version_id: int,
         limit: int = 10,
         document_id: int | None = None,
+        exclude_document_id: int | None = None,
+        source_type: str | None = None,
+        source_ids: Sequence[int] | None = None,
     ) -> list[VectorSearchResult]:
         query = self.encode_vector(query_vector)
+        source_ids = [int(item) for item in source_ids or []]
         if self.db.bind is not None and self.db.bind.dialect.name == "postgresql":
-            return self._search_postgresql(notary_id, query, embedding_version_id=embedding_version_id, limit=limit, document_id=document_id)
-        return self._search_sqlite(notary_id, query, embedding_version_id=embedding_version_id, limit=limit, document_id=document_id)
+            return self._search_postgresql(
+                notary_id,
+                query,
+                embedding_version_id=embedding_version_id,
+                limit=limit,
+                document_id=document_id,
+                exclude_document_id=exclude_document_id,
+                source_type=source_type,
+                source_ids=source_ids,
+            )
+        return self._search_sqlite(
+            notary_id,
+            query,
+            embedding_version_id=embedding_version_id,
+            limit=limit,
+            document_id=document_id,
+            exclude_document_id=exclude_document_id,
+            source_type=source_type,
+            source_ids=source_ids,
+        )
 
     def _search_postgresql(
         self,
@@ -55,27 +77,40 @@ class NotarialVectorStore:
         embedding_version_id: int,
         limit: int,
         document_id: int | None,
+        exclude_document_id: int | None,
+        source_type: str | None,
+        source_ids: Sequence[int],
     ) -> list[VectorSearchResult]:
-        sql = """
+        source_filter = ""
+        if source_ids:
+            source_filter = "and source_id in :source_ids"
+        sql = text(f"""
             select id, source_type, source_id, embedding <=> cast(:query_vector as vector) as distance
             from notarial_document_embeddings
             where notary_id = :notary_id
               and embedding_version_id = :embedding_version_id
               and (:document_id is null or document_id = :document_id)
+              and (:exclude_document_id is null or document_id != :exclude_document_id)
+              and (:source_type is null or source_type = :source_type)
+              {source_filter}
               and embedding is not null
             order by embedding <=> cast(:query_vector as vector)
             limit :limit
-        """
-        rows = self.db.execute(
-            text(sql),
-            {
-                "notary_id": notary_id,
-                "embedding_version_id": embedding_version_id,
-                "document_id": document_id,
-                "query_vector": query,
-                "limit": limit,
-            },
-        ).all()
+        """)
+        if source_ids:
+            sql = sql.bindparams(bindparam("source_ids", expanding=True))
+        params = {
+            "notary_id": notary_id,
+            "embedding_version_id": embedding_version_id,
+            "document_id": document_id,
+            "exclude_document_id": exclude_document_id,
+            "source_type": source_type,
+            "query_vector": query,
+            "limit": limit,
+        }
+        if source_ids:
+            params["source_ids"] = list(source_ids)
+        rows = self.db.execute(sql, params).all()
         return [
             VectorSearchResult(
                 embedding_id=int(row.id),
@@ -94,6 +129,9 @@ class NotarialVectorStore:
         embedding_version_id: int,
         limit: int,
         document_id: int | None,
+        exclude_document_id: int | None,
+        source_type: str | None,
+        source_ids: Sequence[int],
     ) -> list[VectorSearchResult]:
         query_vector = json.loads(query)
         rows = (
@@ -106,6 +144,12 @@ class NotarialVectorStore:
         )
         if document_id is not None:
             rows = rows.filter(NotarialDocumentEmbedding.document_id == document_id)
+        if exclude_document_id is not None:
+            rows = rows.filter(NotarialDocumentEmbedding.document_id != exclude_document_id)
+        if source_type is not None:
+            rows = rows.filter(NotarialDocumentEmbedding.source_type == source_type)
+        if source_ids:
+            rows = rows.filter(NotarialDocumentEmbedding.source_id.in_(list(source_ids)))
 
         scored: list[VectorSearchResult] = []
         for row in rows.all():

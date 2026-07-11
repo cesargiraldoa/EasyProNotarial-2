@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.notarial_document_intelligence import (
@@ -95,13 +96,19 @@ class NotarialIntelligenceEngine:
             prompt_version=self.llm.provider.prompt_version,
             metadata_json=json.dumps({"filename": document.filename}, ensure_ascii=False, sort_keys=True),
         )
-        self.db.add(run)
-        self.db.flush()
-        return run
+        try:
+            with self.db.begin_nested():
+                self.db.add(run)
+                self.db.flush()
+            return run
+        except IntegrityError:
+            return self.db.query(NotarialIntelligenceRun).filter(NotarialIntelligenceRun.run_key == run_key, NotarialIntelligenceRun.notary_id == notary_id).one()
 
     def create_reindex_run(self, notary_id: int) -> NotarialIntelligenceRun:
         embedding_version_key = self.embedding_service.version_key()
-        digest = hashlib.sha1(f"reindex|{notary_id}|{embedding_version_key}|{_now().date().isoformat()}".encode("utf-8")).hexdigest()[:16]
+        documents = self.db.query(NotarialDocument).filter(NotarialDocument.notary_id == notary_id).order_by(NotarialDocument.id.asc()).all()
+        corpus_version = _corpus_version(documents)
+        digest = hashlib.sha1(f"reindex|{notary_id}|{embedding_version_key}|{corpus_version}".encode("utf-8")).hexdigest()[:16]
         run_key = f"notarial-intelligence:reindex:{notary_id}:{digest}"
         run = self.db.query(NotarialIntelligenceRun).filter(NotarialIntelligenceRun.run_key == run_key, NotarialIntelligenceRun.notary_id == notary_id).first()
         if run is not None:
@@ -114,11 +121,15 @@ class NotarialIntelligenceEngine:
             classifier_version=CLASSIFIER_VERSION,
             embedding_version_key=embedding_version_key,
             llm_mode=IntelligenceMode.OFF.value,
-            metadata_json=json.dumps({"scope": "notary"}, ensure_ascii=False, sort_keys=True),
+            metadata_json=json.dumps({"scope": "notary", "corpus_version": corpus_version}, ensure_ascii=False, sort_keys=True),
         )
-        self.db.add(run)
-        self.db.flush()
-        return run
+        try:
+            with self.db.begin_nested():
+                self.db.add(run)
+                self.db.flush()
+            return run
+        except IntegrityError:
+            return self.db.query(NotarialIntelligenceRun).filter(NotarialIntelligenceRun.run_key == run_key, NotarialIntelligenceRun.notary_id == notary_id).one()
 
     def run_intelligence_run(self, run_id: int) -> dict[str, Any]:
         run = self.db.get(NotarialIntelligenceRun, run_id)
@@ -126,12 +137,37 @@ class NotarialIntelligenceEngine:
             raise ValueError(f"Intelligence run {run_id} not found.")
         if run.status == "completed" and run.result_json:
             return json.loads(run.result_json or "{}")
-        run.status = "running"
-        run.attempts += 1
-        run.started_at = _now()
-        run.error_message = None
+        claimed = (
+            self.db.query(NotarialIntelligenceRun)
+            .filter(
+                NotarialIntelligenceRun.id == run_id,
+                NotarialIntelligenceRun.status.in_(["queued", "error", "publication_failed"]),
+            )
+            .update(
+                {
+                    NotarialIntelligenceRun.status: "running",
+                    NotarialIntelligenceRun.attempts: NotarialIntelligenceRun.attempts + 1,
+                    NotarialIntelligenceRun.started_at: _now(),
+                    NotarialIntelligenceRun.error_message: None,
+                },
+                synchronize_session=False,
+            )
+        )
         self.db.commit()
+        if claimed != 1:
+            current = self.db.get(NotarialIntelligenceRun, run_id)
+            if current is None:
+                raise ValueError(f"Intelligence run {run_id} not found.")
+            if current.status == "completed" and current.result_json:
+                return json.loads(current.result_json or "{}")
+            return {
+                "run_id": current.id,
+                "status": current.status,
+                "claimed": False,
+                "message": "intelligence_run_already_claimed",
+            }
         try:
+            run = self.db.get(NotarialIntelligenceRun, run_id)
             if run.run_type == "reindex":
                 result = self.reindex_notary(run.notary_id)
             else:
@@ -244,7 +280,7 @@ class NotarialIntelligenceEngine:
             notary_id=notary_id,
             corpus_version=_corpus_version(documents),
             model_version=f"{CLASSIFIER_VERSION}|{self.embedding_service.version_key()}",
-            status="completed",
+            status=metrics.get("status", "completed"),
             metrics_json=json.dumps(metrics, ensure_ascii=False, sort_keys=True),
             metadata_json=json.dumps({"document_ids": [document.id for document in documents]}, ensure_ascii=False, sort_keys=True),
         )
@@ -520,28 +556,154 @@ def _corpus_version(documents: list[NotarialDocument]) -> str:
 
 
 def _benchmark_metrics(documents: list[NotarialDocument], tagged: list[NotarialDocument], decisions: int, embeddings: int) -> dict[str, Any]:
-    total = max(len(documents), 1)
-    tagged_total = max(len(tagged), 1)
-    classified = sum(1 for document in documents if document.document_type)
-    family_assigned = sum(1 for document in documents if document.family_id is not None)
+    tagged_labels = [(document, _json_object(document.metadata_json).get("labels") or {}) for document in tagged]
+    classification_expected: set[tuple[int, str, str]] = set()
+    classification_predicted: set[tuple[int, str, str]] = set()
+    field_expected: set[tuple[int, str]] = set()
+    retrieval_targets = 0
+    retrieval_recall_sum = 0.0
+    retrieval_rr_sum = 0.0
+    fixed_expected: set[tuple[int, str, str]] = set()
+    fixed_predicted: set[tuple[int, str, str]] = set()
+
+    for document, labels in tagged_labels:
+        expected_type = labels.get("document_type")
+        if expected_type:
+            classification_expected.add((document.id, "document_type", str(expected_type)))
+        predicted_type = document.document_type
+        if predicted_type:
+            classification_predicted.add((document.id, "document_type", str(predicted_type)))
+        for act in labels.get("acts") or []:
+            classification_expected.add((document.id, "act", str(act)))
+        for act in (_json_object(document.metadata_json).get("classification") or {}).get("acts") or []:
+            classification_predicted.add((document.id, "act", str(act)))
+
+        for code in _expected_field_codes(labels):
+            field_expected.add((document.id, code))
+
+        relevant_ids = {int(item) for item in labels.get("relevant_document_ids") or labels.get("expected_relevant_document_ids") or []}
+        if relevant_ids:
+            ranked = _ranked_rag_sources(document)
+            retrieval_targets += 1
+            hits = [source_id for source_id in ranked[:8] if source_id in relevant_ids]
+            retrieval_recall_sum += len(set(hits)) / len(relevant_ids)
+            first_rank = next((index + 1 for index, source_id in enumerate(ranked) if source_id in relevant_ids), None)
+            retrieval_rr_sum += (1.0 / first_rank) if first_rank else 0.0
+
+        for key, value in (labels.get("fixed_variable") or {}).items():
+            fixed_expected.add((document.id, str(key), str(value)))
+
+    if field_expected:
+        rows = (
+            documents[0]._sa_instance_state.session.query(NotarialDocumentEntity)
+            .filter(NotarialDocumentEntity.document_id.in_([document.id for document in documents]))
+            .all()
+        )
+        field_predicted = {(row.document_id, row.canonical_field_code) for row in rows if row.canonical_field_code}
+    else:
+        field_predicted = set()
+
+    if fixed_expected:
+        rows = (
+            documents[0]._sa_instance_state.session.query(NotarialDocumentBlock)
+            .filter(NotarialDocumentBlock.document_id.in_([document.id for document in documents]))
+            .all()
+        )
+        fixed_predicted = {(row.document_id, str(row.id), row.fixed_variable_label) for row in rows}
+        fixed_predicted.update((row.document_id, row.text, row.fixed_variable_label) for row in rows)
+
+    classification = _prf(classification_predicted, classification_expected)
+    fields = _prf(field_predicted, field_expected)
+    clustering = _cluster_metrics(tagged_labels)
+    fixed_variable = _prf(fixed_predicted, fixed_expected) if fixed_expected else {"status": "insufficient_ground_truth", "expected": 0}
+    retrieval = (
+        {
+            "status": "completed",
+            "targets": retrieval_targets,
+            "recall_at_8": retrieval_recall_sum / retrieval_targets,
+            "mrr": retrieval_rr_sum / retrieval_targets,
+        }
+        if retrieval_targets
+        else {"status": "insufficient_ground_truth", "targets": 0}
+    )
+    sufficient = any(item.get("status") == "completed" for item in [classification, fields, retrieval, clustering, fixed_variable])
     return {
-        "classification": {
-            "precision": classified / total,
-            "recall": classified / tagged_total if tagged else classified / total,
-            "f1": _f1(classified / total, classified / tagged_total if tagged else classified / total),
+        "status": "completed" if sufficient else "insufficient_ground_truth",
+        "classification": classification,
+        "fields": fields,
+        "retrieval": retrieval,
+        "clustering": clustering,
+        "fixed_variable": fixed_variable,
+        "support": {
+            "documents": len(documents),
             "tagged_documents": len(tagged),
-        },
-        "retrieval": {
-            "recall_at_8": min(1.0, embeddings / max(total * 2, 1)),
-            "mrr": min(1.0, decisions / total),
-        },
-        "clustering": {
-            "family_assignment_rate": family_assigned / total,
-        },
-        "fixed_variable": {
-            "coverage": min(1.0, decisions / total),
+            "decisions": decisions,
+            "embeddings": embeddings,
         },
     }
+
+
+def _expected_field_codes(labels: dict[str, Any]) -> set[str]:
+    codes = {str(item) for item in labels.get("field_codes") or []}
+    for item in labels.get("fields") or []:
+        if isinstance(item, dict) and item.get("field_code"):
+            codes.add(str(item["field_code"]))
+        elif isinstance(item, str):
+            codes.add(item)
+    return codes
+
+
+def _ranked_rag_sources(document: NotarialDocument) -> list[int]:
+    session = document._sa_instance_state.session
+    rows = (
+        session.query(NotarialDocumentEvidence)
+        .filter(NotarialDocumentEvidence.document_id == document.id, NotarialDocumentEvidence.evidence_type == "hybrid_rag")
+        .order_by(NotarialDocumentEvidence.score.desc(), NotarialDocumentEvidence.id.asc())
+        .all()
+    )
+    ranked: list[int] = []
+    for row in rows:
+        payload = _json_object(row.payload_json)
+        source_id = payload.get("source_document_id")
+        if source_id is not None and int(source_id) not in ranked:
+            ranked.append(int(source_id))
+    return ranked
+
+
+def _cluster_metrics(tagged_labels: list[tuple[NotarialDocument, dict[str, Any]]]) -> dict[str, Any]:
+    labeled = [
+        (document, labels.get("cluster_label") or labels.get("family_label"))
+        for document, labels in tagged_labels
+        if labels.get("cluster_label") or labels.get("family_label")
+    ]
+    if len(labeled) < 2:
+        return {"status": "insufficient_ground_truth", "pairs": 0}
+    tp = fp = fn = pairs = 0
+    for index, (left, left_label) in enumerate(labeled):
+        for right, right_label in labeled[index + 1 :]:
+            expected_same = left_label == right_label
+            predicted_same = left.family_id is not None and left.family_id == right.family_id
+            pairs += 1
+            if expected_same and predicted_same:
+                tp += 1
+            elif not expected_same and predicted_same:
+                fp += 1
+            elif expected_same and not predicted_same:
+                fn += 1
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    return {"status": "completed", "pairs": pairs, "tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall, "f1": _f1(precision, recall)}
+
+
+def _prf(predicted: set, expected: set) -> dict[str, Any]:
+    if not expected:
+        return {"status": "insufficient_ground_truth", "expected": 0}
+    tp = len(predicted & expected)
+    fp = len(predicted - expected)
+    fn = len(expected - predicted)
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    return {"status": "completed", "tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall, "f1": _f1(precision, recall)}
 
 
 def _f1(precision: float, recall: float) -> float:

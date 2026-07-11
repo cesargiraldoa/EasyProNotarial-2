@@ -21,6 +21,7 @@ from app.models.notarial_document_intelligence import (
     NotarialEmbeddingVersion,
 )
 from app.services.notarial_document_intelligence.classifier import DocumentClassification
+from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 
 
 @dataclass(frozen=True)
@@ -178,19 +179,48 @@ class NotarialFamilyClusterService:
         if version is None:
             rows = self.db.query(NotarialDocument.id).filter(NotarialDocument.notary_id == notary_id, NotarialDocument.id != document_id).limit(limit).all()
             return [int(row[0]) for row in rows]
-        rows = (
-            self.db.query(NotarialDocumentEmbedding.document_id)
+        representative = (
+            self.db.query(NotarialDocumentEmbedding)
             .filter(
                 NotarialDocumentEmbedding.notary_id == notary_id,
                 NotarialDocumentEmbedding.embedding_version_id == version.id,
-                NotarialDocumentEmbedding.document_id.isnot(None),
-                NotarialDocumentEmbedding.document_id != document_id,
+                NotarialDocumentEmbedding.document_id == document_id,
+                NotarialDocumentEmbedding.source_type == "block",
+                NotarialDocumentEmbedding.embedding.isnot(None),
             )
-            .distinct()
-            .limit(limit)
-            .all()
+            .order_by(NotarialDocumentEmbedding.source_id.asc())
+            .first()
         )
-        return [int(row[0]) for row in rows if row[0] is not None]
+        if representative is None:
+            return []
+        query_vector = json.loads(representative.embedding or "[]")
+        store = NotarialVectorStore(self.db, dimensions=version.dimensions)
+        rows = store.search(
+            notary_id,
+            query_vector,
+            embedding_version_id=version.id,
+            source_type="block",
+            exclude_document_id=document_id,
+            limit=max(limit * 8, 40),
+        )
+        best_by_document: dict[int, float] = {}
+        embedding_ids = [row.embedding_id for row in rows]
+        if not embedding_ids:
+            return []
+        embeddings_by_id = {
+            row.id: row
+            for row in self.db.query(NotarialDocumentEmbedding)
+            .filter(NotarialDocumentEmbedding.id.in_(embedding_ids), NotarialDocumentEmbedding.document_id.isnot(None))
+            .all()
+        }
+        for row in rows:
+            embedding = embeddings_by_id.get(row.embedding_id)
+            if embedding is None or embedding.document_id is None or embedding.document_id == document_id:
+                continue
+            current = best_by_document.get(int(embedding.document_id))
+            if current is None or row.distance < current:
+                best_by_document[int(embedding.document_id)] = row.distance
+        return [document_id for document_id, _distance in sorted(best_by_document.items(), key=lambda item: (item[1], item[0]))[:limit]]
 
     def _ensure_family_member(self, family: NotarialDocumentFamily, document: NotarialDocument, confidence: float) -> None:
         member = (
