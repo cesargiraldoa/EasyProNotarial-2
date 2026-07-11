@@ -18,6 +18,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentBatch,
     NotarialDocumentBatchItem,
     NotarialDocumentBlock,
+    NotarialIntelligenceRun,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialTaskPublication,
@@ -51,6 +52,7 @@ class TransientDocumentProcessingError(Exception):
 TRANSIENT_PROCESSING_ERRORS = (TransientDocumentProcessingError, OperationalError, DisconnectionError, TimeoutError, ConnectionError)
 TASK_PROCESS_QUEUED_BATCH = "notarial_document_intelligence.document.process_queued_batch"
 TASK_REPARSE_DOCUMENT = "notarial_document_intelligence.document.reparse"
+TASK_PROCESS_INTELLIGENCE_RUN = "notarial_document_intelligence.engine.process_run"
 PUBLICATION_RECOVERABLE_STATUSES = {"pending", "publishing", "publication_failed"}
 
 
@@ -290,6 +292,31 @@ class NotarialDocumentIngestionService:
         )
         if publication is None:
             raise ValueError(f"Publication for {target_type}:{target_id} not found.")
+        return publication
+
+    def ensure_task_publication(
+        self,
+        *,
+        request_key: str,
+        target_type: str,
+        target_id: int,
+        task_name: str,
+        task_args: list[object],
+        document_id: int | None = None,
+        parse_run_id: int | None = None,
+        metadata: dict | None = None,
+    ) -> NotarialTaskPublication:
+        publication = self._ensure_task_publication(
+            request_key=request_key,
+            target_type=target_type,
+            target_id=target_id,
+            task_name=task_name,
+            task_args=task_args,
+            document_id=document_id,
+            parse_run_id=parse_run_id,
+            metadata=metadata,
+        )
+        self.db.commit()
         return publication
 
     def reparse_document(self, document_id: int, commit: bool = True, parse_run_id: int | None = None) -> IngestedDocumentSummary:
@@ -675,6 +702,12 @@ class NotarialDocumentIngestionService:
             self.mark_batch_publication_failed(publication.target_id, error_message)
         elif publication.target_type == "reparse" and publication.parse_run_id is not None:
             self.mark_parse_run_publication_failed(publication.parse_run_id, error_message)
+        elif publication.target_type == "intelligence_run":
+            run = self.db.get(NotarialIntelligenceRun, publication.target_id)
+            if run is not None and run.notary_id == self.notary_id:
+                run.status = "publication_failed"
+                run.error_message = f"publication_failed: {error_message}"
+            self.db.commit()
         else:
             self.db.commit()
 
@@ -686,6 +719,13 @@ class NotarialDocumentIngestionService:
         publication.published_at = _now()
         if publication.target_type == "batch":
             self.mark_batch_published(publication.target_id, task_id)
+        elif publication.target_type == "intelligence_run":
+            run = self.db.get(NotarialIntelligenceRun, publication.target_id)
+            if run is not None and run.notary_id == self.notary_id:
+                run.task_id = task_id
+                if run.status == "publication_failed":
+                    run.status = "queued"
+            self.db.commit()
         else:
             self.db.commit()
 
