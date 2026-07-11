@@ -4,10 +4,12 @@ import hashlib
 import json
 import re
 from difflib import SequenceMatcher
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.models.notarial_document_intelligence import (
+    NotarialBlockAlignment,
     NotarialDocument,
     NotarialDocumentBlock,
     NotarialDocumentCluster,
@@ -15,8 +17,18 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
     NotarialDocumentParseRun,
+    NotarialDocumentEmbedding,
+    NotarialEmbeddingVersion,
 )
 from app.services.notarial_document_intelligence.classifier import DocumentClassification
+
+
+@dataclass(frozen=True)
+class AlignmentSummary:
+    fixed: int
+    variable: int
+    optional: int
+    unknown: int
 
 
 class NotarialFamilyClusterService:
@@ -72,22 +84,22 @@ class NotarialFamilyClusterService:
         current_text = self._active_text(notary_id, document.id)
         if not current_text:
             return clusters
-        for other in (
-            self.db.query(NotarialDocument)
-            .filter(NotarialDocument.notary_id == notary_id, NotarialDocument.id != document.id)
-            .order_by(NotarialDocument.id.asc())
-            .all()
-        ):
+        candidate_ids = self._candidate_document_ids(notary_id, document.id)
+        near_members = {document.id: 1.0}
+        for other in self.db.query(NotarialDocument).filter(NotarialDocument.id.in_(candidate_ids or [0])).all():
             score = SequenceMatcher(None, current_text, self._active_text(notary_id, other.id)).ratio()
             if score >= near_duplicate_threshold:
-                key = "near:" + hashlib.sha1("|".join(str(item) for item in sorted([document.id, other.id])).encode("utf-8")).hexdigest()[:16]
-                cluster = self._cluster(notary_id, "near_duplicate", key, f"Casi duplicados {document.id}-{other.id}", algorithm="sequence-matcher")
-                self._ensure_cluster_member(cluster, document.id, score, {"compared_to": other.id})
-                self._ensure_cluster_member(cluster, other.id, score, {"compared_to": document.id})
-                clusters.append(cluster)
+                near_members[other.id] = score
+        if len(near_members) > 1:
+            representative = min(near_members)
+            key = "near:" + hashlib.sha1("|".join(str(item) for item in sorted(near_members)).encode("utf-8")).hexdigest()[:16]
+            cluster = self._cluster(notary_id, "near_duplicate", key, f"Casi duplicados grupo {representative}", algorithm="pgvector+structural-rerank")
+            for document_id, score in near_members.items():
+                self._ensure_cluster_member(cluster, document_id, score, {"representative_document_id": representative})
+            clusters.append(cluster)
         return clusters
 
-    def classify_fixed_variable_blocks(self, notary_id: int, family_id: int) -> dict[str, int]:
+    def classify_fixed_variable_blocks(self, notary_id: int, family_id: int, *, run_id: int | None = None, target_document_id: int | None = None, target_parse_run_id: int | None = None) -> dict[str, int]:
         documents = (
             self.db.query(NotarialDocument.id)
             .filter(NotarialDocument.notary_id == notary_id, NotarialDocument.family_id == family_id)
@@ -101,12 +113,12 @@ class NotarialFamilyClusterService:
         values_by_location: dict[str, dict[int, str]] = {}
         for document_id, blocks in blocks_by_doc.items():
             for block in blocks:
-                values_by_location.setdefault(block.location_key, {})[document_id] = _normalize_text(block.text)
+                values_by_location.setdefault(_alignment_key(block), {})[document_id] = _normalize_text(block.text)
 
         counts = {"fixed": 0, "variable": 0, "optional": 0, "unknown": 0}
         for document_id, blocks in blocks_by_doc.items():
             for block in blocks:
-                values = values_by_location.get(block.location_key, {})
+                values = values_by_location.get(_alignment_key(block), {})
                 unique_values = {value for value in values.values() if value}
                 if len(values) < len(document_ids):
                     label = "optional"
@@ -118,7 +130,67 @@ class NotarialFamilyClusterService:
                     label = "unknown"
                 block.fixed_variable_label = label
                 counts[label] += 1
+        if run_id is not None and target_document_id is not None and target_parse_run_id is not None:
+            self._persist_alignments(notary_id, run_id, target_document_id, target_parse_run_id, blocks_by_doc)
         return counts
+
+    def _persist_alignments(self, notary_id: int, run_id: int, target_document_id: int, target_parse_run_id: int, blocks_by_doc: dict[int, list[NotarialDocumentBlock]]) -> None:
+        target_blocks = blocks_by_doc.get(target_document_id, [])
+        source_blocks = [block for document_id, blocks in blocks_by_doc.items() if document_id != target_document_id for block in blocks]
+        self.db.query(NotarialBlockAlignment).filter(NotarialBlockAlignment.run_id == run_id).delete(synchronize_session=False)
+        for target in target_blocks:
+            candidates = sorted(
+                (
+                    (_combined_alignment_score(target, source), source)
+                    for source in source_blocks
+                    if _alignment_key(source) == _alignment_key(target) or _combined_alignment_score(target, source) >= 0.72
+                ),
+                key=lambda item: item[0],
+                reverse=True,
+            )[:3]
+            for score, source in candidates:
+                self.db.add(
+                    NotarialBlockAlignment(
+                        run_id=run_id,
+                        notary_id=notary_id,
+                        target_document_id=target_document_id,
+                        target_parse_run_id=target_parse_run_id,
+                        target_block_id=target.id,
+                        source_document_id=source.document_id,
+                        source_parse_run_id=source.parse_run_id,
+                        source_block_id=source.id,
+                        alignment_key=_alignment_key(target),
+                        structural_score=_structural_alignment_score(target, source),
+                        lexical_score=_lexical_similarity(target.text, source.text),
+                        combined_score=score,
+                        label=target.fixed_variable_label,
+                        metadata_json=json.dumps({"target_location": target.location_key, "source_location": source.location_key}, ensure_ascii=False, sort_keys=True),
+                    )
+                )
+
+    def _candidate_document_ids(self, notary_id: int, document_id: int, limit: int = 80) -> list[int]:
+        version = (
+            self.db.query(NotarialEmbeddingVersion)
+            .filter(NotarialEmbeddingVersion.provider.in_(["sentence-transformers", "hash-fixture"]))
+            .order_by(NotarialEmbeddingVersion.id.desc())
+            .first()
+        )
+        if version is None:
+            rows = self.db.query(NotarialDocument.id).filter(NotarialDocument.notary_id == notary_id, NotarialDocument.id != document_id).limit(limit).all()
+            return [int(row[0]) for row in rows]
+        rows = (
+            self.db.query(NotarialDocumentEmbedding.document_id)
+            .filter(
+                NotarialDocumentEmbedding.notary_id == notary_id,
+                NotarialDocumentEmbedding.embedding_version_id == version.id,
+                NotarialDocumentEmbedding.document_id.isnot(None),
+                NotarialDocumentEmbedding.document_id != document_id,
+            )
+            .distinct()
+            .limit(limit)
+            .all()
+        )
+        return [int(row[0]) for row in rows if row[0] is not None]
 
     def _ensure_family_member(self, family: NotarialDocumentFamily, document: NotarialDocument, confidence: float) -> None:
         member = (
@@ -202,3 +274,33 @@ def _slug(value: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").lower()).strip()
+
+
+def _alignment_key(block: NotarialDocumentBlock) -> str:
+    normalized = _normalize_text(block.text)
+    stable = re.sub(r"\b\d{1,4}(?:[.-]\d{1,10})*\b", "<num>", normalized)
+    stable = re.sub(r"\$\s*[\d.,]+", "<money>", stable)
+    location_family = "table" if block.table_index is not None else "paragraph"
+    semantic = block.semantic_type or block.unstructured_category or location_family
+    return hashlib.sha1(f"{semantic}|{stable[:120]}".encode("utf-8")).hexdigest()[:20]
+
+
+def _structural_alignment_score(left: NotarialDocumentBlock, right: NotarialDocumentBlock) -> float:
+    score = 0.0
+    if left.block_type == right.block_type:
+        score += 0.25
+    if (left.semantic_type or left.unstructured_category) == (right.semantic_type or right.unstructured_category):
+        score += 0.25
+    if left.table_index is not None and right.table_index is not None and left.cell_index == right.cell_index:
+        score += 0.25
+    if _alignment_key(left) == _alignment_key(right):
+        score += 0.25
+    return min(score, 1.0)
+
+
+def _lexical_similarity(left: str, right: str) -> float:
+    return SequenceMatcher(None, _normalize_text(left), _normalize_text(right)).ratio()
+
+
+def _combined_alignment_score(left: NotarialDocumentBlock, right: NotarialDocumentBlock) -> float:
+    return (0.55 * _structural_alignment_score(left, right)) + (0.45 * _lexical_similarity(left.text, right.text))

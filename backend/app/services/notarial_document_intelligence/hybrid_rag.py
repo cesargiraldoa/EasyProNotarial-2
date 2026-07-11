@@ -24,6 +24,7 @@ from app.services.notarial_document_intelligence.vector_store import NotarialVec
 class HybridRagHit:
     block_id: int
     document_id: int
+    parse_run_id: int
     location_key: str
     text: str
     score: float
@@ -44,9 +45,10 @@ class NotarialHybridRagService:
         *,
         document_type: str | None = None,
         semantic_type: str | None = None,
+        exclude_document_id: int | None = None,
         limit: int = 8,
     ) -> list[HybridRagHit]:
-        blocks = self._candidate_blocks(notary_id, document_type=document_type, semantic_type=semantic_type)
+        blocks = self._candidate_blocks(notary_id, document_type=document_type, semantic_type=semantic_type, exclude_document_id=exclude_document_id)
         lexical = {block.id: _lexical_score(query, block.text) for block in blocks}
         structural = {block.id: _structural_score(block, semantic_type=semantic_type) for block in blocks}
         vector = self._vector_scores(notary_id, query, blocks)
@@ -54,6 +56,7 @@ class NotarialHybridRagService:
             HybridRagHit(
                 block_id=block.id,
                 document_id=block.document_id,
+                parse_run_id=block.parse_run_id,
                 location_key=block.location_key,
                 text=block.text,
                 score=(0.45 * lexical.get(block.id, 0.0)) + (0.4 * vector.get(block.id, 0.0)) + (0.15 * structural.get(block.id, 0.0)),
@@ -65,20 +68,35 @@ class NotarialHybridRagService:
         ]
         return sorted(hits, key=lambda hit: hit.score, reverse=True)[:limit]
 
-    def persist_hits(self, notary_id: int, parse_run_id: int | None, hits: Sequence[HybridRagHit], evidence_type: str = "hybrid_rag") -> None:
+    def persist_hits(
+        self,
+        notary_id: int,
+        *,
+        target_document_id: int,
+        target_parse_run_id: int,
+        hits: Sequence[HybridRagHit],
+        intelligence_run_id: int | None = None,
+        evidence_type: str = "hybrid_rag",
+    ) -> None:
         for hit in hits:
             self.db.add(
                 NotarialDocumentEvidence(
                     notary_id=notary_id,
-                    document_id=hit.document_id,
-                    parse_run_id=parse_run_id,
-                    block_id=hit.block_id,
+                    document_id=target_document_id,
+                    parse_run_id=target_parse_run_id,
+                    block_id=None,
                     evidence_type=evidence_type,
                     source="hybrid_rag",
                     score=hit.score,
                     payload_json=json.dumps(
                         {
-                            "location_key": hit.location_key,
+                            "intelligence_run_id": intelligence_run_id,
+                            "target_document_id": target_document_id,
+                            "target_parse_run_id": target_parse_run_id,
+                            "source_document_id": hit.document_id,
+                            "source_parse_run_id": hit.parse_run_id,
+                            "source_block_id": hit.block_id,
+                            "source_location_key": hit.location_key,
                             "lexical_score": hit.lexical_score,
                             "vector_score": hit.vector_score,
                             "structural_score": hit.structural_score,
@@ -90,7 +108,7 @@ class NotarialHybridRagService:
                 )
             )
 
-    def _candidate_blocks(self, notary_id: int, *, document_type: str | None, semantic_type: str | None) -> list[NotarialDocumentBlock]:
+    def _candidate_blocks(self, notary_id: int, *, document_type: str | None, semantic_type: str | None, exclude_document_id: int | None) -> list[NotarialDocumentBlock]:
         query = (
             self.db.query(NotarialDocumentBlock)
             .join(NotarialDocumentParseRun, NotarialDocumentParseRun.id == NotarialDocumentBlock.parse_run_id)
@@ -105,6 +123,8 @@ class NotarialHybridRagService:
             query = query.filter(NotarialDocument.document_type == document_type)
         if semantic_type is not None:
             query = query.filter(NotarialDocumentBlock.semantic_type == semantic_type)
+        if exclude_document_id is not None:
+            query = query.filter(NotarialDocumentBlock.document_id != exclude_document_id)
         return query.order_by(NotarialDocumentBlock.document_id.asc(), NotarialDocumentBlock.block_index.asc()).all()
 
     def _vector_scores(self, notary_id: int, query: str, blocks: list[NotarialDocumentBlock]) -> dict[int, float]:
