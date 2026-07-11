@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import threading
 import unittest
@@ -50,6 +51,9 @@ from app.services.notarial_document_intelligence.ingestion import NotarialDocume
 from app.services.notarial_document_intelligence.parser import NotarialDocumentParser
 from app.services.notarial_document_intelligence.storage import NotarialIntelligenceStorage
 from app.services.notarial_document_intelligence import storage as storage_module
+from app.services.notarial_document_intelligence.embedding_provider import HashEmbeddingProvider
+from app.services.notarial_document_intelligence.engine import NotarialIntelligenceEngine
+from app.services.notarial_document_intelligence.llm_provider import IntelligenceMode, NotarialLLMService
 from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 
 
@@ -74,11 +78,13 @@ TABLES = [
 ]
 
 
-def build_docx_bytes(title: str = "COMPRAVENTA", apartment: str = "804", include_table: bool = True) -> bytes:
+def build_docx_bytes(title: str = "COMPRAVENTA", apartment: str = "804", include_table: bool = True, extra_lines: list[str] | None = None) -> bytes:
     buffer = BytesIO()
     document = Document()
     document.add_paragraph(f"ESCRITURA DE {title}")
     document.add_paragraph(f"APARTAMENTO: {apartment}")
+    for line in extra_lines or []:
+        document.add_paragraph(line)
     if include_table:
         table = document.add_table(rows=1, cols=2)
         table.cell(0, 0).text = "MATRICULA"
@@ -296,6 +302,162 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                 store.encode_vector([1.0, 0.0])
         finally:
             db.close()
+
+    def test_intelligence_engine_persists_classification_embeddings_rag_and_audit(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Motor inteligencia",
+                    documents=[
+                        DocumentUpload(
+                            filename="motor.docx",
+                            content=build_docx_bytes(
+                                title="COMPRAVENTA INMUEBLE",
+                                apartment="301",
+                                extra_lines=[
+                                    "NOTARIA 16 DE MEDELLIN",
+                                    "VENDEDOR C.C. 1.234.567",
+                                    "COMPRADOR C.C. 9.876.543",
+                                    "BANCOLOMBIA aprueba credito hipotecario",
+                                    "VALOR $ 120.000.000,00",
+                                ],
+                            ),
+                        )
+                    ],
+                )
+            )
+            document_id = result.documents[0].document_id
+
+            run = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_document(1, document_id)
+
+            document = db.get(NotarialDocument, document_id)
+            self.assertEqual(run.document_id, document_id)
+            self.assertEqual(run.classification["document_type"], "escritura_hipoteca")
+            self.assertIn("hipoteca", run.classification["acts"])
+            self.assertEqual(document.document_type, "escritura_hipoteca")
+            self.assertEqual(document.bank_name, "Bancolombia")
+            self.assertGreater(db.query(NotarialDocumentEmbedding).filter(NotarialDocumentEmbedding.document_id == document_id).count(), 0)
+            self.assertEqual(db.query(NotarialDocumentFamilyMember).filter(NotarialDocumentFamilyMember.document_id == document_id).count(), 1)
+            self.assertGreater(db.query(NotarialDocumentEntity).filter(NotarialDocumentEntity.document_id == document_id).count(), 0)
+            evidence_types = {
+                row.evidence_type
+                for row in db.query(NotarialDocumentEvidence).filter(NotarialDocumentEvidence.document_id == document_id).all()
+            }
+            self.assertIn("document_classification", evidence_types)
+            self.assertIn("hybrid_rag", evidence_types)
+            decision = db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == document_id).one()
+            hybrid = json.loads(decision.hybrid_decision_json)
+            self.assertEqual(hybrid["selected"]["classification"]["document_type"], "escritura_hipoteca")
+            self.assertEqual(run.llm_error, "llm_disabled")
+            metadata = json.loads(document.metadata_json)
+            self.assertEqual(metadata["intelligence"]["decision_id"], decision.id)
+        finally:
+            db.close()
+
+    def test_intelligence_engine_classifies_fixed_variable_and_optional_family_blocks(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Familia variable",
+                    documents=[
+                        DocumentUpload(filename="familia-a.docx", content=build_docx_bytes(apartment="301", include_table=True)),
+                        DocumentUpload(filename="familia-b.docx", content=build_docx_bytes(apartment="302", include_table=False)),
+                    ],
+                )
+            )
+            ids = [item.document_id for item in result.documents]
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            first = engine.run_document(1, ids[0])
+            second = engine.run_document(1, ids[1])
+
+            self.assertEqual(first.family_id, second.family_id)
+            self.assertGreater(second.fixed_variable_counts["fixed"], 0)
+            self.assertGreater(second.fixed_variable_counts["variable"], 0)
+            self.assertGreater(second.fixed_variable_counts["optional"], 0)
+            labels = {
+                row.text: row.fixed_variable_label
+                for row in db.query(NotarialDocumentBlock)
+                .join(NotarialDocumentParseRun, NotarialDocumentParseRun.id == NotarialDocumentBlock.parse_run_id)
+                .filter(NotarialDocumentBlock.document_id == ids[0], NotarialDocumentParseRun.is_active.is_(True))
+                .all()
+            }
+            self.assertEqual(labels["ESCRITURA DE COMPRAVENTA"], "fixed")
+            self.assertEqual(labels["APARTAMENTO: 301"], "variable")
+            self.assertEqual(labels["MATRICULA"], "optional")
+        finally:
+            db.close()
+
+    def test_intelligence_engine_persists_typed_llm_decision_and_token_audit(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="LLM auditado", documents=[DocumentUpload(filename="llm.docx", content=build_docx_bytes(apartment="401"))])
+            )
+            document_id = result.documents[0].document_id
+            provider = _FakeLLMProvider(
+                {
+                    "document_type": "escritura_compraventa",
+                    "document_subtype": None,
+                    "acts": ["compraventa"],
+                    "fields": [
+                        {
+                            "field_code": "numero_apartamento",
+                            "label": "Apartamento",
+                            "value": "401",
+                            "confidence": 0.91,
+                            "evidence_block_ids": [],
+                            "fixed_variable_label": "variable",
+                            "requires_human_review": False,
+                            "reason": "Detectado en bloque de apartamento.",
+                        }
+                    ],
+                    "conflicts": [],
+                    "confidence": 0.93,
+                    "_usage": {"input_tokens": 123, "output_tokens": 45},
+                }
+            )
+
+            run = NotarialIntelligenceEngine(
+                db,
+                embedding_provider=HashEmbeddingProvider(dimensions=8),
+                llm_provider=provider,
+            ).run_document(1, document_id, llm_mode=IntelligenceMode.ASSIST)
+
+            decision = db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == document_id).one()
+            llm_payload = json.loads(decision.llm_decision_json)
+            metadata = json.loads(decision.metadata_json)
+            self.assertEqual(run.llm_mode, "assist")
+            self.assertIsNone(run.llm_error)
+            self.assertEqual(llm_payload["fields"][0]["field_code"], "numero_apartamento")
+            self.assertEqual(metadata["llm_audit"]["input_tokens"], 123)
+            self.assertEqual(metadata["llm_audit"]["output_tokens"], 45)
+            self.assertEqual(provider.calls, 1)
+        finally:
+            db.close()
+
+    def test_llm_service_retries_transient_provider_errors_only_until_success(self):
+        provider = _FlakyLLMProvider()
+        service = NotarialLLMService(provider=provider, timeout_seconds=1, max_retries=1)
+
+        result = service.analyze({"document": {"id": 1}, "evidence": []}, IntelligenceMode.SHADOW)
+
+        self.assertIsNone(result.audit.error)
+        self.assertEqual(result.audit.retries, 1)
+        self.assertEqual(provider.calls, 2)
+        self.assertEqual(result.decision.document_type, "escritura_compraventa")
+
+    def test_llm_service_does_not_retry_invalid_provider_json(self):
+        provider = _FakeLLMProvider({"document_type": "escritura_compraventa", "confidence": 2.0})
+        service = NotarialLLMService(provider=provider, timeout_seconds=1, max_retries=2)
+
+        result = service.analyze({"document": {"id": 1}, "evidence": []}, IntelligenceMode.SHADOW)
+
+        self.assertIsNone(result.decision)
+        self.assertIn("ValidationError", result.audit.error)
+        self.assertEqual(result.audit.retries, 0)
+        self.assertEqual(provider.calls, 1)
 
     def test_reparse_keeps_previous_parse_run_and_switches_active_on_success(self):
         db = self.Session()
@@ -976,6 +1138,40 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         client = TestClient(app)
         self.addCleanup(client.close)
         return client
+
+
+class _FakeLLMProvider:
+    provider_name = "fake-llm"
+    model_name = "typed-json-fixture"
+    prompt_version = "notarial-intelligence-test-v1"
+
+    def __init__(self, response: dict):
+        self.response = response
+        self.calls = 0
+
+    def complete_json(self, system_prompt: str, payload: dict, *, timeout_seconds: int) -> dict:
+        self.calls += 1
+        return dict(self.response)
+
+
+class _FlakyLLMProvider(_FakeLLMProvider):
+    def __init__(self):
+        super().__init__(
+            {
+                "document_type": "escritura_compraventa",
+                "document_subtype": None,
+                "acts": ["compraventa"],
+                "fields": [],
+                "conflicts": [],
+                "confidence": 0.88,
+            }
+        )
+
+    def complete_json(self, system_prompt: str, payload: dict, *, timeout_seconds: int) -> dict:
+        self.calls += 1
+        if self.calls == 1:
+            raise ConnectionError("broker llm temporal")
+        return dict(self.response)
 
 
 def _user(notary_id: int, role_code: str = "protocolist", assignment_notary_id: int | None = None):

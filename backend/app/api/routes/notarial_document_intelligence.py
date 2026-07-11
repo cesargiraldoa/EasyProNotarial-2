@@ -22,13 +22,16 @@ from app.models.notarial_document_intelligence import (
 )
 from app.models.user import User
 from app.services.notarial_document_intelligence.contracts import AcceptedBatchResponse, AcceptedReparseResponse, BatchStatus, DocumentUpload, IngestBatchRequest, IngestBatchResult
+from app.services.notarial_document_intelligence.engine import NotarialIntelligenceEngine
 from app.services.notarial_document_intelligence.ingestion import (
     NotarialDocumentIngestionService,
     TASK_PROCESS_QUEUED_BATCH,
     TASK_REPARSE_DOCUMENT,
     TaskPublicationError,
 )
+from app.services.notarial_document_intelligence.llm_provider import IntelligenceMode
 from app.workers.document_worker import process_queued_document_batch_task, reparse_document_task
+from app.workers.intelligence_worker import process_document_intelligence_task, reindex_notarial_embeddings_task
 
 
 router = APIRouter(prefix="/notarial-intelligence", tags=["notarial-document-intelligence"])
@@ -82,6 +85,34 @@ class ParseRunDetailResponse(BaseModel):
 class PublicationDispatchResponse(BaseModel):
     dispatched: int
     results: list[dict[str, Any]]
+
+
+class IntelligenceRunRequest(BaseModel):
+    async_processing: bool = False
+    llm_mode: IntelligenceMode = IntelligenceMode.OFF
+
+
+class IntelligenceRunResponse(BaseModel):
+    document_id: int
+    parse_run_id: int | None = None
+    task_id: str | None = None
+    status: str
+    result: dict[str, Any] | None = None
+
+
+class ReindexResponse(BaseModel):
+    task_id: str | None = None
+    status: str
+    result: dict[str, Any] | None = None
+
+
+class BenchmarkResponse(BaseModel):
+    notary_id: int
+    documents: int
+    families: int
+    decisions: int
+    existing_embeddings: int
+    coverage: dict[str, int]
 
 
 def _current_notary_id(current_user: User) -> int:
@@ -301,6 +332,55 @@ def reconcile_publications(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
     results = service.dispatch_recoverable_publications(publishers)
     return PublicationDispatchResponse(dispatched=len(results), results=results)
+
+
+@router.post("/documents/{document_id}/intelligence/run", response_model=IntelligenceRunResponse)
+def run_document_intelligence(
+    document_id: int,
+    request: IntelligenceRunRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    notary_id = _current_notary_id(current_user)
+    document = db.get(NotarialDocument, document_id)
+    if document is None or document.notary_id != notary_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    if request.async_processing:
+        if not hasattr(process_document_intelligence_task, "delay"):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
+        task = process_document_intelligence_task.delay(document_id, notary_id, request.llm_mode.value)
+        return IntelligenceRunResponse(document_id=document_id, task_id=str(task.id), status="queued")
+    result = NotarialIntelligenceEngine(db).run_document(notary_id, document_id, llm_mode=request.llm_mode)
+    return IntelligenceRunResponse(
+        document_id=document_id,
+        parse_run_id=result.parse_run_id,
+        status="completed",
+        result=result.__dict__,
+    )
+
+
+@router.post("/embeddings/reindex", response_model=ReindexResponse)
+def reindex_embeddings(
+    async_processing: bool = Form(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.ingest", scoped_to_default_notary=True)),
+):
+    notary_id = _current_notary_id(current_user)
+    if async_processing:
+        if not hasattr(reindex_notarial_embeddings_task, "delay"):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Celery no esta disponible en este entorno.")
+        task = reindex_notarial_embeddings_task.delay(notary_id)
+        return ReindexResponse(task_id=str(task.id), status="queued")
+    return ReindexResponse(status="completed", result=NotarialIntelligenceEngine(db).reindex_notary(notary_id))
+
+
+@router.get("/benchmark", response_model=BenchmarkResponse)
+def benchmark_notarial_corpus(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
+):
+    notary_id = _current_notary_id(current_user)
+    return BenchmarkResponse(**NotarialIntelligenceEngine(db).benchmark_notary(notary_id))
 
 
 async def _read_uploads(files: list[UploadFile], tmp_dir: Path) -> list[DocumentUpload]:

@@ -241,14 +241,14 @@ jobs:
       - name: Start Celery worker
         working-directory: backend
         run: |
-          celery -A app.workers.document_worker:celery_app worker -Q notarial-documental --pool=solo --loglevel=INFO > ../celery-worker.log 2>&1 &
+          celery -A app.workers.celery_app:celery_app worker -Q notarial-documental,notarial-intelligence --pool=solo --loglevel=INFO > ../celery-worker.log 2>&1 &
           echo $! > ../celery-worker.pid
           python - <<'PY'
           import subprocess, time
           deadline = time.time() + 60
           while time.time() < deadline:
               result = subprocess.run(
-                  ["celery", "-A", "app.workers.document_worker:celery_app", "inspect", "ping"],
+                  ["celery", "-A", "app.workers.celery_app:celery_app", "inspect", "ping"],
                   text=True,
                   stdout=subprocess.PIPE,
                   stderr=subprocess.STDOUT,
