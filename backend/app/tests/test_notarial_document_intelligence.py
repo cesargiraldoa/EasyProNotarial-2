@@ -25,6 +25,8 @@ from app.models.notarial_document_intelligence import (
     NotarialDocument,
     NotarialDocumentBatch,
     NotarialDocumentBatchItem,
+    NotarialBenchmarkRun,
+    NotarialBlockAlignment,
     NotarialDocumentBlock,
     NotarialDocumentCluster,
     NotarialDocumentClusterMember,
@@ -34,6 +36,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentEvidence,
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
+    NotarialIntelligenceRun,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialTaskPublication,
@@ -53,7 +56,7 @@ from app.services.notarial_document_intelligence.storage import NotarialIntellig
 from app.services.notarial_document_intelligence import storage as storage_module
 from app.services.notarial_document_intelligence.embedding_provider import HashEmbeddingProvider
 from app.services.notarial_document_intelligence.engine import NotarialIntelligenceEngine
-from app.services.notarial_document_intelligence.llm_provider import IntelligenceMode, NotarialLLMService
+from app.services.notarial_document_intelligence.llm_provider import CircuitOpenError, IntelligenceMode, NotarialLLMService, RedisCircuitBreaker
 from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 
 
@@ -71,10 +74,13 @@ TABLES = [
     NotarialDocumentFamilyMember.__table__,
     NotarialDocumentCluster.__table__,
     NotarialDocumentClusterMember.__table__,
+    NotarialIntelligenceRun.__table__,
     NotarialEmbeddingVersion.__table__,
     NotarialDocumentEmbedding.__table__,
     NotarialDocumentEvidence.__table__,
+    NotarialBlockAlignment.__table__,
     NotarialDocumentDecision.__table__,
+    NotarialBenchmarkRun.__table__,
 ]
 
 
@@ -323,19 +329,22 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                                     "VALOR $ 120.000.000,00",
                                 ],
                             ),
-                        )
+                        ),
+                        DocumentUpload(filename="motor-source.docx", content=build_docx_bytes(title="COMPRAVENTA INMUEBLE", apartment="302")),
                     ],
                 )
             )
             document_id = result.documents[0].document_id
 
-            run = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_document(1, document_id)
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, result.documents[1].document_id)
+            run = engine.run_document(1, document_id)
 
             document = db.get(NotarialDocument, document_id)
             self.assertEqual(run.document_id, document_id)
-            self.assertEqual(run.classification["document_type"], "escritura_hipoteca")
+            self.assertEqual(run.classification["document_type"], "escritura_compraventa")
             self.assertIn("hipoteca", run.classification["acts"])
-            self.assertEqual(document.document_type, "escritura_hipoteca")
+            self.assertEqual(document.document_type, "escritura_compraventa")
             self.assertEqual(document.bank_name, "Bancolombia")
             self.assertGreater(db.query(NotarialDocumentEmbedding).filter(NotarialDocumentEmbedding.document_id == document_id).count(), 0)
             self.assertEqual(db.query(NotarialDocumentFamilyMember).filter(NotarialDocumentFamilyMember.document_id == document_id).count(), 1)
@@ -348,7 +357,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertIn("hybrid_rag", evidence_types)
             decision = db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == document_id).one()
             hybrid = json.loads(decision.hybrid_decision_json)
-            self.assertEqual(hybrid["selected"]["classification"]["document_type"], "escritura_hipoteca")
+            self.assertEqual(hybrid["selected"]["classification"]["document_type"], "escritura_compraventa")
             self.assertEqual(run.llm_error, "llm_disabled")
             metadata = json.loads(document.metadata_json)
             self.assertEqual(metadata["intelligence"]["decision_id"], decision.id)
@@ -437,6 +446,203 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_intelligence_run_redelivery_is_idempotent_without_duplicate_outputs(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Redelivery inteligencia",
+                    documents=[
+                        DocumentUpload(filename="base-redelivery.docx", content=build_docx_bytes(apartment="501")),
+                        DocumentUpload(filename="fuente-redelivery.docx", content=build_docx_bytes(apartment="502")),
+                    ],
+                )
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, result.documents[1].document_id)
+            run = engine.create_document_run(1, result.documents[0].document_id)
+
+            first = engine.run_intelligence_run(run.id)
+            second = engine.run_intelligence_run(run.id)
+
+            self.assertEqual(first["decision_id"], second["decision_id"])
+            self.assertEqual(db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == result.documents[0].document_id).count(), 1)
+            self.assertEqual(db.query(NotarialDocumentEvidence).filter(NotarialDocumentEvidence.document_id == result.documents[0].document_id).count(), first["rag_hits"] + 1)
+            self.assertEqual(db.get(NotarialIntelligenceRun, run.id).status, "completed")
+        finally:
+            db.close()
+
+    def test_rag_persists_target_and_source_trace_without_self_retrieval(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="RAG trazable",
+                    documents=[
+                        DocumentUpload(filename="target.docx", content=build_docx_bytes(apartment="601")),
+                        DocumentUpload(filename="source.docx", content=build_docx_bytes(apartment="602")),
+                    ],
+                )
+            )
+            target_id = result.documents[0].document_id
+            source_id = result.documents[1].document_id
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, source_id)
+            target_run = engine.run_document(1, target_id)
+
+            evidences = db.query(NotarialDocumentEvidence).filter(NotarialDocumentEvidence.document_id == target_id, NotarialDocumentEvidence.evidence_type == "hybrid_rag").all()
+            self.assertGreater(len(evidences), 0)
+            payloads = [json.loads(row.payload_json) for row in evidences]
+            self.assertTrue(all(item["target_document_id"] == target_id for item in payloads))
+            self.assertTrue(all(item["target_parse_run_id"] == target_run.parse_run_id for item in payloads))
+            self.assertTrue(all(item["source_document_id"] != target_id for item in payloads))
+            self.assertIn(source_id, {item["source_document_id"] for item in payloads})
+        finally:
+            db.close()
+
+    def test_structural_alignment_tolerates_shifted_paragraphs_and_table_variants(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Alineacion estructural",
+                    documents=[
+                        DocumentUpload(filename="alineacion-a.docx", content=build_docx_bytes(apartment="701", include_table=True)),
+                        DocumentUpload(filename="alineacion-b.docx", content=build_docx_bytes(apartment="702", include_table=True, extra_lines=["CLAUSULA INSERTADA VARIABLE"])),
+                    ],
+                )
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, result.documents[0].document_id)
+            run = engine.run_document(1, result.documents[1].document_id)
+
+            self.assertGreater(db.query(NotarialBlockAlignment).filter(NotarialBlockAlignment.run_id == run.run_id).count(), 0)
+            labels = {
+                row.text: row.fixed_variable_label
+                for row in db.query(NotarialDocumentBlock)
+                .filter(NotarialDocumentBlock.document_id == result.documents[1].document_id)
+                .all()
+            }
+            self.assertEqual(labels["ESCRITURA DE COMPRAVENTA"], "fixed")
+            self.assertEqual(labels["APARTAMENTO: 702"], "variable")
+        finally:
+            db.close()
+
+    def test_vector_candidate_clustering_consolidates_three_near_duplicate_documents(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Cluster tres",
+                    documents=[
+                        DocumentUpload(filename="cluster-a.docx", content=build_docx_bytes(apartment="801")),
+                        DocumentUpload(filename="cluster-b.docx", content=build_docx_bytes(apartment="802")),
+                        DocumentUpload(filename="cluster-c.docx", content=build_docx_bytes(apartment="803")),
+                    ],
+                )
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            for item in result.documents:
+                engine.run_document(1, item.document_id)
+
+            near_cluster = db.query(NotarialDocumentCluster).filter(NotarialDocumentCluster.cluster_type == "near_duplicate").order_by(NotarialDocumentCluster.id.desc()).first()
+            self.assertIsNotNone(near_cluster)
+            self.assertGreaterEqual(db.query(NotarialDocumentClusterMember).filter(NotarialDocumentClusterMember.cluster_id == near_cluster.id).count(), 3)
+            self.assertIn("pgvector+structural-rerank", near_cluster.algorithm)
+        finally:
+            db.close()
+
+    def test_http_intelligence_run_uses_outbox_and_exposes_status(self):
+        original_task = route_module.process_intelligence_run_task
+
+        class FakeTask:
+            @staticmethod
+            def delay(run_id: int):
+                return type("FakeAsyncResult", (), {"id": f"intel-{run_id}"})()
+
+        route_module.process_intelligence_run_task = FakeTask()
+        self.addCleanup(lambda: setattr(route_module, "process_intelligence_run_task", original_task))
+        client = self._build_api_client()
+        ingest = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "HTTP inteligencia", "source_type": "test"},
+            files=[("files", ("intel.docx", build_docx_bytes(apartment="901"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+        document_id = ingest.json()["documents"][0]["document_id"]
+
+        response = client.post(f"/api/v1/notarial-intelligence/documents/{document_id}/intelligence/run", json={"llm_mode": "off"})
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertEqual(payload["task_id"], f"intel-{payload['run_id']}")
+        detail = client.get(payload["status_url"])
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["run_id"], payload["run_id"])
+        db = self.Session()
+        try:
+            publication = db.query(NotarialTaskPublication).filter(NotarialTaskPublication.target_type == "intelligence_run").one()
+            run = db.get(NotarialIntelligenceRun, payload["run_id"])
+            self.assertEqual(publication.task_id, payload["task_id"])
+            self.assertEqual(run.task_id, payload["task_id"])
+        finally:
+            db.close()
+
+    def test_http_intelligence_publication_failure_reconciles_without_duplicate_run(self):
+        original_task = route_module.process_intelligence_run_task
+
+        class FailingTask:
+            @staticmethod
+            def delay(run_id: int):
+                raise ConnectionError("broker offline")
+
+        class SuccessfulTask:
+            @staticmethod
+            def delay(run_id: int):
+                return type("FakeAsyncResult", (), {"id": f"retry-intel-{run_id}"})()
+
+        route_module.process_intelligence_run_task = FailingTask()
+        self.addCleanup(lambda: setattr(route_module, "process_intelligence_run_task", original_task))
+        client = self._build_api_client()
+        ingest = client.post(
+            "/api/v1/notarial-intelligence/batches/ingest",
+            data={"name": "HTTP intel fail", "source_type": "test"},
+            files=[("files", ("intel-fail.docx", build_docx_bytes(apartment="902"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        )
+        document_id = ingest.json()["documents"][0]["document_id"]
+        failed = client.post(f"/api/v1/notarial-intelligence/documents/{document_id}/intelligence/run", json={"llm_mode": "off"})
+        self.assertEqual(failed.status_code, 503)
+
+        route_module.process_intelligence_run_task = SuccessfulTask()
+        reconciled = client.post("/api/v1/notarial-intelligence/publications/reconcile")
+
+        self.assertEqual(reconciled.status_code, 200)
+        db = self.Session()
+        try:
+            self.assertEqual(db.query(NotarialIntelligenceRun).count(), 1)
+            run = db.query(NotarialIntelligenceRun).one()
+            self.assertEqual(run.task_id, f"retry-intel-{run.id}")
+            self.assertEqual(db.query(NotarialTaskPublication).filter(NotarialTaskPublication.target_type == "intelligence_run").count(), 1)
+        finally:
+            db.close()
+
+    def test_benchmark_persists_versioned_metrics(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="Benchmark", documents=[DocumentUpload(filename="bench.docx", content=build_docx_bytes(apartment="1001"))])
+            )
+            NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_document(1, result.documents[0].document_id)
+
+            benchmark = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8)).benchmark_notary(1)
+
+            self.assertIn("metrics", benchmark)
+            self.assertIn("classification", benchmark["metrics"])
+            self.assertIn("retrieval", benchmark["metrics"])
+            self.assertEqual(db.query(NotarialBenchmarkRun).count(), 1)
+            self.assertTrue(benchmark["corpus_version"].startswith("corpus-"))
+        finally:
+            db.close()
+
     def test_llm_service_retries_transient_provider_errors_only_until_success(self):
         provider = _FlakyLLMProvider()
         service = NotarialLLMService(provider=provider, timeout_seconds=1, max_retries=1)
@@ -458,6 +664,92 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.assertIn("ValidationError", result.audit.error)
         self.assertEqual(result.audit.retries, 0)
         self.assertEqual(provider.calls, 1)
+
+    def test_llm_service_rejects_unknown_field_code_and_foreign_evidence_id(self):
+        invalid_code = _FakeLLMProvider(
+            {
+                "document_type": "escritura_compraventa",
+                "fields": [
+                    {
+                        "field_code": "codigo_inventado",
+                        "label": "Inventado",
+                        "confidence": 0.8,
+                        "evidence_block_ids": [1],
+                        "reason": "No permitido.",
+                    }
+                ],
+                "confidence": 0.8,
+            }
+        )
+        result = NotarialLLMService(provider=invalid_code, timeout_seconds=1, max_retries=2).analyze(
+            {"document": {"id": 1}, "evidence": [{"block_id": 1}]},
+            IntelligenceMode.ASSIST,
+            allowed_field_codes={"numero_apartamento"},
+            allowed_evidence_block_ids={1},
+        )
+        self.assertIn("invalid_field_code", result.audit.error)
+        self.assertEqual(invalid_code.calls, 1)
+
+        invalid_evidence = _FakeLLMProvider(
+            {
+                "document_type": "escritura_compraventa",
+                "fields": [
+                    {
+                        "field_code": "numero_apartamento",
+                        "label": "Apartamento",
+                        "confidence": 0.8,
+                        "evidence_block_ids": [999],
+                        "reason": "Bloque ajeno.",
+                    }
+                ],
+                "confidence": 0.8,
+            }
+        )
+        evidence_result = NotarialLLMService(provider=invalid_evidence, timeout_seconds=1, max_retries=2).analyze(
+            {"document": {"id": 1}, "evidence": [{"block_id": 1}]},
+            IntelligenceMode.ASSIST,
+            allowed_field_codes={"numero_apartamento"},
+            allowed_evidence_block_ids={1},
+        )
+        self.assertIn("invalid_evidence_block_ids", evidence_result.audit.error)
+        self.assertEqual(invalid_evidence.calls, 1)
+
+    def test_llm_modes_have_distinct_hybrid_semantics(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="Modos LLM", documents=[DocumentUpload(filename="modo.docx", content=build_docx_bytes(apartment="1101"))])
+            )
+            document_id = result.documents[0].document_id
+            provider = _FakeLLMProvider(
+                {
+                    "document_type": "escritura_compraventa",
+                    "fields": [],
+                    "conflicts": [],
+                    "confidence": 0.95,
+                }
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8), llm_provider=provider)
+            shadow = engine.run_document(1, document_id, llm_mode=IntelligenceMode.SHADOW)
+            assist = engine.run_document(1, document_id, llm_mode=IntelligenceMode.ASSIST)
+            gated = engine.run_document(1, document_id, llm_mode=IntelligenceMode.GATED)
+
+            decisions = db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == document_id).order_by(NotarialDocumentDecision.id).all()
+            sources = [json.loads(row.hybrid_decision_json)["selected_source"] for row in decisions[-3:]]
+            self.assertEqual(sources, ["deterministic_shadow_llm", "deterministic_with_llm_assist", "llm_gated_with_deterministic_evidence"])
+            self.assertEqual({shadow.llm_mode, assist.llm_mode, gated.llm_mode}, {"shadow", "assist", "gated"})
+        finally:
+            db.close()
+
+    def test_shared_circuit_breaker_state_blocks_second_instance(self):
+        first = RedisCircuitBreaker("unit-shared-breaker", failure_threshold=1, recovery_seconds=60)
+        second = RedisCircuitBreaker("unit-shared-breaker", failure_threshold=1, recovery_seconds=60)
+        first.record_failure()
+
+        with self.assertRaises(CircuitOpenError):
+            second.before_call()
+
+        first.record_success()
 
     def test_reparse_keeps_previous_parse_run_and_switches_active_on_success(self):
         db = self.Session()
@@ -1166,6 +1458,7 @@ class _FlakyLLMProvider(_FakeLLMProvider):
                 "confidence": 0.88,
             }
         )
+        self.model_name = "flaky-json-fixture"
 
     def complete_json(self, system_prompt: str, payload: dict, *, timeout_seconds: int) -> dict:
         self.calls += 1
