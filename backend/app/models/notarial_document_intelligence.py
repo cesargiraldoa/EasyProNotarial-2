@@ -395,6 +395,117 @@ class NotarialDocumentDecision(Base, TimestampMixin):
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
+class NotarialHumanReviewSession(Base, TimestampMixin):
+    __tablename__ = "notarial_human_review_sessions"
+    __table_args__ = (
+        UniqueConstraint("decision_id", "version", name="uq_notarial_human_review_session_decision_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    decision_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_decisions.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_intelligence_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    parse_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="open", index=True)
+    reviewer_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    locked_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    lock_token: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialHumanFieldReview(Base, TimestampMixin):
+    __tablename__ = "notarial_human_field_reviews"
+    __table_args__ = (
+        UniqueConstraint("session_id", "occurrence_key", name="uq_notarial_human_field_review_session_occurrence"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_human_review_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    decision_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_decisions.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    parse_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    block_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="SET NULL"), nullable=True, index=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_entities.id", ondelete="SET NULL"), nullable=True, index=True)
+    occurrence_key: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    field_code: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    proposed_field_code: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    original_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    action: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
+    apply_scope: Mapped[str] = mapped_column(String(40), nullable=False, default="single")
+    fixed_variable_label: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    is_new_field_proposal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialTemplateLibraryItem(Base, TimestampMixin):
+    __tablename__ = "notarial_template_library_items"
+    __table_args__ = (
+        UniqueConstraint("notary_id", "library_key", name="uq_notarial_template_library_items_notary_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    library_key: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    template_kind: Mapped[str] = mapped_column(String(40), nullable=False, default="individual", index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    act_code: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    document_type: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    family_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_families.id", ondelete="SET NULL"), nullable=True, index=True)
+    bank_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    project_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    source_document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    latest_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    approved_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialTemplateVersion(Base, TimestampMixin):
+    __tablename__ = "notarial_template_versions"
+    __table_args__ = (
+        UniqueConstraint("library_item_id", "version_number", name="uq_notarial_template_versions_item_number"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    library_item_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_template_library_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    source_decision_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_decisions.id", ondelete="SET NULL"), nullable=True, index=True)
+    review_session_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_human_review_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    content_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    placeholder_map_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    provenance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    storage_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    approved_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_of_version_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_template_versions.id", ondelete="SET NULL"), nullable=True, index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialHumanReviewAudit(Base, TimestampMixin):
+    __tablename__ = "notarial_human_review_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    entity_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
 class NotarialBenchmarkRun(Base, TimestampMixin):
     __tablename__ = "notarial_benchmark_runs"
 

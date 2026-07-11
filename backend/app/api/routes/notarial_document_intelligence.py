@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentBatch,
     NotarialDocumentBatchItem,
     NotarialDocumentBlock,
+    NotarialDocumentDecision,
     NotarialIntelligenceRun,
     NotarialDocumentParseRun,
 )
@@ -32,6 +34,7 @@ from app.services.notarial_document_intelligence.ingestion import (
     TaskPublicationError,
 )
 from app.services.notarial_document_intelligence.llm_provider import IntelligenceMode
+from app.services.notarial_document_intelligence.human_review import NotarialHumanReviewService
 from app.workers.document_worker import process_queued_document_batch_task, reparse_document_task
 from app.workers.intelligence_worker import process_intelligence_run_task
 
@@ -135,6 +138,49 @@ class BenchmarkResponse(BaseModel):
     model_version: str
     metrics: dict[str, Any]
     coverage: dict[str, int]
+
+
+class HumanReviewCreateRequest(BaseModel):
+    decision_id: int
+    idempotency_key: str | None = None
+
+
+class HumanFieldDecisionRequest(BaseModel):
+    action: str
+    proposed_value: str | None = None
+    proposed_field_code: str | None = None
+    apply_scope: str = "single"
+    fixed_variable_label: str | None = None
+    idempotency_key: str | None = None
+    reason: str | None = None
+
+
+class HumanReviewApproveRequest(BaseModel):
+    template_name: str
+    template_kind: str = "individual"
+    idempotency_key: str | None = None
+
+
+class TemplateRollbackRequest(BaseModel):
+    target_version_id: int
+    idempotency_key: str | None = None
+
+
+class HumanReviewResponse(BaseModel):
+    session: dict[str, Any]
+    decision: dict[str, Any] | None = None
+    fields: list[dict[str, Any]] = []
+    visual_review: list[dict[str, Any]] = []
+
+
+class HumanFieldDecisionResponse(BaseModel):
+    fields: list[dict[str, Any]]
+
+
+class TemplateApprovalResponse(BaseModel):
+    session: dict[str, Any] | None = None
+    library_item: dict[str, Any]
+    version: dict[str, Any]
 
 
 def _current_notary_id(current_user: User) -> int:
@@ -462,6 +508,116 @@ def benchmark_notarial_corpus(
 ):
     notary_id = _current_notary_id(current_user)
     return BenchmarkResponse(**NotarialIntelligenceEngine(db).benchmark_notary(notary_id))
+
+
+@router.post("/human-review/sessions", response_model=HumanReviewResponse)
+def create_human_review_session(
+    request: HumanReviewCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        session = service.create_or_get_session(request.decision_id, idempotency_key=request.idempotency_key)
+        return HumanReviewResponse(**service.detail(session.id))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/human-review/sessions/{session_id}", response_model=HumanReviewResponse)
+def get_human_review_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        return HumanReviewResponse(**service.detail(session_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/human-review/sessions/{session_id}/fields/{field_review_id}", response_model=HumanFieldDecisionResponse)
+def apply_human_field_decision(
+    session_id: int,
+    field_review_id: int,
+    request: HumanFieldDecisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        service.apply_field_decision(
+            session_id,
+            field_review_id,
+            action=request.action,
+            proposed_value=request.proposed_value,
+            proposed_field_code=request.proposed_field_code,
+            apply_scope=request.apply_scope,
+            fixed_variable_label=request.fixed_variable_label,
+            idempotency_key=request.idempotency_key,
+            reason=request.reason,
+        )
+        return HumanFieldDecisionResponse(fields=service.detail(session_id)["fields"])
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post("/human-review/sessions/{session_id}/approve", response_model=TemplateApprovalResponse)
+def approve_human_review_session(
+    session_id: int,
+    request: HumanReviewApproveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        return TemplateApprovalResponse(**service.approve_session(session_id, template_name=request.template_name, template_kind=request.template_kind, idempotency_key=request.idempotency_key))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.get("/template-library")
+def list_template_library(
+    act_code: str | None = None,
+    bank_name: str | None = None,
+    project_name: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
+):
+    return {"items": _human_review_service(db, current_user).list_library(act_code=act_code, bank_name=bank_name, project_name=project_name)}
+
+
+@router.post("/template-library/{library_item_id}/rollback", response_model=TemplateApprovalResponse)
+def rollback_template_library_item(
+    library_item_id: int,
+    request: TemplateRollbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        return TemplateApprovalResponse(**service.rollback_template(library_item_id, request.target_version_id, idempotency_key=request.idempotency_key))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/template-library/versions/{version_id}/docx")
+def download_template_version_docx(
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
+):
+    service = _human_review_service(db, current_user)
+    try:
+        generated = service.generate_template_docx(version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return FileResponse(generated.path, media_type=generated.content_type, filename=generated.filename)
+
+
+def _human_review_service(db: Session, current_user: User) -> NotarialHumanReviewService:
+    return NotarialHumanReviewService(db, notary_id=_current_notary_id(current_user), actor_user_id=getattr(current_user, "id", None))
 
 
 async def _read_uploads(files: list[UploadFile], tmp_dir: Path) -> list[DocumentUpload]:

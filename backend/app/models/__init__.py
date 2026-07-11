@@ -29,10 +29,16 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentEvidence,
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
+    NotarialHumanFieldReview,
+    NotarialHumanReviewAudit,
+    NotarialHumanReviewSession,
+    NotarialIntelligenceRun,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialTaskPublication,
     NotarialEmbeddingVersion,
+    NotarialTemplateLibraryItem,
+    NotarialTemplateVersion,
 )
 from app.models.numbering_sequence import NumberingSequence
 from app.models.person import Person
