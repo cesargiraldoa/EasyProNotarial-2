@@ -36,13 +36,19 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentEvidence,
     NotarialDocumentFamily,
     NotarialDocumentFamilyMember,
+    NotarialHumanFieldReview,
+    NotarialHumanReviewAudit,
+    NotarialHumanReviewSession,
     NotarialIntelligenceRun,
     NotarialDocumentParseRun,
     NotarialDocumentSection,
     NotarialTaskPublication,
     NotarialEmbeddingVersion,
+    NotarialTemplateLibraryItem,
+    NotarialTemplateVersion,
 )
 from app.models.notary import Notary
+from app.services.minuta.inverse_conversion_catalog.models import FieldDefinition
 from app.services.notarial_document_intelligence.contracts import (
     ParsedDocument,
     BatchStatus,
@@ -81,6 +87,12 @@ TABLES = [
     NotarialBlockAlignment.__table__,
     NotarialDocumentDecision.__table__,
     NotarialBenchmarkRun.__table__,
+    FieldDefinition.__table__,
+    NotarialHumanReviewSession.__table__,
+    NotarialHumanFieldReview.__table__,
+    NotarialTemplateLibraryItem.__table__,
+    NotarialTemplateVersion.__table__,
+    NotarialHumanReviewAudit.__table__,
 ]
 
 
@@ -928,6 +940,150 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertEqual(metrics["fields"]["status"], "completed")
             self.assertEqual(metrics["fixed_variable"]["status"], "completed")
             self.assertEqual(db.query(NotarialBenchmarkRun).order_by(NotarialBenchmarkRun.id.desc()).first().status, "completed")
+        finally:
+            db.close()
+
+    def test_human_review_approves_template_without_catalog_autoapproval(self):
+        db = self.Session()
+        try:
+            db.add_all(
+                [
+                    FieldDefinition(field_code="VALOR_VENTA", display_name="Valor venta", status="approved", confidence=1.0),
+                    FieldDefinition(field_code="NUMERO_APARTAMENTO", display_name="Apartamento", status="approved", confidence=1.0),
+                ]
+            )
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Revision humana",
+                    documents=[
+                        DocumentUpload(
+                            filename="review.docx",
+                            content=build_docx_bytes(
+                                apartment="1201",
+                                extra_lines=["VALOR $ 150.000.000", "VALOR $ 150.000.000"],
+                            ),
+                        )
+                    ],
+                )
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            run = engine.run_document(1, result.documents[0].document_id)
+            block = (
+                db.query(NotarialDocumentBlock)
+                .filter(NotarialDocumentBlock.document_id == run.document_id, NotarialDocumentBlock.text == "VALOR $ 150.000.000")
+                .order_by(NotarialDocumentBlock.id.asc())
+                .first()
+            )
+            db.add(
+                NotarialDocumentEntity(
+                    notary_id=1,
+                    document_id=run.document_id,
+                    parse_run_id=run.parse_run_id,
+                    block_id=block.id,
+                    entity_type="money",
+                    canonical_field_code="valor_venta",
+                    text="VALOR $ 150.000.000",
+                    normalized_text="150000000",
+                    confidence=0.92,
+                    source="synthetic-test",
+                    requires_human_review=True,
+                )
+            )
+            db.commit()
+            decision = db.get(NotarialDocumentDecision, run.decision_id)
+            client = self._build_api_client(role_code="protocolist")
+
+            created = client.post(
+                "/api/v1/notarial-intelligence/human-review/sessions",
+                json={"decision_id": decision.id, "idempotency_key": "review-create-1"},
+            )
+            self.assertEqual(created.status_code, 200)
+            session = created.json()["session"]
+            fields = created.json()["fields"]
+            money_field = next(item for item in fields if item["field_code"] == "VALOR_VENTA")
+
+            accepted = client.post(
+                f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}/fields/{money_field['id']}",
+                json={
+                    "action": "correct",
+                    "proposed_field_code": "VALOR_VENTA",
+                    "proposed_value": "150000000",
+                    "apply_scope": "all",
+                    "fixed_variable_label": "variable",
+                    "idempotency_key": "field-money-1",
+                },
+            )
+            self.assertEqual(accepted.status_code, 200)
+
+            new_field = client.post(
+                f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}/fields/{money_field['id']}",
+                json={
+                    "action": "propose_new",
+                    "proposed_field_code": "CAMPO_NUEVO_SUPERVISADO",
+                    "proposed_value": "observacion",
+                    "apply_scope": "single",
+                    "idempotency_key": "field-new-1",
+                },
+            )
+            self.assertEqual(new_field.status_code, 200)
+            self.assertTrue(any(item["status"] == "proposed_catalog_review" and item["is_new_field_proposal"] for item in new_field.json()["fields"]))
+            self.assertEqual(db.query(FieldDefinition).filter(FieldDefinition.field_code == "CAMPO_NUEVO_SUPERVISADO").count(), 0)
+
+            for field in new_field.json()["fields"]:
+                if field["status"] == "pending":
+                    response = client.post(
+                        f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}/fields/{field['id']}",
+                        json={"action": "accept", "fixed_variable_label": "variable", "idempotency_key": f"field-accept-{field['id']}"},
+                    )
+                    self.assertEqual(response.status_code, 200)
+            proposed_rows = [
+                item for item in client.get(f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}").json()["fields"] if item["status"] == "proposed_catalog_review"
+            ]
+            for field in proposed_rows:
+                response = client.post(
+                    f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}/fields/{field['id']}",
+                    json={"action": "reject", "idempotency_key": f"field-reject-{field['id']}"},
+                )
+                self.assertEqual(response.status_code, 200)
+
+            approved = client.post(
+                f"/api/v1/notarial-intelligence/human-review/sessions/{session['id']}/approve",
+                json={"template_name": "Compraventa revisada", "template_kind": "individual", "idempotency_key": "approve-session-1"},
+            )
+            self.assertEqual(approved.status_code, 200)
+            payload = approved.json()
+            self.assertEqual(payload["session"]["status"], "approved")
+            self.assertEqual(payload["library_item"]["status"], "approved")
+            self.assertIn("{{VALOR_VENTA}}", payload["version"]["placeholder_map"])
+
+            library = client.get("/api/v1/notarial-intelligence/template-library?act_code=compraventa")
+            self.assertEqual(library.status_code, 200)
+            self.assertEqual(len(library.json()["items"]), 1)
+
+            docx_response = client.get(f"/api/v1/notarial-intelligence/template-library/versions/{payload['version']['id']}/docx")
+            self.assertEqual(docx_response.status_code, 200)
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+                tmp.write(docx_response.content)
+                tmp_path = Path(tmp.name)
+            try:
+                doc = Document(str(tmp_path))
+                red_markers = [
+                    run.text
+                    for paragraph in doc.paragraphs
+                    for run in paragraph.runs
+                    if run.text == "{{VALOR_VENTA}}" and run.font.color.rgb is not None
+                ]
+                self.assertTrue(red_markers)
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+            rollback = client.post(
+                f"/api/v1/notarial-intelligence/template-library/{payload['library_item']['id']}/rollback",
+                json={"target_version_id": payload["version"]["id"], "idempotency_key": "rollback-1"},
+            )
+            self.assertEqual(rollback.status_code, 200)
+            self.assertEqual(rollback.json()["version"]["rollback_of_version_id"], payload["version"]["id"])
+            self.assertGreaterEqual(db.query(NotarialHumanReviewAudit).count(), 4)
         finally:
             db.close()
 
