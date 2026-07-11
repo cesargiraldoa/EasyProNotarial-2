@@ -49,6 +49,8 @@ class NotarialHybridRagService:
         limit: int = 8,
     ) -> list[HybridRagHit]:
         blocks = self._candidate_blocks(notary_id, document_type=document_type, semantic_type=semantic_type, exclude_document_id=exclude_document_id)
+        if not blocks and document_type is not None:
+            blocks = self._candidate_blocks(notary_id, document_type=None, semantic_type=semantic_type, exclude_document_id=exclude_document_id)
         lexical = {block.id: _lexical_score(query, block.text) for block in blocks}
         structural = {block.id: _structural_score(block, semantic_type=semantic_type) for block in blocks}
         vector = self._vector_scores(notary_id, query, blocks)
