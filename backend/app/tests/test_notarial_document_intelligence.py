@@ -472,6 +472,120 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_create_document_run_recovers_concurrent_run_key_race(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(name="Create run race", documents=[DocumentUpload(filename="race.docx", content=build_docx_bytes(apartment="551"))])
+            )
+            document_id = result.documents[0].document_id
+        finally:
+            db.close()
+
+        barrier = threading.Barrier(2)
+        run_ids: list[int] = []
+        errors: list[BaseException] = []
+
+        def create_run():
+            session = self.Session()
+            try:
+                barrier.wait(timeout=5)
+                run = NotarialIntelligenceEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).create_document_run(1, document_id)
+                session.commit()
+                run_ids.append(run.id)
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                session.close()
+
+        threads = [threading.Thread(target=create_run) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertEqual(errors, [])
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(len(set(run_ids)), 1)
+        db = self.Session()
+        try:
+            self.assertEqual(db.query(NotarialIntelligenceRun).count(), 1)
+        finally:
+            db.close()
+
+    def test_intelligence_run_claim_is_atomic_across_sessions(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Claim atomico",
+                    documents=[
+                        DocumentUpload(filename="claim-target.docx", content=build_docx_bytes(apartment="561")),
+                        DocumentUpload(filename="claim-source.docx", content=build_docx_bytes(apartment="562")),
+                    ],
+                )
+            )
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, result.documents[1].document_id)
+            run = engine.create_document_run(1, result.documents[0].document_id)
+            db.commit()
+            run_id = run.id
+        finally:
+            db.close()
+
+        entered = threading.Event()
+        release = threading.Event()
+        results: list[dict] = []
+        errors: list[BaseException] = []
+
+        class SlowEngine(NotarialIntelligenceEngine):
+            def run_document(self, *args, **kwargs):
+                entered.set()
+                release.wait(timeout=5)
+                return super().run_document(*args, **kwargs)
+
+        def first_worker():
+            session = self.Session()
+            try:
+                results.append(SlowEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_intelligence_run(run_id))
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                session.close()
+
+        def second_worker():
+            session = self.Session()
+            try:
+                entered.wait(timeout=5)
+                results.append(NotarialIntelligenceEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_intelligence_run(run_id))
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                session.close()
+
+        first = threading.Thread(target=first_worker)
+        second = threading.Thread(target=second_worker)
+        first.start()
+        second.start()
+        entered.wait(timeout=5)
+        release.set()
+        first.join(timeout=10)
+        second.join(timeout=10)
+
+        self.assertEqual(errors, [])
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertTrue(any(item.get("claimed") is False for item in results))
+        self.assertTrue(any(item.get("decision_id") for item in results))
+        db = self.Session()
+        try:
+            stored = db.get(NotarialIntelligenceRun, run_id)
+            self.assertEqual(stored.status, "completed")
+            self.assertEqual(stored.attempts, 1)
+            self.assertEqual(db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == result.documents[0].document_id).count(), 1)
+        finally:
+            db.close()
+
     def test_rag_persists_target_and_source_trace_without_self_retrieval(self):
         db = self.Session()
         try:
@@ -497,6 +611,46 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertTrue(all(item["target_parse_run_id"] == target_run.parse_run_id for item in payloads))
             self.assertTrue(all(item["source_document_id"] != target_id for item in payloads))
             self.assertIn(source_id, {item["source_document_id"] for item in payloads})
+        finally:
+            db.close()
+
+    def test_rag_vector_scores_are_limited_to_filtered_candidate_blocks(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="RAG filtrado",
+                    documents=[
+                        DocumentUpload(filename="rag-target.docx", content=build_docx_bytes(apartment="611")),
+                        DocumentUpload(filename="rag-source.docx", content=build_docx_bytes(apartment="612")),
+                        DocumentUpload(filename="rag-wrong-type.docx", content=build_docx_bytes(title="PROMESA DE COMPRAVENTA", apartment="613")),
+                    ],
+                )
+            )
+            target_id, source_id, wrong_id = [item.document_id for item in result.documents]
+            provider = HashEmbeddingProvider(dimensions=8)
+            engine = NotarialIntelligenceEngine(db, embedding_provider=provider)
+            for item in result.documents:
+                engine.embedding_service.reindex_document(1, item.document_id)
+            db.get(NotarialDocument, target_id).document_type = "escritura_compraventa"
+            db.get(NotarialDocument, source_id).document_type = "escritura_compraventa"
+            db.get(NotarialDocument, wrong_id).document_type = "promesa_compraventa"
+            query_vector = provider.encode(["escritura_compraventa compraventa"])[0]
+            encoded_query = NotarialVectorStore(db, dimensions=8).encode_vector(query_vector)
+            for row in db.query(NotarialDocumentEmbedding).filter(NotarialDocumentEmbedding.document_id.in_([target_id, wrong_id])).all():
+                row.embedding = encoded_query
+            source_vector = provider.encode(["escritura_compraventa compraventa fuente"])[0]
+            encoded_source = NotarialVectorStore(db, dimensions=8).encode_vector(source_vector)
+            for row in db.query(NotarialDocumentEmbedding).filter(NotarialDocumentEmbedding.document_id == source_id).all():
+                row.embedding = encoded_source
+            db.commit()
+
+            hits = engine.rag.search(1, "escritura_compraventa compraventa", document_type="escritura_compraventa", exclude_document_id=target_id, limit=8)
+
+            self.assertGreater(len(hits), 0)
+            self.assertEqual({hit.document_id for hit in hits}, {source_id})
+            self.assertTrue(all(hit.document_id != target_id for hit in hits))
+            self.assertTrue(all(hit.vector_score > 0 for hit in hits))
         finally:
             db.close()
 
@@ -549,6 +703,50 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertIsNotNone(near_cluster)
             self.assertGreaterEqual(db.query(NotarialDocumentClusterMember).filter(NotarialDocumentClusterMember.cluster_id == near_cluster.id).count(), 3)
             self.assertIn("pgvector+structural-rerank", near_cluster.algorithm)
+        finally:
+            db.close()
+
+    def test_vector_candidate_clustering_finds_similar_high_id_document(self):
+        db = self.Session()
+        try:
+            documents = [DocumentUpload(filename="cluster-target.docx", content=build_docx_bytes(apartment="821"))]
+            documents.extend(
+                DocumentUpload(filename=f"cluster-distractor-{index}.docx", content=build_docx_bytes(title="HIPOTECA", apartment=str(830 + index)))
+                for index in range(8)
+            )
+            documents.append(DocumentUpload(filename="cluster-similar-high-id.docx", content=build_docx_bytes(apartment="822")))
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(IngestBatchRequest(name="Cluster high id", documents=documents))
+            target_id = result.documents[0].document_id
+            similar_id = result.documents[-1].document_id
+            provider = HashEmbeddingProvider(dimensions=8)
+            engine = NotarialIntelligenceEngine(db, embedding_provider=provider)
+            for item in result.documents:
+                engine.embedding_service.reindex_document(1, item.document_id)
+            vector_store = NotarialVectorStore(db, dimensions=8)
+            target_vector = vector_store.encode_vector([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            similar_vector = vector_store.encode_vector([0.99, 0.01, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            distractor_vector = vector_store.encode_vector([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            for row in db.query(NotarialDocumentEmbedding).all():
+                if row.document_id == target_id:
+                    row.embedding = target_vector
+                elif row.document_id == similar_id:
+                    row.embedding = similar_vector
+                else:
+                    row.embedding = distractor_vector
+            db.commit()
+
+            candidate_ids = engine.family_cluster._candidate_document_ids(1, target_id, limit=3)
+            clusters = engine.family_cluster.update_duplicate_clusters(1, db.get(NotarialDocument, target_id), near_duplicate_threshold=0.75)
+
+            self.assertIn(similar_id, candidate_ids)
+            self.assertNotEqual(candidate_ids, sorted(candidate_ids))
+            near_clusters = [cluster for cluster in clusters if cluster.cluster_type == "near_duplicate"]
+            self.assertTrue(near_clusters)
+            member_ids = {
+                row.document_id
+                for row in db.query(NotarialDocumentClusterMember).filter(NotarialDocumentClusterMember.cluster_id == near_clusters[-1].id).all()
+            }
+            self.assertIn(similar_id, member_ids)
         finally:
             db.close()
 
@@ -636,10 +834,80 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             benchmark = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8)).benchmark_notary(1)
 
             self.assertIn("metrics", benchmark)
+            self.assertEqual(benchmark["metrics"]["status"], "insufficient_ground_truth")
             self.assertIn("classification", benchmark["metrics"])
             self.assertIn("retrieval", benchmark["metrics"])
+            self.assertEqual(benchmark["metrics"]["classification"]["status"], "insufficient_ground_truth")
             self.assertEqual(db.query(NotarialBenchmarkRun).count(), 1)
+            self.assertEqual(db.query(NotarialBenchmarkRun).one().status, "insufficient_ground_truth")
             self.assertTrue(benchmark["corpus_version"].startswith("corpus-"))
+        finally:
+            db.close()
+
+    def test_benchmark_uses_ground_truth_for_quality_metrics(self):
+        db = self.Session()
+        try:
+            result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
+                IngestBatchRequest(
+                    name="Benchmark ground truth",
+                    documents=[
+                        DocumentUpload(filename="bench-target.docx", content=build_docx_bytes(apartment="1001")),
+                        DocumentUpload(filename="bench-source.docx", content=build_docx_bytes(apartment="1002")),
+                    ],
+                )
+            )
+            target_id = result.documents[0].document_id
+            source_id = result.documents[1].document_id
+            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            engine.run_document(1, source_id)
+            engine.run_document(1, target_id)
+            target = db.get(NotarialDocument, target_id)
+            source = db.get(NotarialDocument, source_id)
+            target.metadata_json = json.dumps(
+                {
+                    **json.loads(target.metadata_json),
+                    "labels": {
+                        "document_type": "escritura_compraventa",
+                        "acts": ["compraventa"],
+                        "field_codes": ["numero_apartamento"],
+                        "relevant_document_ids": [source_id],
+                        "cluster_label": "familia-compraventa",
+                        "fixed_variable": {"APARTAMENTO: 1001": "variable"},
+                    },
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            source.metadata_json = json.dumps(
+                {
+                    **json.loads(source.metadata_json),
+                    "labels": {
+                        "document_type": "escritura_compraventa",
+                        "acts": ["compraventa"],
+                        "cluster_label": "familia-compraventa",
+                    },
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            db.commit()
+
+            benchmark = engine.benchmark_notary(1)
+            metrics = benchmark["metrics"]
+
+            self.assertEqual(metrics["status"], "completed")
+            self.assertEqual(metrics["classification"]["tp"], 4)
+            self.assertEqual(metrics["classification"]["fp"], 0)
+            self.assertEqual(metrics["classification"]["fn"], 0)
+            self.assertEqual(metrics["classification"]["precision"], 1.0)
+            self.assertEqual(metrics["classification"]["recall"], 1.0)
+            self.assertEqual(metrics["classification"]["f1"], 1.0)
+            self.assertEqual(metrics["retrieval"]["recall_at_8"], 1.0)
+            self.assertEqual(metrics["retrieval"]["mrr"], 1.0)
+            self.assertEqual(metrics["clustering"]["tp"], 1)
+            self.assertEqual(metrics["fields"]["status"], "completed")
+            self.assertEqual(metrics["fixed_variable"]["status"], "completed")
+            self.assertEqual(db.query(NotarialBenchmarkRun).order_by(NotarialBenchmarkRun.id.desc()).first().status, "completed")
         finally:
             db.close()
 
