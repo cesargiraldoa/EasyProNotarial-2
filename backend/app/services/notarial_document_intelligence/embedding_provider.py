@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.notarial_document_intelligence import (
@@ -89,9 +90,13 @@ class NotarialEmbeddingService:
             status=status,
             metadata_json=json.dumps({"normalized": True}, ensure_ascii=False, sort_keys=True),
         )
-        self.db.add(version)
-        self.db.flush()
-        return version
+        try:
+            with self.db.begin_nested():
+                self.db.add(version)
+                self.db.flush()
+            return version
+        except IntegrityError:
+            return self.db.query(NotarialEmbeddingVersion).filter(NotarialEmbeddingVersion.version_key == version_key).one()
 
     def reindex_document(self, notary_id: int, document_id: int, parse_run_id: int | None = None) -> dict[str, int | str]:
         active_parse_run_id = parse_run_id or self._active_parse_run_id(notary_id, document_id)
@@ -114,6 +119,8 @@ class NotarialEmbeddingService:
             row.source_id: row
             for row in self.db.query(NotarialDocumentEmbedding).filter(
                 NotarialDocumentEmbedding.embedding_version_id == version.id,
+                NotarialDocumentEmbedding.notary_id == notary_id,
+                NotarialDocumentEmbedding.document_id == document_id,
                 NotarialDocumentEmbedding.source_type == "block",
                 NotarialDocumentEmbedding.source_id.in_([block.id for block in candidates] or [0]),
             )
