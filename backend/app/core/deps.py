@@ -16,13 +16,13 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_prefix}/auth/lo
 
 
 ROLE_PERMISSIONS = {
-    "super_admin": {"users.read", "users.write", "notaries.read", "notaries.write", "notaries.import", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
-    "admin_notary": {"users.read", "users.write", "notaries.read", "notaries.write", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
-    "notary": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
-    "notary_titular": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
-    "notary_suplente": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write"},
-    "approver": {"notaries.read", "crm.manage", "cases.read", "cases.write"},
-    "protocolist": {"notaries.read", "crm.manage", "cases.read", "cases.write"},
+    "super_admin": {"users.read", "users.write", "notaries.read", "notaries.write", "notaries.import", "crm.manage", "crm.audit.read", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.ingest", "notarial_intelligence.reparse", "notarial_intelligence.review"},
+    "admin_notary": {"users.read", "users.write", "notaries.read", "notaries.write", "crm.manage", "crm.audit.read", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.ingest", "notarial_intelligence.reparse", "notarial_intelligence.review"},
+    "notary": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.review"},
+    "notary_titular": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.review"},
+    "notary_suplente": {"notaries.read", "crm.manage", "crm.audit.read", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.review"},
+    "approver": {"notaries.read", "crm.manage", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.reparse", "notarial_intelligence.review"},
+    "protocolist": {"notaries.read", "crm.manage", "cases.read", "cases.write", "notarial_intelligence.read", "notarial_intelligence.ingest", "notarial_intelligence.reparse"},
     "client": {"notaries.read", "cases.read"},
 }
 
@@ -86,10 +86,12 @@ def has_role(user: User, *role_codes: str, notary_id: int | None = None) -> bool
     return False
 
 
-def get_permissions(user: User) -> list[str]:
+def get_permissions(user: User, notary_id: int | None = None) -> list[str]:
     permissions: set[str] = set()
-    for role_code in get_role_codes(user):
-        permissions.update(ROLE_PERMISSIONS.get(role_code, set()))
+    for assignment in user.role_assignments:
+        if notary_id is not None and assignment.notary_id not in {None, notary_id}:
+            continue
+        permissions.update(ROLE_PERMISSIONS.get(assignment.role.code, set()))
     return sorted(permissions)
 
 
@@ -102,9 +104,10 @@ def require_roles(*role_codes: str) -> Callable[[User], User]:
     return dependency
 
 
-def require_permission(permission: str) -> Callable[[User], User]:
+def require_permission(permission: str, *, scoped_to_default_notary: bool = False) -> Callable[[User], User]:
     def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if permission in get_permissions(current_user):
+        notary_id = current_user.default_notary_id if scoped_to_default_notary else None
+        if permission in get_permissions(current_user, notary_id=notary_id):
             return current_user
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para esta acción.")
 

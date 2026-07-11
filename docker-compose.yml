@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: easypro2-postgres
     environment:
       POSTGRES_DB: ${EASYPRO2_POSTGRES_DB:-easypro2}
@@ -10,6 +10,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    container_name: easypro2-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
 
 volumes:
   postgres-data:
+  redis-data:

@@ -76,6 +76,30 @@ def _upload_to_supabase(bucket: str, path: str, content: bytes, content_type: st
         raise
 
 
+def _upload_path_to_supabase(bucket: str, path: str, source_path: str | Path, content_type: str) -> None:
+    supabase = get_supabase_client()
+    try:
+        with Path(source_path).open("rb") as handle:
+            supabase.storage.from_(bucket).upload(
+                path=path,
+                file=handle,
+                file_options={
+                    "content-type": content_type,
+                    "upsert": "true",
+                },
+            )
+    except StorageApiError as exc:
+        logger.exception("Supabase Storage rechazó la subida desde ruta", extra={"bucket": bucket, "storage_path": path})
+        detail = (
+            f"Supabase Storage rechazó la subida en {bucket}/{path}: "
+            f"{exc.message} (code={exc.code}, status={exc.status})"
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail) from exc
+    except Exception:
+        logger.exception("Error subiendo archivo desde ruta a Supabase Storage", extra={"bucket": bucket, "storage_path": path})
+        raise
+
+
 def _download_from_supabase(bucket: str, path: str) -> bytes:
     supabase = get_supabase_client()
     result = supabase.storage.from_(bucket).download(path)

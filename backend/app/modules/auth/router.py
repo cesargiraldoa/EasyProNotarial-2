@@ -24,6 +24,7 @@ MODULE_CODES = [
     "crear_minuta",
     "actos_plantillas",
     "lotes",
+    "notarial_intelligence",
     "system_status",
     "configuracion",
 ]
