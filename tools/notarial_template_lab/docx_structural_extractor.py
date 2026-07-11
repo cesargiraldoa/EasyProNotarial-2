@@ -99,15 +99,21 @@ class DocxStructuralExtractor:
                 yield from self._iter_table(child, part, f"{prefix}/table {table_index}")
 
     def _iter_table(self, table: Table, part: str, prefix: str) -> Iterable[BlockMap]:
-        seen_cells: set[int] = set()
+        seen_cells: set[str] = set()
         for row_index, row in enumerate(table.rows, start=1):
             for cell_index, cell in enumerate(row.cells, start=1):
-                cell_id = id(cell._tc)
+                cell_id = self._cell_id(cell)
                 if cell_id in seen_cells:
                     continue
                 seen_cells.add(cell_id)
                 cell_prefix = f"{prefix}/row {row_index}/cell {cell_index}"
                 yield from self._iter_blocks(cell, part=part, prefix=cell_prefix)
+
+    def _cell_id(self, cell: _Cell) -> str:
+        try:
+            return cell._tc.getroottree().getpath(cell._tc)
+        except Exception:
+            return str(id(cell._tc))
 
     def _iter_block_items(self, parent) -> Iterable[Paragraph | Table]:
         if isinstance(parent, DocxDocument):
