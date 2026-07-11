@@ -358,6 +358,86 @@ export type ExecutiveDashboard = {
   pilot_reference?: DashboardPilotReference | null;
   latest_import_reference?: string | null;
 };
+
+export type HumanReviewField = {
+  id: number;
+  session_id: number;
+  block_id?: number | null;
+  entity_id?: number | null;
+  occurrence_key: string;
+  field_code?: string | null;
+  proposed_field_code?: string | null;
+  original_value?: string | null;
+  proposed_value?: string | null;
+  action: string;
+  apply_scope: string;
+  fixed_variable_label: string;
+  is_new_field_proposal: boolean;
+  status: string;
+  metadata: Record<string, unknown>;
+};
+
+export type HumanReviewDetail = {
+  session: {
+    id: number;
+    decision_id: number;
+    document_id?: number | null;
+    parse_run_id?: number | null;
+    version: number;
+    status: string;
+    reviewer_user_id?: number | null;
+    locked_by_user_id?: number | null;
+    approved_at?: string | null;
+    metadata: Record<string, unknown>;
+  };
+  decision?: Record<string, unknown> | null;
+  fields: HumanReviewField[];
+  visual_review: Array<{
+    block_id: number;
+    location_key: string;
+    original_text: string;
+    proposed_text: string;
+    fields: number[];
+  }>;
+};
+
+export type TemplateApprovalResult = {
+  session?: HumanReviewDetail["session"] | null;
+  library_item: TemplateLibraryItem;
+  version: TemplateVersion;
+};
+
+export type TemplateLibraryItem = {
+  id: number;
+  library_key: string;
+  name: string;
+  template_kind: string;
+  status: string;
+  act_code?: string | null;
+  document_type?: string | null;
+  family_id?: number | null;
+  bank_name?: string | null;
+  project_name?: string | null;
+  source_document_id?: number | null;
+  latest_version_id?: number | null;
+  approved_version_id?: number | null;
+  metadata: Record<string, unknown>;
+};
+
+export type TemplateVersion = {
+  id: number;
+  library_item_id: number;
+  version_number: number;
+  status: string;
+  source_decision_id?: number | null;
+  review_session_id?: number | null;
+  source_document_id?: number | null;
+  placeholder_map: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  storage_path?: string | null;
+  approved_at?: string | null;
+  rollback_of_version_id?: number | null;
+};
 function persistSessionToken(token: string, rememberSession: boolean) {
   if (typeof document !== "undefined") {
     const cookie = rememberSession
@@ -640,6 +720,61 @@ export async function updateRolePermissions(roleId: number, permissions: RolePer
     headers: { "Content-Type": "application/json" },
     body: permissions
   });
+}
+
+export async function createHumanReviewSession(decisionId: number): Promise<HumanReviewDetail> {
+  return apiFetch<HumanReviewDetail>("/api/v1/notarial-intelligence/human-review/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { decision_id: decisionId, idempotency_key: `ui-review-${decisionId}` },
+  });
+}
+
+export async function getHumanReviewSession(sessionId: number): Promise<HumanReviewDetail> {
+  return apiFetch<HumanReviewDetail>(`/api/v1/notarial-intelligence/human-review/sessions/${sessionId}`);
+}
+
+export async function applyHumanFieldDecision(
+  sessionId: number,
+  fieldReviewId: number,
+  payload: {
+    action: string;
+    proposed_value?: string | null;
+    proposed_field_code?: string | null;
+    apply_scope?: string;
+    fixed_variable_label?: string | null;
+    reason?: string | null;
+  },
+): Promise<{ fields: HumanReviewField[] }> {
+  return apiFetch<{ fields: HumanReviewField[] }>(`/api/v1/notarial-intelligence/human-review/sessions/${sessionId}/fields/${fieldReviewId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { ...payload, idempotency_key: `ui-field-${sessionId}-${fieldReviewId}-${Date.now()}` },
+  });
+}
+
+export async function approveHumanReviewSession(sessionId: number, templateName: string, templateKind: string): Promise<TemplateApprovalResult> {
+  return apiFetch<TemplateApprovalResult>(`/api/v1/notarial-intelligence/human-review/sessions/${sessionId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { template_name: templateName, template_kind: templateKind, idempotency_key: `ui-approve-${sessionId}-${templateName}` },
+  });
+}
+
+export async function getTemplateLibrary(filters: { act_code?: string; bank_name?: string; project_name?: string } = {}): Promise<{ items: TemplateLibraryItem[] }> {
+  return apiFetch<{ items: TemplateLibraryItem[] }>(`/api/v1/notarial-intelligence/template-library${buildQuery(filters)}`);
+}
+
+export async function rollbackTemplateLibraryItem(libraryItemId: number, targetVersionId: number): Promise<TemplateApprovalResult> {
+  return apiFetch<TemplateApprovalResult>(`/api/v1/notarial-intelligence/template-library/${libraryItemId}/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { target_version_id: targetVersionId, idempotency_key: `ui-rollback-${libraryItemId}-${targetVersionId}` },
+  });
+}
+
+export function templateVersionDocxUrl(versionId: number): string {
+  return buildApiUrl(`/api/v1/notarial-intelligence/template-library/versions/${versionId}/docx`);
 }
 
 
