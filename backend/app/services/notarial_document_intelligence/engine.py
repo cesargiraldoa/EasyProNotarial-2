@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models.notarial_document_intelligence import (
@@ -160,8 +161,11 @@ class NotarialIntelligenceEngine:
         parse_run = self._active_parse_run(notary_id, document_id)
         if run is None:
             run = self.create_document_run(notary_id, document_id, llm_mode=llm_mode)
+            self.db.commit()
+            run = self.db.get(NotarialIntelligenceRun, run.id)
         blocks = self._active_blocks(notary_id, document_id, parse_run.id)
         classification = self.classifier.classify(blocks)
+        allowed_codes = self._allowed_field_codes()
         self._clear_run_artifacts(run.id, document.id, parse_run.id)
         self._persist_classification(run.id, document, parse_run, classification)
         embedding_result = self.embedding_service.reindex_document(notary_id, document_id, parse_run.id)
@@ -177,7 +181,6 @@ class NotarialIntelligenceEngine:
         )
         self.rag.persist_hits(notary_id, target_document_id=document.id, target_parse_run_id=parse_run.id, hits=rag_hits, intelligence_run_id=run.id)
         evidence_blocks = {block.id for block in blocks}
-        allowed_codes = self._allowed_field_codes()
         llm_result = self.llm.analyze(
             _llm_payload(document, parse_run, classification, blocks, rag_hits, allowed_codes),
             llm_mode,
@@ -185,6 +188,11 @@ class NotarialIntelligenceEngine:
             allowed_evidence_block_ids=evidence_blocks,
         )
         decision = self._persist_decision(run.id, document, parse_run, classification, fixed_variable_counts, rag_hits, llm_result, llm_mode)
+        run_id_value = run.id
+        document_id_value = document.id
+        parse_run_id_value = parse_run.id
+        family_id_value = family.id
+        decision_id_value = decision.id
         document.metadata_json = _merge_json(
             document.metadata_json,
             {
@@ -199,16 +207,16 @@ class NotarialIntelligenceEngine:
         )
         self.db.commit()
         return IntelligenceRunResult(
-            run_id=run.id,
-            document_id=document.id,
-            parse_run_id=parse_run.id,
+            run_id=run_id_value,
+            document_id=document_id_value,
+            parse_run_id=parse_run_id_value,
             classification=_classification_payload(classification),
             embedding=embedding_result,
-            family_id=family.id,
+            family_id=family_id_value,
             cluster_count=len(clusters),
             fixed_variable_counts=fixed_variable_counts,
             rag_hits=len(rag_hits),
-            decision_id=decision.id,
+            decision_id=decision_id_value,
             llm_mode=llm_mode.value,
             llm_error=llm_result.audit.error,
         )
@@ -369,8 +377,10 @@ class NotarialIntelligenceEngine:
             "valor_venta",
             "valor_hipoteca",
         }
-        for model, column in ((TemplateField, TemplateField.field_code), (FieldDefinition, FieldDefinition.field_code)):
+        for table_name, column in (("template_fields", TemplateField.field_code), ("field_definitions", FieldDefinition.field_code)):
             try:
+                if not inspect(self.db.get_bind()).has_table(table_name):
+                    continue
                 rows = self.db.query(column).distinct().all()
                 codes.update(str(row[0]) for row in rows if row[0])
             except Exception:

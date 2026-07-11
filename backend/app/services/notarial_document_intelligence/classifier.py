@@ -4,6 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -191,6 +192,8 @@ class NotarialDocumentClassifier:
     def _catalog_acts(self, normalized: str) -> list[str]:
         if self.db is None:
             return []
+        if not _table_exists(self.db, "act_catalog"):
+            return []
         try:
             rows = self.db.query(ActCatalog).filter(ActCatalog.is_active.is_(True)).all()
         except SQLAlchemyError:
@@ -202,7 +205,7 @@ class NotarialDocumentClassifier:
             if (code and code in normalized) or (label and label in normalized):
                 acts.append(row.code)
         try:
-            corpus_rows = self.db.query(CorpusDocument.act_type).filter(CorpusDocument.act_type.isnot(None)).distinct().all()
+            corpus_rows = self.db.query(CorpusDocument.act_type).filter(CorpusDocument.act_type.isnot(None)).distinct().all() if _table_exists(self.db, "corpus_documents") else []
         except SQLAlchemyError:
             corpus_rows = []
         for (act_type,) in corpus_rows:
@@ -215,10 +218,10 @@ class NotarialDocumentClassifier:
             return []
         values: list[str] = []
         try:
-            definitions = self.db.query(FieldDefinition).filter(FieldDefinition.field_code.ilike(f"%{field_hint}%")).all()
-            aliases = self.db.query(FieldAlias).filter(FieldAlias.canonical_field_code.ilike(f"%{field_hint}%")).all()
-            patterns = self.db.query(FieldPattern).filter(FieldPattern.canonical_field_code.ilike(f"%{field_hint}%")).all()
-            template_fields = self.db.query(TemplateField).filter(TemplateField.field_code.ilike(f"%{field_hint}%")).all()
+            definitions = self.db.query(FieldDefinition).filter(FieldDefinition.field_code.ilike(f"%{field_hint}%")).all() if _table_exists(self.db, "field_definitions") else []
+            aliases = self.db.query(FieldAlias).filter(FieldAlias.canonical_field_code.ilike(f"%{field_hint}%")).all() if _table_exists(self.db, "field_aliases") else []
+            patterns = self.db.query(FieldPattern).filter(FieldPattern.canonical_field_code.ilike(f"%{field_hint}%")).all() if _table_exists(self.db, "field_patterns") else []
+            template_fields = self.db.query(TemplateField).filter(TemplateField.field_code.ilike(f"%{field_hint}%")).all() if _table_exists(self.db, "template_fields") else []
         except SQLAlchemyError:
             return []
         values.extend(row.display_name for row in definitions if row.display_name)
@@ -236,3 +239,10 @@ def _normalize(value: str) -> str:
 
 def _clean(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip(" .,:;")
+
+
+def _table_exists(db: Session, table_name: str) -> bool:
+    try:
+        return inspect(db.get_bind()).has_table(table_name)
+    except SQLAlchemyError:
+        return False
