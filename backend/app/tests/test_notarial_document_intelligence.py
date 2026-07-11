@@ -473,8 +473,17 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             db.close()
 
     def test_create_document_run_recovers_concurrent_run_key_race(self):
-        db = self.Session()
+        db_path = Path(self.tmp.name) / "intelligence-run-key-race.db"
+        db_engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False, "timeout": 30},
+        )
+        Base.metadata.create_all(db_engine, tables=TABLES)
+        Session = sessionmaker(bind=db_engine)
+        db = Session()
         try:
+            db.add(_notary(1, "notaria-run-key"))
+            db.commit()
             result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
                 IngestBatchRequest(name="Create run race", documents=[DocumentUpload(filename="race.docx", content=build_docx_bytes(apartment="551"))])
             )
@@ -487,7 +496,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         errors: list[BaseException] = []
 
         def create_run():
-            session = self.Session()
+            session = Session()
             try:
                 barrier.wait(timeout=5)
                 run = NotarialIntelligenceEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).create_document_run(1, document_id)
@@ -507,15 +516,25 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertFalse(any(thread.is_alive() for thread in threads))
         self.assertEqual(len(set(run_ids)), 1)
-        db = self.Session()
+        db = Session()
         try:
             self.assertEqual(db.query(NotarialIntelligenceRun).count(), 1)
         finally:
             db.close()
+            db_engine.dispose()
 
     def test_intelligence_run_claim_is_atomic_across_sessions(self):
-        db = self.Session()
+        db_path = Path(self.tmp.name) / "intelligence-claim-race.db"
+        db_engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False, "timeout": 30},
+        )
+        Base.metadata.create_all(db_engine, tables=TABLES)
+        Session = sessionmaker(bind=db_engine)
+        db = Session()
         try:
+            db.add(_notary(1, "notaria-claim"))
+            db.commit()
             result = NotarialDocumentIngestionService(db, notary_id=1, storage=self.storage).ingest_batch(
                 IngestBatchRequest(
                     name="Claim atomico",
@@ -525,9 +544,9 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                     ],
                 )
             )
-            engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
-            engine.run_document(1, result.documents[1].document_id)
-            run = engine.create_document_run(1, result.documents[0].document_id)
+            intelligence_engine = NotarialIntelligenceEngine(db, embedding_provider=HashEmbeddingProvider(dimensions=8))
+            intelligence_engine.run_document(1, result.documents[1].document_id)
+            run = intelligence_engine.create_document_run(1, result.documents[0].document_id)
             db.commit()
             run_id = run.id
         finally:
@@ -545,7 +564,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                 return super().run_document(*args, **kwargs)
 
         def first_worker():
-            session = self.Session()
+            session = Session()
             try:
                 results.append(SlowEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_intelligence_run(run_id))
             except BaseException as exc:
@@ -554,7 +573,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                 session.close()
 
         def second_worker():
-            session = self.Session()
+            session = Session()
             try:
                 entered.wait(timeout=5)
                 results.append(NotarialIntelligenceEngine(session, embedding_provider=HashEmbeddingProvider(dimensions=8)).run_intelligence_run(run_id))
@@ -564,20 +583,20 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
                 session.close()
 
         first = threading.Thread(target=first_worker)
-        second = threading.Thread(target=second_worker)
         first.start()
-        second.start()
         entered.wait(timeout=5)
+        second = threading.Thread(target=second_worker)
+        second.start()
+        second.join(timeout=10)
         release.set()
         first.join(timeout=10)
-        second.join(timeout=10)
 
         self.assertEqual(errors, [])
         self.assertFalse(first.is_alive())
         self.assertFalse(second.is_alive())
         self.assertTrue(any(item.get("claimed") is False for item in results))
         self.assertTrue(any(item.get("decision_id") for item in results))
-        db = self.Session()
+        db = Session()
         try:
             stored = db.get(NotarialIntelligenceRun, run_id)
             self.assertEqual(stored.status, "completed")
@@ -585,6 +604,7 @@ class NotarialDocumentIntelligenceTests(unittest.TestCase):
             self.assertEqual(db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.document_id == result.documents[0].document_id).count(), 1)
         finally:
             db.close()
+            db_engine.dispose()
 
     def test_rag_persists_target_and_source_trace_without_self_retrieval(self):
         db = self.Session()
