@@ -14,7 +14,15 @@ def build_celery_app():
     settings = get_settings()
     broker_url = settings.celery_broker_url or settings.redis_url
     result_backend = settings.celery_result_backend or settings.redis_url
-    app = Celery("easypro2_notarial_intelligence", broker=broker_url, backend=result_backend)
+    app = Celery(
+        "easypro2_notarial_intelligence",
+        broker=broker_url,
+        backend=result_backend,
+        include=[
+            "app.workers.document_worker",
+            "app.workers.intelligence_worker",
+        ],
+    )
     app.conf.update(
         task_default_queue="notarial-documental",
         task_acks_late=True,

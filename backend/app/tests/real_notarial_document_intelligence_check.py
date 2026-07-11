@@ -16,19 +16,26 @@ from app.models.notarial_document_intelligence import (
     NotarialDocumentBatch,
     NotarialDocumentBatchItem,
     NotarialDocumentBlock,
+    NotarialDocumentDecision,
     NotarialDocumentEmbedding,
+    NotarialDocumentEvidence,
+    NotarialIntelligenceRun,
     NotarialDocumentParseRun,
     NotarialEmbeddingVersion,
 )
 from app.models.notary import Notary
 from app.services.notarial_document_intelligence.contracts import DocumentUpload, IngestBatchRequest
-from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService
+from app.services.notarial_document_intelligence.engine import NotarialIntelligenceEngine
+from app.services.notarial_document_intelligence.ingestion import NotarialDocumentIngestionService, TASK_PROCESS_INTELLIGENCE_RUN
 from app.services.notarial_document_intelligence.storage import NotarialIntelligenceStorage
 from app.services.notarial_document_intelligence.vector_store import NotarialVectorStore
 from app.workers.document_worker import (
     process_queued_document_batch_task,
     reparse_document_task,
     transient_retry_probe_task,
+)
+from app.workers.intelligence_worker import (
+    process_intelligence_run_task,
 )
 
 
@@ -251,6 +258,85 @@ def validate_celery_retry_probe() -> None:
     assert payload["retries"] >= 1
 
 
+def validate_intelligence_worker() -> None:
+    db = SessionLocal()
+    try:
+        document = db.query(NotarialDocument).filter(NotarialDocument.notary_id == 1).order_by(NotarialDocument.id.asc()).first()
+        assert document is not None
+        document_id = document.id
+        run = NotarialIntelligenceEngine(db).create_document_run(1, document_id)
+        service = NotarialDocumentIngestionService(db, notary_id=1)
+        publication = service.ensure_task_publication(
+            request_key=f"real:intelligence_run:{run.id}",
+            target_type="intelligence_run",
+            target_id=run.id,
+            task_name=TASK_PROCESS_INTELLIGENCE_RUN,
+            task_args=[run.id],
+            document_id=document_id,
+            parse_run_id=run.parse_run_id,
+            metadata={"source": "real_service_check"},
+        )
+        task_id = service.publish_task_publication(publication.id, process_intelligence_run_task.delay)
+        assert task_id
+        run_id = run.id
+    finally:
+        db.close()
+
+    result = process_intelligence_run_task.AsyncResult(task_id).get(timeout=180)
+    assert result["document_id"] == document_id
+    assert result["classification"]["document_type"] in {"escritura_compraventa", "escritura_hipoteca"}
+    assert result["embedding"]["indexed"] > 0 or result["embedding"]["skipped"] > 0
+    assert result["decision_id"] > 0
+
+    db = SessionLocal()
+    try:
+        reindex_run = NotarialIntelligenceEngine(db).create_reindex_run(1)
+        service = NotarialDocumentIngestionService(db, notary_id=1)
+        publication = service.ensure_task_publication(
+            request_key=f"real:intelligence_run:{reindex_run.id}",
+            target_type="intelligence_run",
+            target_id=reindex_run.id,
+            task_name=TASK_PROCESS_INTELLIGENCE_RUN,
+            task_args=[reindex_run.id],
+            metadata={"source": "real_service_reindex_check"},
+        )
+        reindex_task_id = service.publish_task_publication(publication.id, process_intelligence_run_task.delay)
+        assert reindex_task_id
+    finally:
+        db.close()
+    reindex = process_intelligence_run_task.AsyncResult(reindex_task_id).get(timeout=180)
+    assert reindex["documents"] >= 1
+    assert reindex["version_key"].startswith("sentence-transformers:")
+
+    db = SessionLocal()
+    try:
+        version = (
+            db.query(NotarialEmbeddingVersion)
+            .filter(NotarialEmbeddingVersion.provider == "sentence-transformers")
+            .order_by(NotarialEmbeddingVersion.id.desc())
+            .first()
+        )
+        assert version is not None
+        assert version.dimensions == 384
+        assert db.query(NotarialDocumentEmbedding).filter(NotarialDocumentEmbedding.notary_id == 1, NotarialDocumentEmbedding.embedding_version_id == version.id).count() > 0
+        assert db.query(NotarialDocumentDecision).filter(NotarialDocumentDecision.notary_id == 1, NotarialDocumentDecision.document_id == document_id).count() > 0
+        assert db.get(NotarialIntelligenceRun, run_id).status == "completed"
+        evidence_types = {
+            row[0]
+            for row in db.query(NotarialDocumentEvidence.evidence_type)
+            .filter(NotarialDocumentEvidence.notary_id == 1, NotarialDocumentEvidence.document_id == document_id)
+            .all()
+        }
+        assert "document_classification" in evidence_types
+        assert "hybrid_rag" in evidence_types
+        refreshed = db.get(NotarialDocument, document_id)
+        assert refreshed is not None
+        assert refreshed.family_id is not None
+        assert refreshed.document_type is not None
+    finally:
+        db.close()
+
+
 def main() -> None:
     assert os.environ.get("DATABASE_URL", "").startswith("postgresql"), "real check requires PostgreSQL"
     assert os.environ.get("REDIS_URL", "").startswith("redis://"), "real check requires Redis"
@@ -261,6 +347,7 @@ def main() -> None:
         validate_worker_and_reconciliation(storage)
         validate_reparse(storage)
         validate_celery_retry_probe()
+        validate_intelligence_worker()
 
 
 if __name__ == "__main__":

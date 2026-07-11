@@ -197,6 +197,34 @@ class NotarialTaskPublication(Base, TimestampMixin):
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
+class NotarialIntelligenceRun(Base, TimestampMixin):
+    __tablename__ = "notarial_intelligence_runs"
+    __table_args__ = (
+        UniqueConstraint("run_key", name="uq_notarial_intelligence_runs_run_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_key: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    parse_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    run_type: Mapped[str] = mapped_column(String(60), nullable=False, default="document", index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="queued", index=True)
+    classifier_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    embedding_version_key: Mapped[str] = mapped_column(String(240), nullable=False)
+    llm_provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    llm_mode: Mapped[str] = mapped_column(String(40), nullable=False, default="off")
+    prompt_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    task_id: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
 class NotarialDocumentEntity(Base, TimestampMixin):
     __tablename__ = "notarial_document_entities"
 
@@ -325,6 +353,29 @@ class NotarialDocumentEvidence(Base, TimestampMixin):
     payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
+class NotarialBlockAlignment(Base, TimestampMixin):
+    __tablename__ = "notarial_block_alignments"
+    __table_args__ = (
+        UniqueConstraint("run_id", "target_block_id", "source_block_id", name="uq_notarial_block_alignments_run_blocks"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_intelligence_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_parse_run_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_block_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_document_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_parse_run_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_parse_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_block_id: Mapped[int] = mapped_column(Integer, ForeignKey("notarial_document_blocks.id", ondelete="CASCADE"), nullable=False, index=True)
+    alignment_key: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    structural_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    lexical_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    combined_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    label: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
 class NotarialDocumentDecision(Base, TimestampMixin):
     __tablename__ = "notarial_document_decisions"
 
@@ -341,4 +392,16 @@ class NotarialDocumentDecision(Base, TimestampMixin):
     human_decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending", index=True)
     decided_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class NotarialBenchmarkRun(Base, TimestampMixin):
+    __tablename__ = "notarial_benchmark_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notary_id: Mapped[int] = mapped_column(Integer, ForeignKey("notaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    corpus_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    model_version: Mapped[str] = mapped_column(String(240), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="completed", index=True)
+    metrics_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

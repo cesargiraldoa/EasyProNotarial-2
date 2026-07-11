@@ -8,11 +8,13 @@ from app.services.notarial_document_intelligence.ingestion import (
     PermanentDocumentProcessingError,
     NotarialDocumentIngestionService,
     PUBLICATION_RECOVERABLE_STATUSES,
+    TASK_PROCESS_INTELLIGENCE_RUN,
     TASK_PROCESS_QUEUED_BATCH,
     TASK_REPARSE_DOCUMENT,
     TRANSIENT_PROCESSING_ERRORS,
 )
 from app.workers.celery_app import celery_app
+from app.workers.intelligence_worker import process_intelligence_run_task
 
 
 TRANSIENT_RETRY_ERRORS = (*TRANSIENT_PROCESSING_ERRORS, OperationalError, DisconnectionError, TimeoutError, ConnectionError)
@@ -97,6 +99,7 @@ def dispatch_recoverable_publications(limit_per_notary: int = 50) -> dict:
     publishers = {
         TASK_PROCESS_QUEUED_BATCH: process_queued_document_batch_task.delay,
         TASK_REPARSE_DOCUMENT: reparse_document_task.delay,
+        TASK_PROCESS_INTELLIGENCE_RUN: process_intelligence_run_task.delay,
     }
     for notary_id in notary_ids:
         session = SessionLocal()
