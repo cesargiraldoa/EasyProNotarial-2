@@ -4,6 +4,19 @@ import { resolve } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 
+test("plugin html and config keep production OnlyOffice runtime cache busting", () => {
+  const html = readFileSync(resolve("onlyoffice-plugin/biblioteca/index.html"), "utf8");
+  const config = JSON.parse(readFileSync(resolve("onlyoffice-plugin/biblioteca/config.json"), "utf8"));
+  const runtimeIndex = html.indexOf('<script type="text/javascript" src="../v1/plugins.js"></script>');
+  const pluginIndex = html.indexOf('<script src="plugin.js?v=e5bd402-1"></script>');
+
+  assert.notEqual(runtimeIndex, -1);
+  assert.notEqual(pluginIndex, -1);
+  assert.ok(runtimeIndex < pluginIndex);
+  assert.equal(config.version, "1.0.1");
+  assert.equal(config.variations[0].url, "index.html?v=e5bd402-1");
+});
+
 function loadPlugin() {
   const posted = [];
   const target = {
