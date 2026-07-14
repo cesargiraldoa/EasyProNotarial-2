@@ -8,6 +8,7 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
 from app.api.router import api_router
+from app.api.v1.endpoints.biblioteca import router as biblioteca_router
 from app.core.config import get_settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
@@ -82,6 +83,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(FlexibleCORSMiddleware)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+app.include_router(biblioteca_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health")

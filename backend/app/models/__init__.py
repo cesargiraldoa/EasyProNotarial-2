@@ -16,6 +16,7 @@ from app.models.legal_entity_representative import LegalEntityRepresentative
 from app.models.notary import Notary
 from app.models.notary_commercial_activity import NotaryCommercialActivity
 from app.models.notary_crm_audit_log import NotaryCrmAuditLog
+from app.models.notarial_field_catalog import NotarialFieldCatalog
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
     NotarialDocumentBatch,
