@@ -279,12 +279,38 @@
     let sugerencias = [];
     const BACKEND_URL = "https://easypronotarial-2-production.up.railway.app";
 
-    function getToken() {
-      try {
-        return window.sessionStorage.getItem("easypro2_session") || window.localStorage.getItem("easypro2_session");
-      } catch (error) {
-        return null;
+    // Escuchar token enviado desde el parent via postMessage
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.type === "easypro2_token") {
+        window._easypro2_token = event.data.token;
+        cargarCatalogo();
       }
+    });
+
+    // Solicitar token al parent
+    function solicitarToken() {
+      try {
+        window.parent.postMessage({ type: "easypro2_request_token" }, "*");
+      } catch(e) {}
+    }
+
+    function getToken() {
+      if (window._easypro2_token) return window._easypro2_token;
+      try {
+        var t = window.localStorage.getItem("easypro2_session") 
+             || window.sessionStorage.getItem("easypro2_session");
+        if (t) return t;
+      } catch(e) {}
+      try {
+        var cookies = document.cookie.split(";");
+        for (var i = 0; i < cookies.length; i++) {
+          var parts = cookies[i].trim().split("=");
+          if (parts[0] === "easypro2_session") {
+            return decodeURIComponent(parts[1]);
+          }
+        }
+      } catch(e) {}
+      return null;
     }
 
     function categoriaClass(categoria) {
@@ -403,9 +429,6 @@
 
     document.getElementById("buscarCampo").addEventListener("input", filtrarCatalogo);
     document.getElementById("btnAnalizar").addEventListener("click", function() {
-      if (window.Asc && window.Asc.plugin && typeof window.Asc.plugin.callCommand === "function") {
-        window.Asc.plugin.callCommand(function() { return "analizar"; }, false, false);
-      }
       if (typeof analizarDocumento === "function") analizarDocumento();
     });
 
@@ -435,7 +458,10 @@
     window.Asc = window.Asc || {};
     window.Asc.plugin = window.Asc.plugin || {};
     window.Asc.plugin.init = function() {
-      cargarCatalogo();
+      solicitarToken();
+      setTimeout(function() {
+        cargarCatalogo();
+      }, 1000);
     };
   </script>
   <script src="plugin.js"></script>
