@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { getOnlyOfficeConfig } from "@/lib/document-flow";
+import { useOnlyOfficePluginAuthBridge } from "@/lib/onlyoffice-plugin-auth-bridge";
 
 declare global {
   interface Window {
@@ -23,6 +24,7 @@ export default function OnlyOfficeEditorPage({ params }: EditorPageProps) {
   const resolvedParams = use(params);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  useOnlyOfficePluginAuthBridge();
 
   useEffect(() => {
     let mounted = true;

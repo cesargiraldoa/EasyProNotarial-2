@@ -34,9 +34,13 @@ class FlexibleCORSMiddleware(BaseHTTPMiddleware):
 
         env_values = [
             settings.frontend_url,
+            settings.onlyoffice_documentserver_url,
+            settings.onlyoffice_plugin_origin,
+            settings.onlyoffice_allowed_origins,
             os.getenv("FRONTEND_URL", ""),
             os.getenv("FRONTEND_URLS", ""),
             os.getenv("CORS_ALLOWED_ORIGINS", ""),
+            os.getenv("ONLYOFFICE_ALLOWED_ORIGINS", ""),
         ]
         for value in env_values:
             if not value:

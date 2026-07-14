@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5179"
     api_public_url: str = ""
     onlyoffice_documentserver_url: str = "http://localhost:8082"
+    onlyoffice_plugin_origin: str = "https://onlyoffice.easypronotarial.com"
+    onlyoffice_allowed_origins: str = ""
     onlyoffice_jwt_secret: str = ""
     database_url: str = DEFAULT_DATABASE_URL
     secret_key: str = "change-this-in-production"

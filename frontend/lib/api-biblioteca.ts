@@ -46,9 +46,8 @@ export async function getCamposCatalogo(params: {
   search?: string;
 } = {}): Promise<FieldCatalogItem[]> {
   const token = typeof window !== "undefined" ? (window.localStorage.getItem("easypro2_session") || window.sessionStorage.getItem("easypro2_session")) : null;
-  console.log("[biblioteca] token presente:", !!token, "primeros 20 chars:", token?.slice(0, 20));
+  console.info("[biblioteca] sesión", token ? "presente" : "ausente");
   const result = await apiFetch<FieldCatalogItem[]>(`/api/v1/biblioteca/campos${buildQuery(params)}`);
-  console.log("[biblioteca] campos catalogo raw:", result);
   return result;
 }
 

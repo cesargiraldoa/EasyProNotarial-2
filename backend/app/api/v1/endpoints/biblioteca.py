@@ -66,7 +66,7 @@ def list_field_catalog(
     if notary_id is None:
         conditions.append("scope = 'global' AND notary_id IS NULL")
     else:
-        conditions.append("(scope = 'global' AND notary_id IS NULL) OR (scope = 'notary' AND notary_id = :notary_id)")
+        conditions.append("((scope = 'global' AND notary_id IS NULL) OR (scope = 'notary' AND notary_id = :notary_id))")
         params["notary_id"] = notary_id
 
     if category:

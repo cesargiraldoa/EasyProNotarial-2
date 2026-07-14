@@ -56,6 +56,11 @@
       padding: 8px 10px;
     }
 
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
     .btn-primary {
       width: 100%;
       background: var(--indigo);
@@ -235,6 +240,12 @@
       margin-top: 2px;
     }
 
+    .empty-state {
+      color: var(--gray);
+      font-size: 12px;
+      padding: 8px 0;
+    }
+
     .footer {
       color: var(--gray);
       font-size: 11px;
@@ -250,8 +261,8 @@
   </div>
 
   <div class="section">
-    <button class="btn btn-primary" id="btnAnalizar">Analizar documento</button>
-    <div class="hint">Detecta campos variables automáticamente</div>
+    <button class="btn btn-primary" id="btnAnalizar" type="button">Analizar documento</button>
+    <div class="hint">Análisis del documento disponible en el siguiente bloque.</div>
   </div>
 
   <div id="estado"></div>
@@ -274,217 +285,6 @@
 
   <div class="footer">Motor de Biblioteca v1.0</div>
 
-  <script>
-    let camposCatalogo = [];
-    let sugerencias = [];
-    const BACKEND_URL = "https://easypronotarial-2-production.up.railway.app";
-
-    // Escuchar token enviado desde el parent via postMessage
-    window.addEventListener("message", function(event) {
-      if (event.data && event.data.type === "easypro2_token") {
-        window._easypro2_token = event.data.token;
-        cargarCatalogo();
-      }
-    });
-
-    // Solicitar token al parent
-    function solicitarToken() {
-      try {
-        window.parent.postMessage({ type: "easypro2_request_token" }, "*");
-      } catch(e) {}
-    }
-
-    function getToken() {
-      // Intentar desde variable guardada por postMessage
-      if (window._easypro2_token) return window._easypro2_token;
-      
-      // Intentar desde OnlyOffice plugin info
-      try {
-        if (window.Asc && window.Asc.plugin && window.Asc.plugin.info) {
-          var info = window.Asc.plugin.info;
-          if (info._easypro2_session) return info._easypro2_session;
-        }
-      } catch(e) {}
-      
-      // Intentar desde localStorage/sessionStorage
-      try {
-        var t = window.localStorage.getItem("easypro2_session") 
-             || window.sessionStorage.getItem("easypro2_session");
-        if (t) return t;
-      } catch(e) {}
-      
-      // Intentar desde cookies
-      try {
-        var cookies = document.cookie.split(";");
-        for (var i = 0; i < cookies.length; i++) {
-          var parts = cookies[i].trim().split("=");
-          if (parts[0] === "easypro2_session") {
-            return decodeURIComponent(parts[1]);
-          }
-        }
-      } catch(e) {}
-      return null;
-    }
-
-    function categoriaClass(categoria) {
-      return "cat-" + (categoria || "otro");
-    }
-
-    function confianzaClass(confianza) {
-      if (confianza > 0.95) return "conf-alta";
-      if (confianza > 0.85) return "conf-media";
-      return "conf-baja";
-    }
-
-    function renderSugerencias(data) {
-      sugerencias = Array.isArray(data) ? data : [];
-      const wrapper = document.getElementById("sugerencias");
-      const contador = document.getElementById("contador");
-      const lista = document.getElementById("listaSugerencias");
-
-      wrapper.style.display = "block";
-      contador.textContent = String(sugerencias.length);
-      lista.innerHTML = "";
-
-      sugerencias.forEach(function(item) {
-        const card = document.createElement("div");
-        card.className = "sugerencia-card";
-        card.dataset.texto = item.texto_original || "";
-        card.dataset.campo = item.campo_sugerido || "";
-        card.dataset.categoria = item.categoria || "";
-
-        const texto = document.createElement("div");
-        texto.className = "texto-original";
-        texto.textContent = item.texto_original || "";
-
-        const campo = document.createElement("div");
-        campo.className = "campo-sugerido";
-        campo.textContent = item.campo_sugerido || "";
-
-        const badges = document.createElement("div");
-        badges.className = "badges";
-
-        const categoria = document.createElement("span");
-        categoria.className = "badge " + categoriaClass(item.categoria);
-        categoria.textContent = item.categoria || "otro";
-
-        const confianza = document.createElement("span");
-        confianza.className = "badge " + confianzaClass(Number(item.confianza || 0));
-        confianza.textContent = Math.round(Number(item.confianza || 0) * 100) + "%";
-
-        badges.appendChild(categoria);
-        badges.appendChild(confianza);
-
-        const actions = document.createElement("div");
-        actions.className = "actions";
-
-        const yes = document.createElement("button");
-        yes.className = "btn btn-yes";
-        yes.textContent = "✓ Sí";
-        yes.onclick = function() {
-          aceptarSugerencia(item.texto_original, item.campo_sugerido);
-        };
-
-        const no = document.createElement("button");
-        no.className = "btn btn-no";
-        no.textContent = "✗ No";
-        no.onclick = function() {
-          card.classList.add("oculta");
-          window.setTimeout(function() { card.style.display = "none"; }, 180);
-        };
-
-        actions.appendChild(yes);
-        actions.appendChild(no);
-
-        card.appendChild(texto);
-        card.appendChild(campo);
-        card.appendChild(badges);
-        card.appendChild(actions);
-        lista.appendChild(card);
-      });
-    }
-
-    function renderCatalogo(campos) {
-      const lista = document.getElementById("listaCampos");
-      lista.innerHTML = "";
-
-      (campos || []).forEach(function(campo) {
-        const item = document.createElement("div");
-        item.className = "campo-item";
-        item.onclick = function() {
-          insertarCampo(campo.code, campo.label);
-        };
-
-        const code = document.createElement("div");
-        code.className = "campo-code";
-        code.textContent = campo.code;
-
-        const label = document.createElement("div");
-        label.className = "campo-label";
-        label.textContent = campo.label;
-
-        item.appendChild(code);
-        item.appendChild(label);
-        lista.appendChild(item);
-      });
-    }
-
-    function filtrarCatalogo() {
-      const q = document.getElementById("buscarCampo").value.trim().toLowerCase();
-      if (!q) {
-        renderCatalogo(camposCatalogo);
-        return;
-      }
-      renderCatalogo(camposCatalogo.filter(function(campo) {
-        return String(campo.code || "").toLowerCase().includes(q) || String(campo.label || "").toLowerCase().includes(q);
-      }));
-    }
-
-    document.getElementById("buscarCampo").addEventListener("input", filtrarCatalogo);
-    document.getElementById("btnAnalizar").addEventListener("click", function() {
-      if (typeof analizarDocumento === "function") analizarDocumento();
-    });
-
-    function mostrarEstado(msg, tipo) {
-      const estado = document.getElementById("estado");
-      estado.textContent = msg;
-      estado.className = tipo === "error" ? "error" : tipo === "ok" ? "ok" : "";
-      estado.style.display = "block";
-    }
-
-    async function cargarCatalogo() {
-      try {
-        const response = await fetch(BACKEND_URL + "/api/v1/biblioteca/campos", {
-          headers: {
-            Authorization: "Bearer " + getToken()
-          }
-        });
-        if (!response.ok) throw new Error("Catalogo no disponible");
-        const data = await response.json();
-        camposCatalogo = Array.isArray(data) ? data : [];
-        renderCatalogo(camposCatalogo);
-      } catch (error) {
-        mostrarEstado("Error cargando catálogo", "error");
-      }
-    }
-
-    window.Asc = window.Asc || {};
-    window.Asc.plugin = window.Asc.plugin || {};
-    window.Asc.plugin.init = function() {
-      // Intentar leer token desde config de OnlyOffice
-      try {
-        if (window.Asc && window.Asc.plugin && window.Asc.plugin.info 
-            && window.Asc.plugin.info._easypro2_session) {
-          window._easypro2_token = window.Asc.plugin.info._easypro2_session;
-        }
-      } catch(e) {}
-      
-      solicitarToken();
-      setTimeout(function() {
-        cargarCatalogo();
-      }, 1500);
-    };
-  </script>
   <script src="plugin.js"></script>
 </body>
 </html>

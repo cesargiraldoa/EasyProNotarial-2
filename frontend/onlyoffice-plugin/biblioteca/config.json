@@ -9,7 +9,6 @@
       "description": "Motor de Biblioteca — Ecosistema Notarial",
       "descriptionLocale": {},
       "url": "index.html",
-      "icons": ["icon.png"],
       "isViewer": false,
       "EditorsSupport": ["word"],
       "isVisual": true,

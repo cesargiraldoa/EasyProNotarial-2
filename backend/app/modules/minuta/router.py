@@ -364,13 +364,6 @@ def minuta_onlyoffice_config(
     file_url = f"{base_url}/api/v1/minuta/onlyoffice/file?token={token}"
     callback_url = f"{base_url}/api/v1/minuta/onlyoffice/callback?token={token}"
 
-    # Obtener el token de sesión del request para pasarlo al plugin
-    session_token = request.cookies.get("easypro2_session") or ""
-    # También intentar desde el header Authorization
-    auth_header = request.headers.get("Authorization", "")
-    if not session_token and auth_header.startswith("Bearer "):
-        session_token = auth_header[7:]
-
     config: dict = {
         "document": {
             "fileType": "docx",
@@ -401,7 +394,6 @@ def minuta_onlyoffice_config(
         "customization": {
             "plugins": True,
         },
-        "_easypro2_session": session_token,
     }
 
     secret = (get_settings().onlyoffice_jwt_secret or "").strip()

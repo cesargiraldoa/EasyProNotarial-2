@@ -1081,7 +1081,14 @@ def onlyoffice_config(case_id: int, document_id: int, version_id: int, request: 
     payload = {
         "document": {"fileType": "docx", "key": f"case-{case_id}-doc-{document_id}-v-{version_id}-{version.updated_at.timestamp()}", "title": version.original_filename or f"case_{case_id}.docx", "url": file_url},
         "documentType": "word",
-        "editorConfig": {"callbackUrl": callback_url, "mode": "edit", "lang": "es", "user": {"id": str(current_user.id), "name": current_user.full_name or current_user.email}},
+        "editorConfig": {
+            "callbackUrl": callback_url,
+            "mode": "edit",
+            "lang": "es",
+            "user": {"id": str(current_user.id), "name": current_user.full_name or current_user.email},
+            "customization": {"plugins": True},
+        },
+        "customization": {"plugins": True},
     }
     if secret:
         payload["token"] = jwt.encode(payload, secret, algorithm="HS256")
