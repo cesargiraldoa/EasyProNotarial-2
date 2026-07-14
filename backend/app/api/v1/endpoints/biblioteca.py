@@ -36,6 +36,7 @@ def list_field_catalog(
     current_user: User = Depends(get_current_user),
 ):
     notary_id = current_user.default_notary_id
+    print(f"[biblioteca/campos] user_id={current_user.id} notary_id={notary_id}")
     query = db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.is_active.is_(True))
 
     if notary_id is None:
@@ -57,4 +58,6 @@ def list_field_catalog(
         query = query.filter(or_(NotarialFieldCatalog.code.ilike(pattern), NotarialFieldCatalog.label.ilike(pattern)))
 
     scope_order = case((NotarialFieldCatalog.scope == "global", 0), else_=1)
-    return query.order_by(scope_order, NotarialFieldCatalog.category.asc(), NotarialFieldCatalog.code.asc()).all()
+    results = query.order_by(scope_order, NotarialFieldCatalog.category.asc(), NotarialFieldCatalog.code.asc()).all()
+    print(f"[biblioteca/campos] resultados={len(results)}")
+    return results
