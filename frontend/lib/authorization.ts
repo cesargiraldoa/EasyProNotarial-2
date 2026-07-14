@@ -26,6 +26,7 @@ export const ROLE_PROTECTED_ROUTES: Record<string, RoleCode[]> = {
   "/dashboard/roles": ["super_admin", "admin_notary"],
   "/dashboard/casos": NOTARIAL_WORKSPACE_ROLES,
   "/dashboard/minutas": NOTARIAL_WORKSPACE_ROLES,
+  "/dashboard/biblioteca": NOTARIAL_WORKSPACE_ROLES,
   "/dashboard/actos-plantillas": NOTARIAL_WORKSPACE_ROLES,
   "/dashboard/inteligencia-documental": NOTARIAL_WORKSPACE_ROLES,
   "/dashboard/lotes": NOTARIAL_WORKSPACE_ROLES,

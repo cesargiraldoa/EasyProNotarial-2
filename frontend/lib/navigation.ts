@@ -1,5 +1,6 @@
 import {
   Activity,
+  BookOpen,
   Building2,
   GitCompareArrows,
   FolderKanban,
@@ -31,6 +32,7 @@ export const appNavigation: NavigationItem[] = [
   { label: "Roles", href: "/dashboard/roles", icon: ShieldCheck, roles: ["super_admin", "admin_notary"] },
   { label: "Minutas", href: "/dashboard/casos", icon: FolderKanban, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "Crear Minuta", href: "/dashboard/minutas/nueva", icon: PenTool, roles: [...NOTARIAL_WORKSPACE_ROLES] },
+  { label: "Biblioteca", href: "/dashboard/biblioteca", icon: BookOpen, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "Actos / Plantillas", href: "/dashboard/actos-plantillas", icon: Layers3, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "Revisión Documental", href: "/dashboard/inteligencia-documental", icon: GitCompareArrows, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "System Status", href: "/dashboard/system-status", icon: Activity, roles: ["super_admin"] },

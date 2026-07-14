@@ -1,0 +1,25 @@
+{
+  "name": "Motor de Biblioteca",
+  "nameLocale": {},
+  "guid": "asc.{biblioteca-easypro-2026-v1}",
+  "version": "1.0.0",
+  "minVersion": "7.0.0",
+  "variations": [
+    {
+      "description": "Motor de Biblioteca — Ecosistema Notarial",
+      "descriptionLocale": {},
+      "url": "index.html",
+      "icons": ["icon.png"],
+      "isViewer": false,
+      "EditorsSupport": ["word"],
+      "isVisual": true,
+      "isModal": false,
+      "isInsideMode": true,
+      "initDataType": "none",
+      "initData": "",
+      "isUpdateOleOnResize": false,
+      "buttons": [],
+      "type": "panel"
+    }
+  ]
+}

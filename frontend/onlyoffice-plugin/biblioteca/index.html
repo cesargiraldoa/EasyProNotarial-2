@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Motor de Biblioteca</title>
+  <style>
+    :root {
+      --indigo: #0d2e5d;
+      --green: #059669;
+      --red: #DC2626;
+      --gray: #6B7280;
+      --line: #E5E7EB;
+      --soft: #F3F4F6;
+      --text: #111827;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #fff;
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+    }
+
+    .header {
+      background: var(--indigo);
+      color: #fff;
+      padding: 12px;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin-top: 3px;
+      font-size: 11px;
+      opacity: 0.78;
+    }
+
+    .section {
+      padding: 8px 12px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 10px;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--indigo);
+      color: #fff;
+    }
+
+    .btn-yes {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn-no {
+      background: #fff;
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+
+    .hint {
+      margin-top: 6px;
+      color: var(--gray);
+      font-size: 11px;
+    }
+
+    #estado {
+      display: none;
+      margin: 8px 12px;
+      border-radius: 8px;
+      padding: 8px;
+      background: var(--soft);
+      color: var(--gray);
+      font-size: 12px;
+    }
+
+    #estado.error {
+      background: #FEF2F2;
+      color: var(--red);
+    }
+
+    #estado.ok {
+      background: #ECFDF5;
+      color: var(--green);
+    }
+
+    #sugerencias {
+      display: none;
+      padding: 8px 12px;
+    }
+
+    .section-title {
+      align-items: center;
+      display: flex;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .counter {
+      background: #DBEAFE;
+      border-radius: 999px;
+      color: var(--indigo);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+    }
+
+    .sugerencias-list {
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .sugerencia-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      padding: 8px;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    .sugerencia-card.oculta {
+      opacity: 0;
+      transform: translateX(8px);
+    }
+
+    .texto-original {
+      color: #111827;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .campo-sugerido {
+      color: var(--indigo);
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 3px;
+      word-break: break-word;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 7px;
+    }
+
+    .badge {
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+    }
+
+    .cat-persona { background: #DBEAFE; color: #1D4ED8; }
+    .cat-valor { background: #D1FAE5; color: #047857; }
+    .cat-inmueble { background: #FFEDD5; color: #C2410C; }
+    .cat-fecha { background: #F3E8FF; color: #7E22CE; }
+    .cat-notaria { background: #E0E7FF; color: #3730A3; }
+    .cat-otro { background: #F3F4F6; color: #4B5563; }
+    .conf-alta { background: #D1FAE5; color: #047857; }
+    .conf-media { background: #FEF3C7; color: #B45309; }
+    .conf-baja { background: #F3F4F6; color: #4B5563; }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .actions .btn {
+      flex: 1;
+      padding: 6px 8px;
+    }
+
+    .separator {
+      border-top: 1px solid var(--line);
+      margin: 8px 12px;
+    }
+
+    .search {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 8px;
+      outline: none;
+      padding: 8px;
+      width: 100%;
+    }
+
+    .lista-campos {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .campo-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      padding: 7px 8px;
+    }
+
+    .campo-item:hover {
+      border-color: var(--indigo);
+      background: #F8FAFC;
+    }
+
+    .campo-code {
+      color: var(--indigo);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .campo-label {
+      color: var(--gray);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .footer {
+      color: var(--gray);
+      font-size: 11px;
+      padding: 10px 12px 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Motor de Biblioteca</div>
+    <div class="subtitle">Ecosistema Notarial</div>
+  </div>
+
+  <div class="section">
+    <button class="btn btn-primary" id="btnAnalizar">Analizar documento</button>
+    <div class="hint">Detecta campos variables automáticamente</div>
+  </div>
+
+  <div id="estado"></div>
+
+  <div id="sugerencias">
+    <div class="section-title">
+      <span>Campos sugeridos</span>
+      <span class="counter" id="contador">0</span>
+    </div>
+    <div class="sugerencias-list" id="listaSugerencias"></div>
+  </div>
+
+  <div class="separator"></div>
+
+  <div class="section">
+    <div class="section-title">Insertar campo</div>
+    <input id="buscarCampo" class="search" placeholder="Buscar campo..." />
+    <div id="listaCampos" class="lista-campos"></div>
+  </div>
+
+  <div class="footer">Motor de Biblioteca v1.0</div>
+
+  <script>
+    let camposCatalogo = [];
+    let sugerencias = [];
+    const BACKEND_URL = "https://easypronotarial-2-production.up.railway.app";
+
+    function getToken() {
+      try {
+        return window.sessionStorage.getItem("easypro2_session") || window.localStorage.getItem("easypro2_session");
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function categoriaClass(categoria) {
+      return "cat-" + (categoria || "otro");
+    }
+
+    function confianzaClass(confianza) {
+      if (confianza > 0.95) return "conf-alta";
+      if (confianza > 0.85) return "conf-media";
+      return "conf-baja";
+    }
+
+    function renderSugerencias(data) {
+      sugerencias = Array.isArray(data) ? data : [];
+      const wrapper = document.getElementById("sugerencias");
+      const contador = document.getElementById("contador");
+      const lista = document.getElementById("listaSugerencias");
+
+      wrapper.style.display = "block";
+      contador.textContent = String(sugerencias.length);
+      lista.innerHTML = "";
+
+      sugerencias.forEach(function(item) {
+        const card = document.createElement("div");
+        card.className = "sugerencia-card";
+        card.dataset.texto = item.texto_original || "";
+        card.dataset.campo = item.campo_sugerido || "";
+        card.dataset.categoria = item.categoria || "";
+
+        const texto = document.createElement("div");
+        texto.className = "texto-original";
+        texto.textContent = item.texto_original || "";
+
+        const campo = document.createElement("div");
+        campo.className = "campo-sugerido";
+        campo.textContent = item.campo_sugerido || "";
+
+        const badges = document.createElement("div");
+        badges.className = "badges";
+
+        const categoria = document.createElement("span");
+        categoria.className = "badge " + categoriaClass(item.categoria);
+        categoria.textContent = item.categoria || "otro";
+
+        const confianza = document.createElement("span");
+        confianza.className = "badge " + confianzaClass(Number(item.confianza || 0));
+        confianza.textContent = Math.round(Number(item.confianza || 0) * 100) + "%";
+
+        badges.appendChild(categoria);
+        badges.appendChild(confianza);
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const yes = document.createElement("button");
+        yes.className = "btn btn-yes";
+        yes.textContent = "✓ Sí";
+        yes.onclick = function() {
+          aceptarSugerencia(item.texto_original, item.campo_sugerido);
+        };
+
+        const no = document.createElement("button");
+        no.className = "btn btn-no";
+        no.textContent = "✗ No";
+        no.onclick = function() {
+          card.classList.add("oculta");
+          window.setTimeout(function() { card.style.display = "none"; }, 180);
+        };
+
+        actions.appendChild(yes);
+        actions.appendChild(no);
+
+        card.appendChild(texto);
+        card.appendChild(campo);
+        card.appendChild(badges);
+        card.appendChild(actions);
+        lista.appendChild(card);
+      });
+    }
+
+    function renderCatalogo(campos) {
+      const lista = document.getElementById("listaCampos");
+      lista.innerHTML = "";
+
+      (campos || []).forEach(function(campo) {
+        const item = document.createElement("div");
+        item.className = "campo-item";
+        item.onclick = function() {
+          insertarCampo(campo.code, campo.label);
+        };
+
+        const code = document.createElement("div");
+        code.className = "campo-code";
+        code.textContent = campo.code;
+
+        const label = document.createElement("div");
+        label.className = "campo-label";
+        label.textContent = campo.label;
+
+        item.appendChild(code);
+        item.appendChild(label);
+        lista.appendChild(item);
+      });
+    }
+
+    function filtrarCatalogo() {
+      const q = document.getElementById("buscarCampo").value.trim().toLowerCase();
+      if (!q) {
+        renderCatalogo(camposCatalogo);
+        return;
+      }
+      renderCatalogo(camposCatalogo.filter(function(campo) {
+        return String(campo.code || "").toLowerCase().includes(q) || String(campo.label || "").toLowerCase().includes(q);
+      }));
+    }
+
+    document.getElementById("buscarCampo").addEventListener("input", filtrarCatalogo);
+    document.getElementById("btnAnalizar").addEventListener("click", function() {
+      if (window.Asc && window.Asc.plugin && typeof window.Asc.plugin.callCommand === "function") {
+        window.Asc.plugin.callCommand(function() { return "analizar"; }, false, false);
+      }
+      if (typeof analizarDocumento === "function") analizarDocumento();
+    });
+
+    function mostrarEstado(msg, tipo) {
+      const estado = document.getElementById("estado");
+      estado.textContent = msg;
+      estado.className = tipo === "error" ? "error" : tipo === "ok" ? "ok" : "";
+      estado.style.display = "block";
+    }
+
+    async function cargarCatalogo() {
+      try {
+        const response = await fetch(BACKEND_URL + "/api/v1/biblioteca/campos", {
+          headers: {
+            Authorization: "Bearer " + getToken()
+          }
+        });
+        if (!response.ok) throw new Error("Catalogo no disponible");
+        const data = await response.json();
+        camposCatalogo = Array.isArray(data) ? data : [];
+        renderCatalogo(camposCatalogo);
+      } catch (error) {
+        mostrarEstado("Error cargando catálogo", "error");
+      }
+    }
+
+    window.Asc = window.Asc || {};
+    window.Asc.plugin = window.Asc.plugin || {};
+    window.Asc.plugin.init = function() {
+      cargarCatalogo();
+    };
+  </script>
+  <script src="plugin.js"></script>
+</body>
+</html>
