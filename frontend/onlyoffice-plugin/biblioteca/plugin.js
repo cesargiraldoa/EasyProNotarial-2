@@ -21,66 +21,41 @@ function obtenerTextoDocumento() {
     }, false, false);
 }
 
-// Aceptar sugerencia: convierte texto en Content Control
+// Aceptar sugerencia: inserta el marcador del campo sugerido
 function aceptarSugerencia(textoOriginal, campoSugerido) {
-    window.Asc.plugin.scope = { textoOriginal: textoOriginal, campoSugerido: campoSugerido };
-
-    window.Asc.plugin.callCommand(function() {
-        var oDoc = Api.GetDocument();
-        var nCount = oDoc.GetElementsCount();
-        var sTexto = window.Asc.plugin.scope.textoOriginal;
-        var sCampo = window.Asc.plugin.scope.campoSugerido;
-
-        // Buscar y reemplazar todas las ocurrencias con Content Control
-        for (var i = 0; i < nCount; i++) {
-            var oPar = oDoc.GetElement(i);
-            if (!oPar || typeof oPar.GetText !== "function") continue;
-            var sParText = oPar.GetText();
-            if (sParText && sParText.indexOf(sTexto) !== -1) {
-                // Crear Content Control inline
-                var oRun = Api.CreateRun();
-                oRun.AddText(sTexto);
-                var oCC = Api.CreateInlineLvlSdt();
-                oCC.SetAlias(sCampo);
-                oCC.SetTag(sCampo);
-                oCC.Push(oRun);
-                // El reemplazo real se hace via search/replace
-            }
+    window.Asc.plugin.executeMethod("PasteText", ["{{" + campoSugerido + "}}"], function() {
+        mostrarEstado("Campo " + campoSugerido + " marcado.", "ok");
+    });
+    // Ocultar la card
+    var cards = document.querySelectorAll(".sugerencia-card");
+    cards.forEach(function(card) {
+        if (card.getAttribute("data-texto") === textoOriginal) {
+            card.style.display = "none";
         }
-
-        // Usar Search and Replace nativo de OnlyOffice
-        oDoc.ReplaceAllText(
-            {searchText: sTexto, replaceText: "{{" + sCampo + "}}", matchCase: true},
-        );
-    }, false, false);
+    });
 }
 
 // Insertar campo en posición del cursor
 function insertarCampo(codigoCampo, labelCampo) {
-    window.Asc.plugin.scope = { codigo: codigoCampo, label: labelCampo };
-    window.Asc.plugin.callCommand(function() {
-        var sCodigo = window.Asc.plugin.scope.codigo;
-        var oDoc = Api.GetDocument();
-        var oCursor = oDoc.GetCurrentCursor();
-        if (oCursor) {
-            oCursor.AddText("{{" + sCodigo + "}}");
-        }
-    }, false, false);
+    window.Asc.plugin.executeMethod("PasteText", ["{{" + codigoCampo + "}}"], function() {});
 }
 
-// Función analizar: sube el documento al backend y obtiene sugerencias
-async function analizarDocumento() {
+// Función analizar: notifica el flujo disponible para análisis
+function analizarDocumento() {
     mostrarEstado("Analizando documento...", "cargando");
-
-    // Obtener el documento como base64 via OnlyOffice
-    window.Asc.plugin.callCommand(function() {
-        // Solicitar descarga del documento actual
-        window.Asc.plugin.executeMethod("GetImageDataFromSelection", [], function(data) {});
-    }, false, false);
-
-    // Alternativa: usar el endpoint con el storage_path del documento actual
-    // Por ahora mostrar mensaje de que la función está en construcción
-    mostrarEstado("Función de análisis disponible desde el panel principal", "ok");
+    
+    var token = getToken();
+    if (!token) {
+        mostrarEstado("Error: no hay sesión activa. Recarga la página.", "error");
+        return;
+    }
+    
+    // En OnlyOffice v9 el plugin panel no puede acceder al documento directamente.
+    // El análisis se hace desde el backend usando el storage_path del documento.
+    // Por ahora notificamos al usuario que use el botón desde la Biblioteca.
+    setTimeout(function() {
+        mostrarEstado("Para analizar: usa el botón 'Subir documento' en la Biblioteca de Plantillas.", "ok");
+    }, 500);
 }
 
 // Event listener para mensajes del documento
