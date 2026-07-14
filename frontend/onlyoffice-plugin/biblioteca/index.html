@@ -295,12 +295,25 @@
     }
 
     function getToken() {
+      // Intentar desde variable guardada por postMessage
       if (window._easypro2_token) return window._easypro2_token;
+      
+      // Intentar desde OnlyOffice plugin info
+      try {
+        if (window.Asc && window.Asc.plugin && window.Asc.plugin.info) {
+          var info = window.Asc.plugin.info;
+          if (info._easypro2_session) return info._easypro2_session;
+        }
+      } catch(e) {}
+      
+      // Intentar desde localStorage/sessionStorage
       try {
         var t = window.localStorage.getItem("easypro2_session") 
              || window.sessionStorage.getItem("easypro2_session");
         if (t) return t;
       } catch(e) {}
+      
+      // Intentar desde cookies
       try {
         var cookies = document.cookie.split(";");
         for (var i = 0; i < cookies.length; i++) {
@@ -458,10 +471,18 @@
     window.Asc = window.Asc || {};
     window.Asc.plugin = window.Asc.plugin || {};
     window.Asc.plugin.init = function() {
+      // Intentar leer token desde config de OnlyOffice
+      try {
+        if (window.Asc && window.Asc.plugin && window.Asc.plugin.info 
+            && window.Asc.plugin.info._easypro2_session) {
+          window._easypro2_token = window.Asc.plugin.info._easypro2_session;
+        }
+      } catch(e) {}
+      
       solicitarToken();
       setTimeout(function() {
         cargarCatalogo();
-      }, 1000);
+      }, 1500);
     };
   </script>
   <script src="plugin.js"></script>
