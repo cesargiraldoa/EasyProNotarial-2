@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { getToken } from "@/lib/auth";
 import { getMinutaOnlyOfficeConfig } from "@/lib/minuta";
 
 declare global {
@@ -98,6 +99,22 @@ export default function MinutaEditorPage({ params }: EditorPageProps) {
       editorInstance?.destroyEditor?.();
     };
   }, [token]);
+
+  useEffect(() => {
+    function handlePluginMessage(event: MessageEvent) {
+      if (event.data && event.data.type === "easypro2_request_token") {
+        const sessionToken = getToken();
+        if (sessionToken && event.source) {
+          (event.source as Window).postMessage(
+            { type: "easypro2_token", token: sessionToken },
+            "*"
+          );
+        }
+      }
+    }
+    window.addEventListener("message", handlePluginMessage);
+    return () => window.removeEventListener("message", handlePluginMessage);
+  }, []);
 
   return (
     <main className="h-screen w-screen bg-white">

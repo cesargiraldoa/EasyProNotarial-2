@@ -440,10 +440,12 @@ export type TemplateVersion = {
 };
 function persistSessionToken(token: string, rememberSession: boolean) {
   if (typeof document !== "undefined") {
-    const cookieAttributes = window.location.protocol === "https:" ? "SameSite=None; Secure" : "SameSite=Lax";
+    const isHttps = window.location.protocol === "https:";
+    const cookieAttributes = isHttps ? "SameSite=None; Secure" : "SameSite=Lax";
+    const domainAttr = isHttps ? "; domain=.easypronotarial.com" : "";
     const cookie = rememberSession
-      ? `easypro2_session=${encodeURIComponent(token)}; path=/; max-age=2592000; ${cookieAttributes}`
-      : `easypro2_session=${encodeURIComponent(token)}; path=/; ${cookieAttributes}`;
+      ? `easypro2_session=${encodeURIComponent(token)}; path=/${domainAttr}; max-age=2592000; ${cookieAttributes}`
+      : `easypro2_session=${encodeURIComponent(token)}; path=/${domainAttr}; ${cookieAttributes}`;
     document.cookie = cookie;
   }
   if (typeof window !== "undefined") {
