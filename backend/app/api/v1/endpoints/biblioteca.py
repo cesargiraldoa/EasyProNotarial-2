@@ -39,6 +39,10 @@ def list_field_catalog(
     notary_id = current_user.default_notary_id
     print(f"[biblioteca/campos] user_id={current_user.id} notary_id={notary_id}")
     # Construir SQL nativo para evitar bugs de ORM con IS NULL en OR
+    # DEBUG TEMPORAL
+    raw = db.execute(sa.text("SELECT COUNT(*) FROM notarial_field_catalog")).scalar()
+    raw2 = db.execute(sa.text("SELECT COUNT(*) FROM notarial_field_catalog WHERE is_active = true AND scope = 'global' AND notary_id IS NULL")).scalar()
+    print(f"[biblioteca/campos DEBUG] total_tabla={raw} global_null={raw2} notary_id={notary_id}")
     conditions = ["is_active = true"]
     params: dict = {}
 
