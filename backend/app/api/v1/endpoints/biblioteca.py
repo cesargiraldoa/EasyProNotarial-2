@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
+import sqlalchemy as sa
 from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 
@@ -37,27 +38,34 @@ def list_field_catalog(
 ):
     notary_id = current_user.default_notary_id
     print(f"[biblioteca/campos] user_id={current_user.id} notary_id={notary_id}")
-    query = db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.is_active.is_(True))
+    # Construir SQL nativo para evitar bugs de ORM con IS NULL en OR
+    conditions = ["is_active = true"]
+    params: dict = {}
 
     if notary_id is None:
-        query = query.filter(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None))
+        conditions.append("scope = 'global' AND notary_id IS NULL")
     else:
-        query = query.filter(
-            or_(
-                (NotarialFieldCatalog.scope == "global") & NotarialFieldCatalog.notary_id.is_(None),
-                (NotarialFieldCatalog.scope == "notary") & (NotarialFieldCatalog.notary_id == notary_id),
-            )
-        )
+        conditions.append("(scope = 'global' AND notary_id IS NULL) OR (scope = 'notary' AND notary_id = :notary_id)")
+        params["notary_id"] = notary_id
 
     if category:
-        query = query.filter(NotarialFieldCatalog.category == category.strip())
+        conditions.append("category = :category")
+        params["category"] = category.strip()
     if scope:
-        query = query.filter(NotarialFieldCatalog.scope == scope.strip())
+        conditions.append("scope = :scope")
+        params["scope"] = scope.strip()
     if search:
-        pattern = f"%{search.strip()}%"
-        query = query.filter(or_(NotarialFieldCatalog.code.ilike(pattern), NotarialFieldCatalog.label.ilike(pattern)))
+        conditions.append("(code ILIKE :search OR label ILIKE :search)")
+        params["search"] = f"%{search.strip()}%"
 
-    scope_order = case((NotarialFieldCatalog.scope == "global", 0), else_=1)
-    results = query.order_by(scope_order, NotarialFieldCatalog.category.asc(), NotarialFieldCatalog.code.asc()).all()
-    print(f"[biblioteca/campos] resultados={len(results)}")
-    return results
+    where = " AND ".join(conditions)
+    sql = sa.text(f"""
+        SELECT * FROM notarial_field_catalog
+        WHERE {where}
+        ORDER BY CASE WHEN scope = 'global' THEN 0 ELSE 1 END,
+                 category ASC, code ASC
+    """)
+
+    rows = db.execute(sql, params).mappings().all()
+    print(f"[biblioteca/campos] resultados={len(rows)}")
+    return [NotarialFieldCatalog(**dict(row)) for row in rows]
