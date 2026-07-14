@@ -440,9 +440,10 @@ export type TemplateVersion = {
 };
 function persistSessionToken(token: string, rememberSession: boolean) {
   if (typeof document !== "undefined") {
+    const cookieAttributes = window.location.protocol === "https:" ? "SameSite=None; Secure" : "SameSite=Lax";
     const cookie = rememberSession
-      ? `easypro2_session=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=None; Secure`
-      : `easypro2_session=${encodeURIComponent(token)}; path=/; SameSite=None; Secure`;
+      ? `easypro2_session=${encodeURIComponent(token)}; path=/; max-age=2592000; ${cookieAttributes}`
+      : `easypro2_session=${encodeURIComponent(token)}; path=/; ${cookieAttributes}`;
     document.cookie = cookie;
   }
   if (typeof window !== "undefined") {

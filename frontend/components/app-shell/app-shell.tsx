@@ -7,6 +7,7 @@ import { Bell, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, LogOut, Menu,
 import { appNavigation, type NavigationItem } from "@/lib/navigation";
 import { defaultBranding } from "@/lib/branding";
 import { getCurrentUser, logout, type CurrentUser } from "@/lib/api";
+import { isNavigationItemAllowed, normalizeUserRoles } from "@/lib/authorization";
 import { LogoBadge } from "@/components/ui/logo-badge";
 import { useTheme } from "@/components/ui/theme-provider";
 import { cn } from "@/components/ui/utils";
@@ -99,77 +100,13 @@ export function AppShell({ children }: AppShellProps) {
 
   const userName = currentUser?.full_name ?? "Operación Ecosistema Notarial";
   const userSubtitle = currentUser?.role_codes?.[0] ?? currentUser?.roles?.[0] ?? "Sesión activa";
-  const normalizedRoles = Array.from(new Set([...(currentUser?.role_codes ?? []), ...(currentUser?.roles ?? [])].map((role) => role.toLowerCase())));
-  const recognizedRoles = new Set(["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"]);
-  const hasRecognizedRole = normalizedRoles.some((role) => recognizedRoles.has(role));
-
-  const navVisibilityByLabel: Record<string, string[]> = {
-    Resumen: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
-    Comercial: ["super_admin"],
-    Notarías: ["super_admin"],
-    Usuarios: ["super_admin", "admin_notary", "notary"],
-    Roles: ["super_admin", "admin_notary"],
-    Minutas: ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
-    "Crear Minuta": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    "Actos / Plantillas": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    "Revisión Documental": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    Lotes: ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    "Lotes (Next)": ["super_admin", "admin_notary", "notary", "approver", "protocolist"],
-    "System Status": ["super_admin"],
-    Configuración: ["super_admin", "admin_notary"],
-    "Mi Perfil": ["super_admin", "admin_notary", "notary", "approver", "protocolist", "client"],
-  };
-  const navModuleCodesByLabel: Record<string, string[]> = {
-    Resumen: ["resumen"],
-    Comercial: ["comercial"],
-    Notarías: ["notarias"],
-    Usuarios: ["usuarios"],
-    Roles: ["roles"],
-    Minutas: ["minutas"],
-    "Crear Minuta": ["crear_minuta"],
-    "Actos / Plantillas": ["actos_plantillas"],
-    "Revisión Documental": ["actos_plantillas", "minutas"],
-    Lotes: ["lotes"],
-    "Lotes (Next)": ["lotes"],
-    "System Status": ["system_status"],
-    Configuración: ["configuracion"],
-    "Mi Perfil": [],
-  };
-  const hasPermissions = Boolean(currentUser?.permissions?.length);
-  const allowedModuleCodes = new Set(
-    (currentUser?.permissions ?? [])
-      .filter((permission) => permission.can_access)
-      .map((permission) => permission.module_code.toLowerCase()),
-  );
-
-  const visibleNavigation = appNavigation.filter(({ label }) => {
-    if (label === "Ayuda") {
+  const normalizedRoles = normalizeUserRoles([...(currentUser?.role_codes ?? []), ...(currentUser?.roles ?? [])]);
+  const visibleNavigation = appNavigation.filter((item) => {
+    if (item.label === "Ayuda") {
       return false;
     }
 
-    if (hasPermissions) {
-      if (label === "Mi Perfil") {
-        return true;
-      }
-
-      const allowedModuleCodesForLabel = navModuleCodesByLabel[label];
-      if (!allowedModuleCodesForLabel) {
-        return false;
-      }
-
-      return allowedModuleCodesForLabel.some((moduleCode) => allowedModuleCodes.has(moduleCode));
-    }
-
-    if (!hasRecognizedRole) {
-      return label === "Resumen" || label === "Minutas";
-    }
-
-    const allowedRoles = navVisibilityByLabel[label];
-    if (!allowedRoles) {
-      return false;
-    }
-
-    return normalizedRoles.some((role) => allowedRoles.includes(role));
+    return isNavigationItemAllowed(item, normalizedRoles);
   });
 
   return (

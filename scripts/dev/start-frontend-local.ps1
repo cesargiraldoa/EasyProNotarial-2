@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -10,7 +10,7 @@ $nextPath = Join-Path $frontendPath '.next'
 $stdoutLogPath = Join-Path $frontendPath 'frontend-local.stdout.log'
 $stderrLogPath = Join-Path $frontendPath 'frontend-local.stderr.log'
 $frontendBaseUrl = 'http://127.0.0.1:5179'
-$backendHealthUrl = 'http://127.0.0.1:8000/health'
+$backendHealthUrl = 'http://127.0.0.1:8001/health'
 $devTimeoutSeconds = 120
 $validationRoutes = @(
     '/login'
@@ -303,7 +303,7 @@ if (-not (Test-Path -LiteralPath $layoutPath)) {
     throw "Missing app layout: $layoutPath"
 }
 
-Ensure-FrontendEnvLocal -Path $envLocalPath -BackendUrl 'http://127.0.0.1:8000'
+Ensure-FrontendEnvLocal -Path $envLocalPath -BackendUrl 'http://127.0.0.1:8001'
 Ensure-NpmCiIfMissingNodeModules -WorkingDirectory $frontendPath
 
 $layoutContent = Get-Content -LiteralPath $layoutPath -Raw
@@ -361,3 +361,4 @@ catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     throw
 }
+
