@@ -3,16 +3,22 @@ name: Biblioteca Engine
 on:
   pull_request:
     paths:
+      - "backend/app/api/v1/endpoints/biblioteca*.py"
+      - "backend/app/main.py"
       - "backend/app/services/biblioteca_motor/**"
       - "backend/app/tests/test_biblioteca_*.py"
       - "backend/requirements.txt"
+      - "frontend/onlyoffice-plugin/biblioteca/**"
       - ".github/workflows/biblioteca-engine.yml"
   push:
     branches: [main]
     paths:
+      - "backend/app/api/v1/endpoints/biblioteca*.py"
+      - "backend/app/main.py"
       - "backend/app/services/biblioteca_motor/**"
       - "backend/app/tests/test_biblioteca_*.py"
       - "backend/requirements.txt"
+      - "frontend/onlyoffice-plugin/biblioteca/**"
 
 jobs:
   test:
@@ -46,11 +52,18 @@ jobs:
       - name: Compile biblioteca modules
         run: |
           python -m py_compile \
+            app/main.py \
+            app/api/v1/endpoints/biblioteca_async.py \
             app/services/biblioteca_motor/analysis.py \
             app/services/biblioteca_motor/anchor_resolver.py \
             app/services/biblioteca_motor/comprehensive_extractor.py \
             app/services/biblioteca_motor/llm_extractor.py \
+            app/tests/test_biblioteca_async.py \
             app/tests/test_biblioteca_comprehensive_extractor.py
+      - name: Run asynchronous transport tests
+        id: async_transport
+        continue-on-error: true
+        run: python -m unittest -v app.tests.test_biblioteca_async > async-tests.log 2>&1
       - name: Run comprehensive extraction tests
         id: comprehensive
         continue-on-error: true
@@ -73,10 +86,12 @@ jobs:
       - name: Enforce focused test success
         if: always()
         run: |
+          cat async-tests.log
           cat comprehensive-tests.log
           cat analysis-tests.log
           cat review-tests.log
-          if [ "${{ steps.comprehensive.outcome }}" != "success" ] || \
+          if [ "${{ steps.async_transport.outcome }}" != "success" ] || \
+             [ "${{ steps.comprehensive.outcome }}" != "success" ] || \
              [ "${{ steps.analysis.outcome }}" != "success" ] || \
              [ "${{ steps.review.outcome }}" != "success" ]; then
             exit 1
