@@ -58,8 +58,10 @@ jobs:
             app/services/biblioteca_motor/anchor_resolver.py \
             app/services/biblioteca_motor/comprehensive_extractor.py \
             app/services/biblioteca_motor/llm_extractor.py \
+            app/services/biblioteca_motor/review_document_safe.py \
             app/tests/test_biblioteca_async.py \
-            app/tests/test_biblioteca_comprehensive_extractor.py
+            app/tests/test_biblioteca_comprehensive_extractor.py \
+            app/tests/test_biblioteca_review_visible_guard.py
       - name: Validate async plugin JavaScript
         run: node --check ../frontend/onlyoffice-plugin/biblioteca/async-analysis.js
       - name: Run asynchronous transport tests
@@ -78,6 +80,10 @@ jobs:
         id: review
         continue-on-error: true
         run: python -m unittest -v app.tests.test_biblioteca_review_document > review-tests.log 2>&1
+      - name: Run visible text guard tests
+        id: review_guard
+        continue-on-error: true
+        run: python -m unittest -v app.tests.test_biblioteca_review_visible_guard > review-guard-tests.log 2>&1
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -92,9 +98,11 @@ jobs:
           cat comprehensive-tests.log
           cat analysis-tests.log
           cat review-tests.log
+          cat review-guard-tests.log
           if [ "${{ steps.async_transport.outcome }}" != "success" ] || \
              [ "${{ steps.comprehensive.outcome }}" != "success" ] || \
              [ "${{ steps.analysis.outcome }}" != "success" ] || \
-             [ "${{ steps.review.outcome }}" != "success" ]; then
+             [ "${{ steps.review.outcome }}" != "success" ] || \
+             [ "${{ steps.review_guard.outcome }}" != "success" ]; then
             exit 1
           fi
