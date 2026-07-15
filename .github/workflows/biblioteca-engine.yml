@@ -1,0 +1,59 @@
+name: Biblioteca Engine
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/services/biblioteca_motor/**"
+      - "backend/app/tests/test_biblioteca_*.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/biblioteca-engine.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/services/biblioteca_motor/**"
+      - "backend/app/tests/test_biblioteca_*.py"
+      - "backend/requirements.txt"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "fastapi==0.115.12" \
+            "sqlalchemy==2.0.40" \
+            "pydantic-settings==2.8.1" \
+            "python-docx>=0.8.11" \
+            "lxml>=5.0.0" \
+            "openai>=1.42.0" \
+            "python-jose[cryptography]==3.4.0" \
+            "passlib[bcrypt]==1.7.4" \
+            "email-validator==2.2.0" \
+            "python-dotenv" \
+            "requests>=2.31.0" \
+            "python-multipart>=0.0.7"
+      - name: Compile biblioteca modules
+        run: |
+          python -m py_compile \
+            app/services/biblioteca_motor/analysis.py \
+            app/services/biblioteca_motor/anchor_resolver.py \
+            app/services/biblioteca_motor/comprehensive_extractor.py \
+            app/services/biblioteca_motor/llm_extractor.py \
+            app/tests/test_biblioteca_comprehensive_extractor.py
+      - name: Run biblioteca tests
+        run: |
+          python -m unittest \
+            app.tests.test_biblioteca_comprehensive_extractor \
+            app.tests.test_biblioteca_analizar_actual \
+            app.tests.test_biblioteca_review_document
