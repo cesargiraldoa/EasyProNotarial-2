@@ -142,7 +142,7 @@ def _llm_diagnostics(result: LLMExtractionResult) -> dict[str, Any]:
         "input_tokens": result.audit.input_tokens,
         "output_tokens": result.audit.output_tokens,
         "latency_ms": result.audit.latency_ms,
-        "diagnostics": result.extraction.diagnostics,
+        "diagnostics": [item.model_dump(mode="json") for item in result.extraction.diagnostics],
     }
 
 
