@@ -2,13 +2,13 @@
   "name": "Motor de Biblioteca",
   "nameLocale": {},
   "guid": "asc.{biblioteca-easypro-2026-v1}",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minVersion": "7.0.0",
   "variations": [
     {
       "description": "Motor de Biblioteca — Ecosistema Notarial",
       "descriptionLocale": {},
-      "url": "index.html?v=1.1.0",
+      "url": "index.html?v=1.1.1",
       "isViewer": false,
       "EditorsSupport": ["word"],
       "isVisual": true,

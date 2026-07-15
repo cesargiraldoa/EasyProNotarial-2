@@ -8,13 +8,13 @@ test("plugin html and config keep production OnlyOffice runtime cache busting", 
   const html = readFileSync(resolve("onlyoffice-plugin/biblioteca/index.html"), "utf8");
   const config = JSON.parse(readFileSync(resolve("onlyoffice-plugin/biblioteca/config.json"), "utf8"));
   const runtimeIndex = html.indexOf('<script type="text/javascript" src="../v1/plugins.js"></script>');
-  const pluginIndex = html.indexOf('<script src="plugin.js?v=1.1.0"></script>');
+  const pluginIndex = html.indexOf('<script src="plugin.js?v=1.1.1"></script>');
 
   assert.notEqual(runtimeIndex, -1);
   assert.notEqual(pluginIndex, -1);
   assert.ok(runtimeIndex < pluginIndex);
-  assert.equal(config.version, "1.1.0");
-  assert.equal(config.variations[0].url, "index.html?v=1.1.0");
+  assert.equal(config.version, "1.1.1");
+  assert.equal(config.variations[0].url, "index.html?v=1.1.1");
 });
 
 function loadPlugin(options = {}) {
@@ -53,7 +53,12 @@ function loadPlugin(options = {}) {
       },
     },
   };
-  if (options.document) {
+  if (options.callCommand) {
+    window.Asc.plugin.callCommand = function (command, close, calc, callback) {
+      commandCalls.push({ close, calc });
+      options.callCommand(command, close, calc, callback);
+    };
+  } else if (options.document) {
     window.Asc.plugin.callCommand = function (command, _close, _calc, callback) {
       commandCalls.push({ close: _close, calc: _calc });
       const result = command();
@@ -343,7 +348,7 @@ test("plugin calls analyze-current and renders suggestions", async () => {
     document_id: 114,
     version_id: 229,
   };
-  const suggestions = await api.analizarActualConToken("jwt-real", context, async (url, init) => {
+  const analysis = await api.analizarActualConToken("jwt-real", context, async (url, init) => {
     calls.push({ url, init });
     return {
       ok: true,
@@ -364,13 +369,13 @@ test("plugin calls analyze-current and renders suggestions", async () => {
     };
   });
 
-  assert.equal(suggestions.length, 1);
+  assert.equal(analysis.suggestions.length, 1);
   assert.match(calls[0].url, /\/api\/v1\/biblioteca\/analizar-actual$/);
   assert.equal(calls[0].init.headers.Authorization, "Bearer jwt-real");
   assert.equal(calls[0].init.headers["Content-Type"], "application/json");
   assert.deepEqual(JSON.parse(calls[0].init.body), context);
 
-  api.renderSugerencias(suggestions);
+  api.renderSugerencias(analysis.suggestions);
   const list = elements.get("listaSugerencias");
   assert.equal(list.children.length, 1);
   assert.equal(list.children[0].dataset.candidateId, "cand_1");
@@ -729,6 +734,107 @@ test("plugin handles OnlyOffice API errors as mark_failed", async () => {
   await api.marcarSugerenciasEnDocumento(items);
 
   assert.equal(api.getMarkerRegistry().sug_1.status, "mark_failed");
+});
+
+test("plugin does not mark suggestions without field_code", async () => {
+  const range = makeRange("Daniela Campo", {
+    location_key: "paragraph:1:17:30:1",
+    block_hash: "hash-1",
+  });
+  const document = makeDocument({ "Daniela Campo": [range] });
+  const { api, commandCalls } = loadPlugin({ document });
+  const items = api.prepararSugerencias([suggestion({ field_code: null })]);
+
+  await api.marcarSugerenciasEnDocumento(items);
+
+  assert.equal(items.length, 0);
+  assert.equal(commandCalls.length, 0);
+  assert.equal(range.highlightCalls.length, 0);
+});
+
+test("plugin marks high volume suggestions in small batches", async () => {
+  const searchMap = {};
+  const rawSuggestions = Array.from({ length: 55 }, (_, index) => {
+    const text = `Daniela Campo ${index}`;
+    const loc = `paragraph:1:${index}:${index + 13}:1`;
+    searchMap[text] = [makeRange(text, { location_key: loc, block_hash: "hash-1" })];
+    return suggestion({
+      suggestion_id: `sug_${index}`,
+      candidate_id: `cand_${index}`,
+      original_text: text,
+      location: {
+        ...suggestion().location,
+        char_start: index,
+        char_end: index + 13,
+        location_key: loc,
+        block_hash: "hash-1",
+      },
+    });
+  });
+  const document = makeDocument(searchMap);
+  const { api, commandCalls } = loadPlugin({ document });
+
+  await api.marcarSugerenciasEnDocumento(api.prepararSugerencias(rawSuggestions));
+
+  assert.equal(commandCalls.length, 3);
+  assert.equal(Object.values(api.getMarkerRegistry()).filter((item) => item.status === "marked").length, 55);
+});
+
+test("plugin keeps loaded analysis visible when OnlyOffice marking fails", async () => {
+  const { api, constants, window, elements } = loadPlugin({
+    callCommand(_command, _close, _calc, callback) {
+      callback(JSON.stringify({ ok: false, error: "onlyoffice_command_failed", results: [] }));
+    },
+  });
+  window.fetch = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        suggestions: [suggestion()],
+        stats: {
+          deterministic_candidates: 940,
+          classified_candidates: 1,
+          unclassified_candidates: 939,
+          suggestions: 1,
+        },
+        diagnostics: {
+          ai: { attempted: true, status: "timeout", classified: 0 },
+        },
+      };
+    },
+  });
+  const tokenPromise = api.solicitarToken();
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-real",
+      document_context: { kind: "minuta", editor_token: "signed-token" },
+    },
+  });
+  await tokenPromise;
+
+  await api.analizarDocumento();
+
+  assert.doesNotMatch(elements.get("estado").textContent, /conectar/i);
+  assert.match(elements.get("estado").textContent, /OnlyOffice no pudo aplicar las marcas|Analisis recibido/);
+  assert.equal(elements.get("contador").textContent, "1");
+});
+
+test("plugin renders high volume suggestions by page", () => {
+  const { api, elements } = loadPlugin();
+  const rawSuggestions = Array.from({ length: 140 }, (_, index) => suggestion({
+    suggestion_id: `sug_page_${index}`,
+    candidate_id: `cand_page_${index}`,
+    original_text: `Daniela Campo ${index}`,
+  }));
+
+  api.renderSugerencias(rawSuggestions);
+
+  assert.equal(elements.get("contador").textContent, "140");
+  assert.equal(elements.get("listaSugerencias").children.length, 81);
 });
 
 test("plugin creates no marks when there are no suggestions", async () => {

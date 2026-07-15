@@ -7,6 +7,8 @@
   var HOST_SOURCE = "easypro-host";
   var AUTH_TIMEOUT_MS = 5000;
   var ANALYSIS_TIMEOUT_MS = 60000;
+  var MARK_BATCH_SIZE = 25;
+  var SUGGESTIONS_PAGE_SIZE = 80;
   var DEFAULT_API_BASE_URL = "https://easypronotarial-2-production.up.railway.app";
   var CATALOG_PATH = "/api/v1/biblioteca/campos";
   var ANALYZE_CURRENT_PATH = "/api/v1/biblioteca/analizar-actual";
@@ -22,12 +24,15 @@
   var sugerenciasActuales = [];
   var markerRegistry = {};
   var activeSuggestionId = null;
+  var renderLimit = SUGGESTIONS_PAGE_SIZE;
   var latestDiagnostics = {
     runtime: "plugin.js",
     suggestions: 0,
     marked: 0,
     stale: 0,
     failed: 0,
+    stats: null,
+    ai: null,
     capabilities: {
       search_supported: false,
       select_supported: false,
@@ -297,7 +302,11 @@
   }
 
   function prepararSugerencias(data) {
-    return (Array.isArray(data) ? data : []).map(normalizarSugerencia);
+    return (Array.isArray(data) ? data : [])
+      .map(normalizarSugerencia)
+      .filter(function (item) {
+        return Boolean(item.field_code && item.original_text);
+      });
   }
 
   function estadoMarca(suggestionId) {
@@ -337,6 +346,22 @@
       + " · comment: " + String(latestDiagnostics.capabilities.comment_supported);
   }
 
+  function resumenAnalisis(stats, ai) {
+    var total = Number(stats && stats.deterministic_candidates || 0);
+    var classified = Number(stats && stats.classified_candidates || 0);
+    var suggestions = Number(stats && stats.suggestions || 0);
+    var omitted = Number(stats && stats.omitted_suggestions || 0);
+    var text = "Analisis recibido: " + String(suggestions) + " sugerencias de "
+      + String(total) + " candidatos; clasificados: " + String(classified) + ".";
+    if (omitted > 0) {
+      text += " " + String(omitted) + " quedaron fuera por prioridad.";
+    }
+    if (ai && ai.attempted) {
+      text += " IA: " + String(ai.status || "n/a") + ", clasificados: " + String(ai.classified || 0) + ".";
+    }
+    return text;
+  }
+
   function registrarEstadoMarca(suggestion, status, markerId, reason, canNavigate) {
     markerRegistry[suggestion.suggestion_id] = {
       suggestion_id: suggestion.suggestion_id,
@@ -369,7 +394,8 @@
     contador.textContent = String(sugerencias.length);
     lista.innerHTML = "";
 
-    sugerencias.forEach(function (item) {
+    var visibleCount = Math.min(sugerencias.length, renderLimit);
+    sugerencias.slice(0, visibleCount).forEach(function (item) {
       var status = estadoMarca(item.suggestion_id);
       var card = document.createElement("div");
       card.className = "sugerencia-card" + (activeSuggestionId === item.suggestion_id ? " activa" : "");
@@ -454,6 +480,16 @@
       card.appendChild(actions);
       lista.appendChild(card);
     });
+    if (sugerencias.length > visibleCount) {
+      var more = document.createElement("button");
+      more.className = "btn";
+      more.textContent = "Mostrar " + String(sugerencias.length - visibleCount) + " sugerencias mas";
+      more.onclick = function () {
+        renderLimit = sugerencias.length;
+        renderSugerencias(sugerencias);
+      };
+      lista.appendChild(more);
+    }
     actualizarDiagnostico();
   }
 
@@ -562,7 +598,15 @@
     if (!payload || typeof payload !== "object" || !Array.isArray(payload.suggestions)) {
       throw crearError("invalid_json");
     }
-    return payload.suggestions;
+    return {
+      suggestions: payload.suggestions,
+      stats: payload.stats && typeof payload.stats === "object" ? payload.stats : {},
+      ai: payload.diagnostics && payload.diagnostics.ai && typeof payload.diagnostics.ai === "object"
+        ? payload.diagnostics.ai
+        : (payload.ai && typeof payload.ai === "object" ? payload.ai : {}),
+      status: typeof payload.status === "string" ? payload.status : "completed",
+      mode: typeof payload.mode === "string" ? payload.mode : "deterministic"
+    };
   }
 
   async function analizarActualConToken(token, documentContext, fetchImpl) {
@@ -859,39 +903,47 @@
   }
 
   async function marcarSugerenciasEnDocumento(sugerencias) {
-    if (!sugerencias.length) {
+    var operativas = (Array.isArray(sugerencias) ? sugerencias : []).filter(function (suggestion) {
+      return Boolean(suggestion && suggestion.field_code && suggestion.original_text);
+    });
+    if (!operativas.length) {
       actualizarDiagnostico();
       return;
     }
-    sugerencias.forEach(function (suggestion) {
+    operativas.forEach(function (suggestion) {
       registrarEstadoMarca(suggestion, "pending_mark");
     });
-    var result = await callOnlyOfficeCommand("easyproMarkPayload", sugerencias, onlyOfficeMarkCommand);
-    if (result && result.runtime) {
-      latestDiagnostics.runtime = result.runtime;
-    }
-    if (result && result.capabilities) {
-      latestDiagnostics.capabilities = {
-        search_supported: Boolean(result.capabilities.search_supported),
-        select_supported: Boolean(result.capabilities.select_supported),
-        highlight_supported: Boolean(result.capabilities.highlight_supported),
-        comment_supported: Boolean(result.capabilities.comment_supported)
-      };
-    }
-    var byId = {};
-    (result && Array.isArray(result.results) ? result.results : []).forEach(function (item) {
-      byId[item.suggestion_id] = item;
-    });
-    sugerencias.forEach(function (suggestion) {
-      var item = byId[suggestion.suggestion_id];
-      if (!result || result.ok === false) {
-        registrarEstadoMarca(suggestion, "mark_failed", null, result && result.error);
-      } else if (!item) {
-        registrarEstadoMarca(suggestion, "mark_failed", null, "missing_result");
-      } else {
-        registrarEstadoMarca(suggestion, item.status, item.marker_id, item.reason, item.can_navigate);
+    for (var start = 0; start < operativas.length; start += MARK_BATCH_SIZE) {
+      var batch = operativas.slice(start, start + MARK_BATCH_SIZE);
+      mostrarEstado("Marcando " + String(Math.min(start + batch.length, operativas.length)) + " de " + String(operativas.length), "");
+      var result = await callOnlyOfficeCommand("easyproMarkPayload", batch, onlyOfficeMarkCommand);
+      if (result && result.runtime) {
+        latestDiagnostics.runtime = result.runtime;
       }
-    });
+      if (result && result.capabilities) {
+        latestDiagnostics.capabilities = {
+          search_supported: Boolean(result.capabilities.search_supported),
+          select_supported: Boolean(result.capabilities.select_supported),
+          highlight_supported: Boolean(result.capabilities.highlight_supported),
+          comment_supported: Boolean(result.capabilities.comment_supported)
+        };
+      }
+      var byId = {};
+      (result && Array.isArray(result.results) ? result.results : []).forEach(function (item) {
+        byId[item.suggestion_id] = item;
+      });
+      batch.forEach(function (suggestion) {
+        var item = byId[suggestion.suggestion_id];
+        if (!result || result.ok === false) {
+          registrarEstadoMarca(suggestion, "mark_failed", null, result && result.error);
+        } else if (!item) {
+          registrarEstadoMarca(suggestion, "mark_failed", null, "missing_result");
+        } else {
+          registrarEstadoMarca(suggestion, item.status, item.marker_id, item.reason, item.can_navigate);
+        }
+      });
+      renderSugerencias(sugerenciasActuales);
+    }
     actualizarDiagnostico();
   }
 
@@ -958,19 +1010,48 @@
     setAnalisisEnCurso(true);
     await limpiarMarcasTemporales();
     sugerenciasActuales = [];
+    renderLimit = SUGGESTIONS_PAGE_SIZE;
     renderSugerencias(sugerenciasActuales);
     mostrarEstado("Analizando documento...", "");
     try {
       var token = await solicitarToken();
-      var sugerencias = await analizarActualConToken(token, documentContextEnMemoria);
-      sugerenciasActuales = prepararSugerencias(sugerencias);
-      renderSugerencias(sugerenciasActuales);
-      await marcarSugerenciasEnDocumento(sugerenciasActuales);
-      renderSugerencias(sugerenciasActuales);
-      mostrarEstado(
-        sugerenciasActuales.length ? "Sugerencias cargadas y marcadas en el documento." : "No se encontraron candidatos en el documento.",
-        sugerenciasActuales.length ? "ok" : ""
-      );
+      var analysis;
+      try {
+        analysis = await analizarActualConToken(token, documentContextEnMemoria);
+      } catch (error) {
+        mostrarEstado(error && error.kind === "analysis_timeout"
+          ? "No fue posible obtener el analisis del documento."
+          : "No fue posible obtener el analisis del documento.", "error");
+        return;
+      }
+      latestDiagnostics.stats = analysis.stats || null;
+      latestDiagnostics.ai = analysis.ai || null;
+      try {
+        sugerenciasActuales = prepararSugerencias(analysis.suggestions);
+        renderSugerencias(sugerenciasActuales);
+      } catch (error) {
+        mostrarEstado("El analisis fue recibido, pero no pudo mostrarse.", "error");
+        return;
+      }
+      mostrarEstado(resumenAnalisis(analysis.stats, analysis.ai), sugerenciasActuales.length ? "ok" : "");
+      try {
+        await marcarSugerenciasEnDocumento(sugerenciasActuales);
+        renderSugerencias(sugerenciasActuales);
+      } catch (error) {
+        mostrarEstado("Las sugerencias fueron cargadas, pero OnlyOffice no pudo aplicar las marcas.", "error");
+        return;
+      }
+      var values = Object.keys(markerRegistry).map(function (key) { return markerRegistry[key]; });
+      var failed = values.filter(function (item) { return item.status === "mark_failed"; }).length;
+      var marked = values.filter(function (item) { return item.status === "marked"; }).length;
+      if (failed > 0 && marked === 0 && sugerenciasActuales.length > 0) {
+        mostrarEstado("Las sugerencias fueron cargadas, pero OnlyOffice no pudo aplicar las marcas. " + resumenAnalisis(analysis.stats, analysis.ai), "error");
+      } else {
+        mostrarEstado(
+          sugerenciasActuales.length ? resumenAnalisis(analysis.stats, analysis.ai) : "No se encontraron sugerencias operativas en el documento.",
+          sugerenciasActuales.length ? "ok" : ""
+        );
+      }
     } catch (error) {
       mostrarEstado(mensajeError(error), "error");
     } finally {
@@ -1044,12 +1125,15 @@
         sugerenciasActuales = [];
         markerRegistry = {};
         activeSuggestionId = null;
+        renderLimit = SUGGESTIONS_PAGE_SIZE;
         latestDiagnostics = {
           runtime: "plugin.js",
           suggestions: 0,
           marked: 0,
           stale: 0,
           failed: 0,
+          stats: null,
+          ai: null,
           capabilities: {
             search_supported: false,
             select_supported: false,
