@@ -10,6 +10,7 @@ from starlette.responses import Response
 from app.api.router import api_router
 from app.api.v1.endpoints.biblioteca import router as biblioteca_router
 from app.api.v1.endpoints.biblioteca_async import router as biblioteca_async_router
+from app.api.v1.endpoints.biblioteca_poll import router as biblioteca_poll_router
 from app.core.config import get_settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
@@ -90,6 +91,7 @@ app.add_middleware(FlexibleCORSMiddleware)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_async_router, prefix=settings.api_v1_prefix)
+app.include_router(biblioteca_poll_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health")
