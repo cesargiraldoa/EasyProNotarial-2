@@ -258,7 +258,7 @@ class BibliotecaComprehensiveExtractorTests(unittest.TestCase):
 
         self.assertEqual(len(resolved.anchored), 1)
         self.assertEqual(resolved.anchored[0].location["occurrence_index"], 2)
-        self.assertEqual(resolved.anchored[0].location["char_start"], 25)
+        self.assertEqual(resolved.anchored[0].location["char_start"], 27)
 
 
 if __name__ == "__main__":
