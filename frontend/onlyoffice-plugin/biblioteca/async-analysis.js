@@ -3,8 +3,9 @@
 
   var AUTH_RESPONSE_TYPE = "EASYPRO_ONLYOFFICE_AUTH_RESPONSE";
   var HOST_SOURCE = "easypro-host";
-  var START_PATH = "/api/v1/biblioteca/analisis/iniciar";
+  var START_PATH = "/api/v1/biblioteca/analisis/iniciar-seguro";
   var STATUS_PATH = "/api/v1/biblioteca/analisis/";
+  var STATUS_SUFFIX = "/estado-seguro";
   var POLL_MS = 4000;
   var MAX_WAIT_MS = 45 * 60 * 1000;
   var documentContext = null;
@@ -57,21 +58,25 @@
     return window.fetch(apiBaseUrl() + path, requestOptions);
   }
 
-  async function startJob(token, context) {
-    var response = await authorizedFetch(token, START_PATH, {
+  async function startJob(userToken, context) {
+    var response = await authorizedFetch(userToken, START_PATH, {
       method: "POST",
       body: JSON.stringify(context)
     });
     var payload = await readJson(response);
-    if (!response.ok || !payload.run_id) {
+    if (!response.ok || !payload.run_id || !payload.poll_token) {
       var detail = payload.detail || payload.error_code || "No fue posible iniciar el análisis.";
       throw new Error(String(detail));
     }
     return payload;
   }
 
-  async function getJobStatus(token, runId) {
-    var response = await authorizedFetch(token, STATUS_PATH + String(runId), { method: "GET" });
+  async function getJobStatus(pollToken, runId) {
+    var response = await authorizedFetch(
+      pollToken,
+      STATUS_PATH + String(runId) + STATUS_SUFFIX,
+      { method: "GET" }
+    );
     var payload = await readJson(response);
     if (!response.ok) {
       throw new Error(String(payload.detail || "No fue posible consultar el análisis."));
@@ -93,11 +98,12 @@
     try {
       var plugin = window.__EasyProBibliotecaPlugin;
       if (!plugin || !plugin.test) throw new Error("Plugin no inicializado.");
-      var token = await plugin.test.solicitarToken();
+      var userToken = await plugin.test.solicitarToken();
       if (!documentContext) throw new Error("No fue posible identificar el documento abierto.");
 
-      var start = await startJob(token, documentContext);
+      var start = await startJob(userToken, documentContext);
       var runId = start.run_id;
+      var pollToken = start.poll_token;
       showStatus(
         start.reused
           ? "Retomando análisis en curso..."
@@ -109,7 +115,7 @@
         await sleep(POLL_MS);
         var state;
         try {
-          state = await getJobStatus(token, runId);
+          state = await getJobStatus(pollToken, runId);
         } catch (_transientError) {
           showStatus("El análisis continúa. Reintentando consulta... " + elapsedText(startedAt), "");
           continue;
