@@ -225,6 +225,22 @@
       overflow-y: auto;
     }
 
+    .change-panel {
+      border-top: 1px solid var(--line);
+      display: none;
+      padding: 8px 12px;
+    }
+
+    .change-panel.visible {
+      display: block;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
     .campo-item {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -284,6 +300,24 @@
     </div>
     <div class="sugerencias-list" id="listaSugerencias"></div>
     <div class="empty-state" id="diagnosticoMotor" style="display:none"></div>
+  </div>
+
+  <div class="separator"></div>
+
+  <div class="change-panel" id="panelCambio">
+    <div class="section-title">Cambiar sugerencia</div>
+    <input id="campoCambioBuscar" class="search" placeholder="Filtrar campo existente..." />
+    <select id="campoCambioSelect" class="search"></select>
+    <button class="btn btn-primary" id="btnAsignarCampo" type="button">Asignar campo existente</button>
+    <div class="hint">Crear campo nuevo</div>
+    <input id="nuevoCampoCode" class="search" placeholder="CODE" />
+    <input id="nuevoCampoLabel" class="search" placeholder="Nombre visible" />
+    <div class="field-row">
+      <input id="nuevoCampoCategory" class="search" placeholder="categoria" />
+      <input id="nuevoCampoType" class="search" placeholder="text" />
+    </div>
+    <button class="btn btn-primary" id="btnCrearCampo" type="button">Crear y asignar</button>
+    <button class="btn" id="btnCancelarCambio" type="button">Cancelar</button>
   </div>
 
   <div class="separator"></div>
