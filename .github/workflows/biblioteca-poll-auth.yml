@@ -1,0 +1,55 @@
+name: Biblioteca Poll Auth
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/api/v1/endpoints/biblioteca_poll.py"
+      - "backend/app/main.py"
+      - "backend/app/tests/test_biblioteca_poll.py"
+      - "frontend/onlyoffice-plugin/biblioteca/**"
+      - ".github/workflows/biblioteca-poll-auth.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/api/v1/endpoints/biblioteca_poll.py"
+      - "backend/app/main.py"
+      - "backend/app/tests/test_biblioteca_poll.py"
+      - "frontend/onlyoffice-plugin/biblioteca/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "fastapi==0.115.12" \
+            "sqlalchemy==2.0.40" \
+            "pydantic-settings==2.8.1" \
+            "python-docx>=0.8.11" \
+            "lxml>=5.0.0" \
+            "openai>=1.42.0" \
+            "python-jose[cryptography]==3.4.0" \
+            "passlib[bcrypt]==1.7.4" \
+            "email-validator==2.2.0" \
+            "python-dotenv" \
+            "requests>=2.31.0" \
+            "python-multipart>=0.0.7"
+      - name: Compile polling modules
+        run: |
+          python -m py_compile \
+            app/main.py \
+            app/api/v1/endpoints/biblioteca_poll.py \
+            app/tests/test_biblioteca_poll.py
+      - name: Validate plugin JavaScript
+        run: node --check ../frontend/onlyoffice-plugin/biblioteca/async-analysis.js
+      - name: Run polling authentication tests
+        run: python -m unittest -v app.tests.test_biblioteca_poll
