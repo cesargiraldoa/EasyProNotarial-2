@@ -1,20 +1,28 @@
 from __future__ import annotations
 
 import re
+import hashlib
 import tempfile
 from pathlib import Path
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field
 import sqlalchemy as sa
 from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, get_manageable_notary_ids, get_role_codes
+from app.models.case import Case
+from app.models.case_document import CaseDocument
+from app.models.case_document_version import CaseDocumentVersion
 from app.models.notarial_field_catalog import NotarialFieldCatalog
 from app.models.user import User
+from app.modules.minuta.router import _decode_file_token
+from app.services.biblioteca_motor.analysis import OpenAIBibliotecaClassifier, analyze_biblioteca_document
 from app.services.minuta.detector import analizar_documento
+from app.services.storage import download_storage_bytes
 
 
 router = APIRouter(prefix="/biblioteca", tags=["biblioteca"])
@@ -48,6 +56,30 @@ class AnalizarDocumentoResponse(BaseModel):
     sugerencias: list[SugerenciaCampo]
     texto_original: str
     costo_usd: float
+
+
+class CaseDocumentContext(BaseModel):
+    kind: Literal["case_document"]
+    case_id: int
+    document_id: int
+    version_id: int
+
+
+class MinutaDocumentContext(BaseModel):
+    kind: Literal["minuta"]
+    editor_token: str
+
+
+AnalyzeActualRequest = Annotated[CaseDocumentContext | MinutaDocumentContext, Field(discriminator="kind")]
+
+
+class AnalyzeActualResponse(BaseModel):
+    analysis_id: str
+    document: dict
+    mode: str
+    status: str
+    suggestions: list[dict]
+    stats: dict
 
 
 @router.get("/campos", response_model=list[FieldCatalogItem])
@@ -214,3 +246,105 @@ def _build_sugerencias(resultado: dict) -> list[SugerenciaCampo]:
 
     sugerencias.sort(key=lambda s: (-s.confianza, 0 if s.metodo == "deterministico" else 1))
     return sugerencias
+
+
+@router.post("/analizar-actual", response_model=AnalyzeActualResponse)
+def analizar_documento_actual(
+    payload: AnalyzeActualRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    storage_path, document_info = _resolve_current_document(payload, db, current_user)
+    try:
+        docx_bytes = download_storage_bytes(storage_path)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no disponible.") from exc
+
+    fields = _field_catalog_for_user(db, current_user)
+    settings = get_settings()
+    classifier = OpenAIBibliotecaClassifier(settings.openai_api_key) if settings.openai_api_key else None
+    result = analyze_biblioteca_document(docx_bytes, fields, ai_classifier=classifier)
+    result["document"] = {**document_info, "sha256": hashlib.sha256(docx_bytes).hexdigest()}
+    return result
+
+
+def _resolve_current_document(
+    payload: CaseDocumentContext | MinutaDocumentContext,
+    db: Session,
+    current_user: User,
+) -> tuple[str, dict]:
+    if payload.kind == "case_document":
+        return _resolve_case_document(payload, db, current_user)
+    return _resolve_minuta_document(payload, current_user)
+
+
+def _resolve_case_document(
+    payload: CaseDocumentContext,
+    db: Session,
+    current_user: User,
+) -> tuple[str, dict]:
+    row = (
+        db.query(CaseDocumentVersion, Case.notary_id)
+        .join(CaseDocument, CaseDocumentVersion.case_document_id == CaseDocument.id)
+        .join(Case, CaseDocument.case_id == Case.id)
+        .filter(
+            Case.id == payload.case_id,
+            CaseDocument.id == payload.document_id,
+            CaseDocumentVersion.id == payload.version_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    version, notary_id = row
+    if not _user_can_access_notary(current_user, notary_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    return version.storage_path, {
+        "kind": "case_document",
+        "case_id": payload.case_id,
+        "document_id": payload.document_id,
+        "version_id": payload.version_id,
+    }
+
+
+def _resolve_minuta_document(
+    payload: MinutaDocumentContext,
+    current_user: User,
+) -> tuple[str, dict]:
+    token_payload = _decode_file_token(payload.editor_token)
+
+    notary_id = token_payload.get("notary_id")
+    if not isinstance(notary_id, int) or not _user_can_access_notary(current_user, notary_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    storage_path = str(token_payload.get("storage_path") or "").strip()
+    if not storage_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    return storage_path, {"kind": "minuta"}
+
+
+def _user_can_access_notary(current_user: User, notary_id: int | None) -> bool:
+    if notary_id is None:
+        return False
+    role_codes = get_role_codes(current_user)
+    if "super_admin" in role_codes:
+        return True
+    return notary_id in get_manageable_notary_ids(current_user)
+
+
+def _field_catalog_for_user(db: Session, current_user: User) -> list[NotarialFieldCatalog]:
+    notary_id = current_user.default_notary_id
+    query = db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.is_active.is_(True))
+    if notary_id is None:
+        query = query.filter(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None))
+    else:
+        query = query.filter(
+            or_(
+                sa.and_(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None)),
+                sa.and_(NotarialFieldCatalog.scope == "notary", NotarialFieldCatalog.notary_id == notary_id),
+            ),
+        )
+    return query.order_by(
+        case((NotarialFieldCatalog.scope == "global", 0), else_=1),
+        NotarialFieldCatalog.category.asc(),
+        NotarialFieldCatalog.code.asc(),
+    ).all()

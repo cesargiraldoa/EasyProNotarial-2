@@ -2,9 +2,13 @@
 
 import { useEffect } from "react";
 import { getToken } from "@/lib/auth";
-import { installOnlyOfficePluginAuthBridge, resolveAllowedOnlyOfficeOrigins } from "@/lib/onlyoffice-plugin-auth-bridge-core";
+import {
+  installOnlyOfficePluginAuthBridge,
+  resolveAllowedOnlyOfficeOrigins,
+  type OnlyOfficeDocumentContext,
+} from "@/lib/onlyoffice-plugin-auth-bridge-core";
 
-export function useOnlyOfficePluginAuthBridge() {
+export function useOnlyOfficePluginAuthBridge(documentContext: OnlyOfficeDocumentContext | null) {
   useEffect(() => {
     const allowedOrigins = resolveAllowedOnlyOfficeOrigins({
       docsUrl: process.env.NEXT_PUBLIC_ONLYOFFICE_DOCS_URL,
@@ -14,6 +18,7 @@ export function useOnlyOfficePluginAuthBridge() {
       target: window,
       allowedOrigins,
       getSessionToken: getToken,
+      getDocumentContext: () => documentContext,
     });
-  }, []);
+  }, [documentContext]);
 }

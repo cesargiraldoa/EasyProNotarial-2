@@ -136,9 +136,15 @@
     .sugerencia-card {
       border: 1px solid var(--line);
       border-radius: 10px;
+      cursor: pointer;
       margin-bottom: 8px;
       padding: 8px;
-      transition: opacity 0.18s ease, transform 0.18s ease;
+      transition: border-color 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+    }
+
+    .sugerencia-card.activa {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.18);
     }
 
     .sugerencia-card.oculta {
@@ -183,6 +189,10 @@
     .conf-alta { background: #D1FAE5; color: #047857; }
     .conf-media { background: #FEF3C7; color: #B45309; }
     .conf-baja { background: #F3F4F6; color: #4B5563; }
+    .estado-marked { background: #FEF3C7; color: #92400E; }
+    .estado-pending_mark { background: #E0E7FF; color: #3730A3; }
+    .estado-stale { background: #FEE2E2; color: #B91C1C; }
+    .estado-mark_failed { background: #F3F4F6; color: #4B5563; }
 
     .actions {
       display: flex;
@@ -262,7 +272,7 @@
 
   <div class="section">
     <button class="btn btn-primary" id="btnAnalizar" type="button">Analizar documento</button>
-    <div class="hint">Análisis del documento disponible en el siguiente bloque.</div>
+    <div class="hint">Marca sugerencias en amarillo. Sí/No estará disponible en el siguiente bloque.</div>
   </div>
 
   <div id="estado"></div>
@@ -273,6 +283,7 @@
       <span class="counter" id="contador">0</span>
     </div>
     <div class="sugerencias-list" id="listaSugerencias"></div>
+    <div class="empty-state" id="diagnosticoMotor" style="display:none"></div>
   </div>
 
   <div class="separator"></div>
@@ -283,9 +294,9 @@
     <div id="listaCampos" class="lista-campos"></div>
   </div>
 
-  <div class="footer">Motor de Biblioteca v1.0</div>
+  <div class="footer">Motor de Biblioteca v1.1.0</div>
 
   <script type="text/javascript" src="../v1/plugins.js"></script>
-  <script src="plugin.js?v=e5bd402-1"></script>
+  <script src="plugin.js?v=1.1.0"></script>
 </body>
 </html>

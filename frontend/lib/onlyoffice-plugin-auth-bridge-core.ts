@@ -9,11 +9,24 @@ export type OnlyOfficeAuthRequestPayload = {
   source: typeof EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
 };
 
+export type OnlyOfficeDocumentContext =
+  | {
+      kind: "case_document";
+      case_id: number;
+      document_id: number;
+      version_id: number;
+    }
+  | {
+      kind: "minuta";
+      editor_token: string;
+    };
+
 export type OnlyOfficeAuthResponsePayload =
   | {
       type: typeof EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE;
       source: typeof EASYPRO_ONLYOFFICE_HOST_SOURCE;
       token: string;
+      document_context?: OnlyOfficeDocumentContext;
     }
   | {
       type: typeof EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE;
@@ -78,12 +91,16 @@ export function isOnlyOfficeAuthRequest(
     && data.source === EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
 }
 
-export function buildOnlyOfficeAuthResponse(token: string | null | undefined): OnlyOfficeAuthResponsePayload {
+export function buildOnlyOfficeAuthResponse(
+  token: string | null | undefined,
+  documentContext?: OnlyOfficeDocumentContext | null,
+): OnlyOfficeAuthResponsePayload {
   if (typeof token === "string" && token.trim()) {
     return {
       type: EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE,
       source: EASYPRO_ONLYOFFICE_HOST_SOURCE,
       token: token.trim(),
+      ...(documentContext ? { document_context: documentContext } : {}),
     };
   }
 
@@ -97,10 +114,14 @@ export function buildOnlyOfficeAuthResponse(token: string | null | undefined): O
 export function createOnlyOfficePluginAuthBridgeHandler(options: {
   allowedOrigins: Set<string>;
   getSessionToken: () => string | null;
+  getDocumentContext?: () => OnlyOfficeDocumentContext | null;
 }) {
   return function handleOnlyOfficePluginAuth(event: BridgeMessageEvent) {
     if (!isOnlyOfficeAuthRequest(event, options.allowedOrigins)) return;
-    event.source.postMessage(buildOnlyOfficeAuthResponse(options.getSessionToken()), event.origin);
+    event.source.postMessage(
+      buildOnlyOfficeAuthResponse(options.getSessionToken(), options.getDocumentContext?.() ?? null),
+      event.origin,
+    );
   };
 }
 
@@ -108,10 +129,12 @@ export function installOnlyOfficePluginAuthBridge(options: {
   target: BridgeEventTarget;
   allowedOrigins: Set<string>;
   getSessionToken: () => string | null;
+  getDocumentContext?: () => OnlyOfficeDocumentContext | null;
 }) {
   const handler = createOnlyOfficePluginAuthBridgeHandler({
     allowedOrigins: options.allowedOrigins,
     getSessionToken: options.getSessionToken,
+    getDocumentContext: options.getDocumentContext,
   });
   options.target.addEventListener("message", handler);
   return () => options.target.removeEventListener("message", handler);

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { getMinutaOnlyOfficeConfig } from "@/lib/minuta";
 import { useOnlyOfficePluginAuthBridge } from "@/lib/onlyoffice-plugin-auth-bridge";
 
@@ -23,7 +23,8 @@ export default function MinutaEditorPage({ params }: EditorPageProps) {
   const { token } = use(params);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  useOnlyOfficePluginAuthBridge();
+  const documentContext = useMemo(() => ({ kind: "minuta" as const, editor_token: token }), [token]);
+  useOnlyOfficePluginAuthBridge(documentContext);
 
   useEffect(() => {
     let mounted = true;

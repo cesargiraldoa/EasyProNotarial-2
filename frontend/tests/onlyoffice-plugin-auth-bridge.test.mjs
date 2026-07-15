@@ -88,6 +88,38 @@ test("bridge responds to authorized origin and only to event.source", () => {
   });
 });
 
+test("bridge includes document context in successful auth response", () => {
+  const source = sourceSpy();
+  const documentContext = {
+    kind: "case_document",
+    case_id: 174,
+    document_id: 114,
+    version_id: 229,
+  };
+  const handler = createOnlyOfficePluginAuthBridgeHandler({
+    allowedOrigins: resolveAllowedOnlyOfficeOrigins(),
+    getSessionToken: () => "jwt-real",
+    getDocumentContext: () => documentContext,
+  });
+
+  handler({
+    origin: onlyOfficeOrigin,
+    source,
+    data: {
+      type: EASYPRO_ONLYOFFICE_AUTH_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+    },
+  });
+
+  assert.equal(source.calls.length, 1);
+  assert.deepEqual(source.calls[0].message, {
+    type: EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE,
+    source: EASYPRO_ONLYOFFICE_HOST_SOURCE,
+    token: "jwt-real",
+    document_context: documentContext,
+  });
+});
+
 test("bridge responds with typed error and no token when session is missing", () => {
   const source = sourceSpy();
   const handler = createOnlyOfficePluginAuthBridgeHandler({

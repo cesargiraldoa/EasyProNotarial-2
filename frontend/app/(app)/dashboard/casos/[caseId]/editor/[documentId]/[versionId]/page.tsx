@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { getOnlyOfficeConfig } from "@/lib/document-flow";
 import { useOnlyOfficePluginAuthBridge } from "@/lib/onlyoffice-plugin-auth-bridge";
 
@@ -24,7 +24,21 @@ export default function OnlyOfficeEditorPage({ params }: EditorPageProps) {
   const resolvedParams = use(params);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  useOnlyOfficePluginAuthBridge();
+  const documentContext = useMemo(() => {
+    const caseId = Number(resolvedParams.caseId);
+    const documentId = Number(resolvedParams.documentId);
+    const versionId = Number(resolvedParams.versionId);
+    if (!Number.isFinite(caseId) || !Number.isFinite(documentId) || !Number.isFinite(versionId)) {
+      return null;
+    }
+    return {
+      kind: "case_document" as const,
+      case_id: caseId,
+      document_id: documentId,
+      version_id: versionId,
+    };
+  }, [resolvedParams.caseId, resolvedParams.documentId, resolvedParams.versionId]);
+  useOnlyOfficePluginAuthBridge(documentContext);
 
   useEffect(() => {
     let mounted = true;
