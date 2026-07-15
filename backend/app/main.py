@@ -1,4 +1,4 @@
-﻿import os
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,16 +8,21 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
 from app.api.router import api_router
-from app.api.v1.endpoints.biblioteca import router as biblioteca_router
-from app.api.v1.endpoints.biblioteca_async import router as biblioteca_async_router
+from app.api.v1.endpoints import biblioteca as biblioteca_endpoint
+from app.api.v1.endpoints import biblioteca_async as biblioteca_async_endpoint
 from app.api.v1.endpoints.biblioteca_poll import router as biblioteca_poll_router
 from app.core.config import get_settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
+from app.services.biblioteca_motor.review_document_safe import prepare_review_document_safe
 from dotenv import load_dotenv
 
 load_dotenv()
 settings = get_settings()
+
+# Apply the same fail-closed OOXML guard to both review preparation routes.
+biblioteca_endpoint.prepare_review_document = prepare_review_document_safe
+biblioteca_async_endpoint.prepare_review_document = prepare_review_document_safe
 
 
 class FlexibleCORSMiddleware(BaseHTTPMiddleware):
@@ -89,8 +94,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(FlexibleCORSMiddleware)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
-app.include_router(biblioteca_router, prefix=settings.api_v1_prefix)
-app.include_router(biblioteca_async_router, prefix=settings.api_v1_prefix)
+app.include_router(biblioteca_endpoint.router, prefix=settings.api_v1_prefix)
+app.include_router(biblioteca_async_endpoint.router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_poll_router, prefix=settings.api_v1_prefix)
 
 
