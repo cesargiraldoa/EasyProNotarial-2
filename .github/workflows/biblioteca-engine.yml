@@ -60,6 +60,8 @@ jobs:
             app/services/biblioteca_motor/llm_extractor.py \
             app/tests/test_biblioteca_async.py \
             app/tests/test_biblioteca_comprehensive_extractor.py
+      - name: Validate async plugin JavaScript
+        run: node --check ../frontend/onlyoffice-plugin/biblioteca/async-analysis.js
       - name: Run asynchronous transport tests
         id: async_transport
         continue-on-error: true
