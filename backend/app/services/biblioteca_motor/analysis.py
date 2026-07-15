@@ -83,7 +83,7 @@ def analyze_biblioteca_document(
         + hashlib.sha256(
             f"{document_map.document_sha256}:{llm_result.audit.model}:{llm_result.audit.prompt_version}".encode("utf-8"),
         ).hexdigest()[:16],
-        "mode": "llm_first_comprehensive",
+        "mode": "llm_first",
         "status": "completed_llm",
         "document_type": llm_result.extraction.document_type,
         "notary_id": notary_id,
