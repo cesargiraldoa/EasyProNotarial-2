@@ -243,6 +243,26 @@ El corpus cubre compraventa simple, compraventa con hipoteca, propiedad horizont
 - Corpus anonimizado: recall 1.0, precision 1.0.
 - Versionado y reapertura: cubierto por snapshot/backend y pruebas de persistencia OOXML automatizadas.
 
+### Cobertura antes/despues
+
+Linea base antes de reconstruir a LLM-first:
+
+- Backend focal: 42 tests OK.
+- Backend completo: 265 tests OK, 1 skipped.
+- Plugin: 16 tests OK.
+- Spike OnlyOffice: 16 tests OK.
+- Auth bridge OnlyOffice: 8 tests OK.
+
+Resultado final LLM-first:
+
+- Backend focal: 23 tests OK.
+- Backend completo: 246 tests OK, 1 skipped.
+- Plugin + spike OnlyOffice: 35 tests OK.
+- Auth bridge OnlyOffice: 8 tests OK.
+- Corpus anonimizado: 18/18 textos utiles, recall 1.0, precision 1.0.
+
+La variacion de conteos responde al reemplazo del flujo incremental por pruebas nuevas de contratos LLM, anclaje, corpus, aprendizaje, decisiones secuenciales y bloqueo de caminos legacy.
+
 ### Validacion no ejecutada
 
 No se ejecuto una prueba manual en un OnlyOffice productivo vivo desde este entorno. `docker compose ps` no pudo conectar con Docker Desktop:
