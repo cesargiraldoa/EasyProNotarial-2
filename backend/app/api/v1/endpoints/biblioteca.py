@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import re
 import hashlib
+import logging
 import tempfile
+import time
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -26,6 +28,7 @@ from app.services.storage import download_storage_bytes
 
 
 router = APIRouter(prefix="/biblioteca", tags=["biblioteca"])
+logger = logging.getLogger(__name__)
 
 
 class FieldCatalogItem(BaseModel):
@@ -80,6 +83,8 @@ class AnalyzeActualResponse(BaseModel):
     status: str
     suggestions: list[dict]
     stats: dict
+    diagnostics: dict | None = None
+    timing: dict | None = None
 
 
 @router.get("/campos", response_model=list[FieldCatalogItem])
@@ -255,16 +260,29 @@ def analizar_documento_actual(
     current_user: User = Depends(get_current_user),
 ):
     storage_path, document_info = _resolve_current_document(payload, db, current_user)
+    download_started = time.perf_counter()
     try:
         docx_bytes = download_storage_bytes(storage_path)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no disponible.") from exc
+    download_ms = max(0, int((time.perf_counter() - download_started) * 1000))
 
     fields = _field_catalog_for_user(db, current_user)
     settings = get_settings()
     classifier = OpenAIBibliotecaClassifier(settings.openai_api_key) if settings.openai_api_key else None
     result = analyze_biblioteca_document(docx_bytes, fields, ai_classifier=classifier)
+    result["timing"]["download_ms"] = download_ms
+    result["timing"]["total_ms"] = int(result["timing"].get("total_ms", 0)) + download_ms
     result["document"] = {**document_info, "sha256": hashlib.sha256(docx_bytes).hexdigest()}
+    logger.info(
+        "biblioteca analysis completed analysis_id=%s kind=%s candidates=%s suggestions=%s ai_status=%s total_ms=%s",
+        result["analysis_id"],
+        document_info.get("kind"),
+        result["stats"].get("deterministic_candidates"),
+        result["stats"].get("suggestions"),
+        (result.get("diagnostics") or {}).get("ai", {}).get("status"),
+        result["timing"].get("total_ms"),
+    )
     return result
 
 

@@ -8,7 +8,13 @@ from docx import Document
 from fastapi import HTTPException
 
 from app.api.v1.endpoints import biblioteca
-from app.services.biblioteca_motor.analysis import analyze_biblioteca_document, extract_candidates, extract_docx_blocks
+from app.services.biblioteca_motor.analysis import (
+    ANALYSIS_TOTAL_BUDGET_SECONDS,
+    MAX_AI_CANDIDATES,
+    analyze_biblioteca_document,
+    extract_candidates,
+    extract_docx_blocks,
+)
 
 
 def _docx_bytes(paragraphs: list[str], table_cells: list[str] | None = None) -> bytes:
@@ -27,8 +33,10 @@ def _docx_bytes(paragraphs: list[str], table_cells: list[str] | None = None) -> 
 def _fields():
     return [
         {"code": "COMPRADOR_1", "label": "Comprador 1", "category": "persona"},
-        {"code": "MATRICULA_INMOBILIARIA", "label": "Matrícula inmobiliaria", "category": "inmueble"},
-        {"code": "CEDULA_COMPRADOR_1", "label": "Cédula comprador 1", "category": "persona"},
+        {"code": "VENDEDOR_1", "label": "Vendedor 1", "category": "persona"},
+        {"code": "BANCO", "label": "Banco", "category": "valor"},
+        {"code": "MATRICULA_INMOBILIARIA", "label": "Matricula inmobiliaria", "category": "inmueble"},
+        {"code": "CEDULA_COMPRADOR_1", "label": "Cedula comprador 1", "category": "persona"},
     ]
 
 
@@ -64,44 +72,60 @@ class _FakeDb:
 class _Classifier:
     def __init__(self, classifications):
         self.classifications = classifications
+        self.calls = 0
 
     def classify(self, candidates, fields):
+        self.calls += 1
         return self.classifications(candidates, fields)
 
 
 class _FailingClassifier:
-    def classify(self, candidates, fields):
+    def __init__(self):
+        self.calls = 0
+
+    def classify(self, candidates, fields, timeout_seconds=None):
+        self.calls += 1
         raise RuntimeError("openai unavailable")
 
 
 class _TimeoutClassifier:
-    def classify(self, candidates, fields):
+    def __init__(self):
+        self.calls = 0
+
+    def classify(self, candidates, fields, timeout_seconds=None):
+        self.calls += 1
         raise TimeoutError("openai timeout")
 
 
 class _RecordingClassifier:
     def __init__(self):
         self.batch_sizes = []
+        self.calls = 0
+        self.timeout_seconds = []
 
-    def classify(self, candidates, fields):
+    def classify(self, candidates, fields, timeout_seconds=None):
+        self.calls += 1
         self.batch_sizes.append(len(candidates))
-        return [{"candidate_id": item.candidate_id, "field_code": "COMPRADOR_1", "confidence": 0.9} for item in candidates if item.candidate_type == "person_name"]
+        self.timeout_seconds.append(timeout_seconds)
+        return [
+            {"candidate_id": item.candidate_id, "field_code": "VENDEDOR_1", "confidence": 0.9}
+            for item in candidates
+            if item.candidate_type == "person_name"
+        ]
 
 
-class _PartialFailingClassifier:
+class _InvalidJsonClassifier:
     def __init__(self):
         self.calls = 0
 
-    def classify(self, candidates, fields):
+    def classify(self, candidates, fields, timeout_seconds=None):
         self.calls += 1
-        if self.calls == 2:
-            raise RuntimeError("provider failed")
-        return [{"candidate_id": item.candidate_id, "field_code": "COMPRADOR_1", "confidence": 0.9} for item in candidates if item.candidate_type == "person_name"]
+        return {"classifications": []}
 
 
 class BibliotecaAnalizarActualTests(unittest.TestCase):
     def test_extraction_in_paragraphs_keeps_exact_offsets(self):
-        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo - cédula de ciudadanía número 1.234.567"])
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo - cedula de ciudadania numero 1.234.567"])
         blocks = extract_docx_blocks(docx)
         candidates = extract_candidates(docx)
         candidate = next(item for item in candidates if item.original_text == "Daniela Campo")
@@ -111,7 +135,7 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertEqual(candidate.location["block_type"], "paragraph")
 
     def test_extraction_in_tables_keeps_exact_offsets(self):
-        docx = _docx_bytes([], ["Matrícula inmobiliaria 050-123456"])
+        docx = _docx_bytes([], ["Matricula inmobiliaria 050-123456"])
         blocks = extract_docx_blocks(docx)
         candidates = extract_candidates(docx)
         candidate = next(item for item in candidates if item.candidate_type == "matricula_inmobiliaria")
@@ -141,19 +165,20 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertNotEqual(first.location["block_hash"], edited_candidate.location["block_hash"])
 
     def test_mocked_ai_classification_is_validated_against_catalog(self):
-        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo"])
+        docx = _docx_bytes(["LOS VENDEDORES: Carlos Perez comparece al otorgamiento."])
 
         def classify(candidates, fields):
-            return [{"candidate_id": candidates[0].candidate_id, "field_code": "COMPRADOR_1", "confidence": 0.97, "reason": "comprador"}]
+            return [{"candidate_id": candidates[0].candidate_id, "field_code": "VENDEDOR_1", "confidence": 0.97, "reason": "vendedor"}]
 
         result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_Classifier(classify))
 
         self.assertEqual(result["mode"], "hybrid")
-        self.assertEqual(result["suggestions"][0]["field_code"], "COMPRADOR_1")
-        self.assertIn(result["suggestions"][0]["source"], {"ai", "hybrid"})
+        self.assertEqual(result["status"], "completed_hybrid")
+        self.assertEqual(result["suggestions"][0]["field_code"], "VENDEDOR_1")
+        self.assertEqual(result["suggestions"][0]["source"], "ai")
 
     def test_unknown_ai_field_code_is_not_renderable_suggestion(self):
-        docx = _docx_bytes(["Banco Demo aprobó el crédito."])
+        docx = _docx_bytes(["LOS VENDEDORES: Carlos Perez comparece al otorgamiento."])
 
         def classify(candidates, fields):
             return [{"candidate_id": candidates[0].candidate_id, "field_code": "NO_EXISTE", "confidence": 0.8}]
@@ -164,23 +189,25 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertEqual(result["stats"]["suggestions"], 0)
         self.assertGreaterEqual(result["stats"]["unclassified_candidates"], 1)
 
-    def test_ai_failure_keeps_deterministic_partial_result(self):
+    def test_ai_is_not_called_for_high_certainty_deterministic_candidates(self):
+        classifier = _FailingClassifier()
         docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo"])
-        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_FailingClassifier())
+        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=classifier)
 
-        self.assertEqual(result["status"], "completed_with_ai_fallback")
+        self.assertEqual(classifier.calls, 0)
+        self.assertEqual(result["status"], "completed_deterministic")
         self.assertGreaterEqual(result["stats"]["deterministic_candidates"], 1)
         self.assertGreaterEqual(len(result["suggestions"]), 1)
 
     def test_suggestion_contract_keeps_location_fields_for_plugin(self):
-        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo - cédula de ciudadanía número 1.234.567"])
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo - cedula de ciudadania numero 1.234.567"])
         result = analyze_biblioteca_document(docx, _fields(), ai_classifier=None)
         suggestion = next(item for item in result["suggestions"] if item["original_text"] == "Daniela Campo")
         location = suggestion["location"]
 
         self.assertEqual(suggestion["original_text"], "Daniela Campo")
         self.assertIn("LOS COMPRADORES", suggestion["context_before"])
-        self.assertIn("cédula", suggestion["context_after"])
+        self.assertIn("cedula", suggestion["context_after"])
         self.assertEqual(location["occurrence_index"], 1)
         self.assertTrue(location["location_key"])
         self.assertTrue(location["block_hash"])
@@ -190,7 +217,8 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         paragraphs = ["LOS COMPRADORES: Daniela Campo"]
         paragraphs.extend([f"Banco Demo aprobo credito {index}" for index in range(80)])
         docx = _docx_bytes(paragraphs)
-        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=None)
+        limited_fields = [{"code": "COMPRADOR_1", "label": "Comprador 1", "category": "persona"}]
+        result = analyze_biblioteca_document(docx, limited_fields, ai_classifier=None)
 
         self.assertGreater(result["stats"]["deterministic_candidates"], result["stats"]["suggestions"])
         self.assertLess(result["stats"]["suggestions"], result["stats"]["deterministic_candidates"])
@@ -225,29 +253,75 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
             result["stats"]["classified_candidates"] + result["stats"]["unclassified_candidates"],
         )
 
-    def test_ai_processes_candidates_in_batches(self):
-        paragraphs = [f"LOS COMPRADORES: Daniela Campo {index}" for index in range(130)]
+    def test_940_candidates_do_not_generate_multiple_ai_calls(self):
+        paragraphs = ["LOS COMPRADORES: Daniela Campo"]
+        paragraphs.extend([f"LOS VENDEDORES: Carlos Perez comparece {index}" for index in range(940)])
         classifier = _RecordingClassifier()
-        analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=classifier)
+        result = analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=classifier)
 
-        self.assertGreater(len(classifier.batch_sizes), 1)
-        self.assertTrue(all(size <= 60 for size in classifier.batch_sizes))
+        self.assertEqual(classifier.calls, 1)
+        self.assertEqual(classifier.batch_sizes, [MAX_AI_CANDIDATES])
+        self.assertEqual(result["stats"]["ai_candidates_sent"], MAX_AI_CANDIDATES)
+        self.assertGreater(result["stats"]["ai_candidates_omitted"], 0)
+        self.assertLess(result["stats"]["suggestions"], result["stats"]["deterministic_candidates"])
+
+    def test_ai_processes_candidates_in_single_bounded_call(self):
+        paragraphs = [f"LOS VENDEDORES: Carlos Perez comparece {index}" for index in range(130)]
+        classifier = _RecordingClassifier()
+        result = analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=classifier)
+
+        self.assertEqual(classifier.calls, 1)
+        self.assertEqual(classifier.batch_sizes, [MAX_AI_CANDIDATES])
+        self.assertTrue(all(timeout <= 10 for timeout in classifier.timeout_seconds if timeout is not None))
+        self.assertEqual(result["stats"]["ai_candidates_sent"], MAX_AI_CANDIDATES)
+        self.assertGreater(result["stats"]["ai_candidates_omitted"], 0)
 
     def test_ai_timeout_produces_safe_diagnostic(self):
-        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo"])
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo", "LOS VENDEDORES: Carlos Perez"])
         result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_TimeoutClassifier())
 
         self.assertEqual(result["diagnostics"]["ai"]["status"], "timeout")
+        self.assertEqual(result["status"], "completed_with_ai_timeout")
+        self.assertTrue(any(item["field_code"] == "COMPRADOR_1" for item in result["suggestions"]))
         self.assertNotIn("prompt", result["diagnostics"]["ai"])
         self.assertNotIn("token", result["diagnostics"]["ai"])
 
-    def test_partial_ai_failure_keeps_deterministic_suggestions(self):
-        paragraphs = [f"LOS COMPRADORES: Daniela Campo {index}" for index in range(80)]
-        result = analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=_PartialFailingClassifier())
+    def test_provider_error_keeps_deterministic_suggestions(self):
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo", "LOS VENDEDORES: Carlos Perez"])
+        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_FailingClassifier())
 
-        self.assertEqual(result["status"], "completed_partial_ai")
+        self.assertEqual(result["status"], "completed_with_ai_provider_fallback")
         self.assertGreater(result["stats"]["suggestions"], 0)
-        self.assertGreaterEqual(result["diagnostics"]["ai"]["failed_batches"], 1)
+        self.assertEqual(result["diagnostics"]["ai"]["status"], "provider_error")
+
+    def test_invalid_ai_response_keeps_deterministic_suggestions(self):
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo", "LOS VENDEDORES: Carlos Perez"])
+        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_InvalidJsonClassifier())
+
+        self.assertEqual(result["status"], "completed_with_ai_invalid_response")
+        self.assertGreater(result["stats"]["suggestions"], 0)
+        self.assertEqual(result["diagnostics"]["ai"]["status"], "invalid_json")
+
+    def test_total_timing_stays_under_budget_with_controlled_mocks(self):
+        paragraphs = ["LOS COMPRADORES: Daniela Campo"]
+        paragraphs.extend([f"LOS VENDEDORES: Carlos Perez comparece {index}" for index in range(250)])
+        result = analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=_RecordingClassifier())
+
+        self.assertLess(result["timing"]["total_ms"], ANALYSIS_TOTAL_BUDGET_SECONDS * 1000)
+        self.assertIn("extraction_ms", result["timing"])
+        self.assertIn("deterministic_ms", result["timing"])
+        self.assertIn("ai_ms", result["timing"])
+
+    def test_diagnostics_do_not_include_personal_text_or_secrets(self):
+        docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo", "LOS VENDEDORES: Carlos Perez"])
+        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_TimeoutClassifier())
+        diagnostics = str(result["diagnostics"])
+
+        self.assertNotIn("Daniela", diagnostics)
+        self.assertNotIn("Carlos", diagnostics)
+        self.assertNotIn("storage_path", diagnostics)
+        self.assertNotIn("api_key", diagnostics)
+        self.assertNotIn("token", diagnostics.lower())
 
     def test_valid_suggestions_are_limited_with_declared_omission(self):
         paragraphs = [f"LOS COMPRADORES: Daniela Campo {index}" for index in range(12)]
@@ -261,6 +335,24 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertEqual(result["stats"]["suggestions"], 5)
         self.assertGreater(result["stats"]["omitted_suggestions"], 0)
         self.assertEqual(len(result["suggestions"]), 5)
+
+    def test_large_synthetic_document_returns_operational_deterministic_result(self):
+        paragraphs = [
+            "INSTRUMENTO PUBLICO",
+            "LOS COMPRADORES: Daniela Campo con cedula numero 1.234.567",
+            "MATRICULA INMOBILIARIA 050-123456",
+            "VALOR DEL ACTO $ 120.000.000 PESOS",
+        ]
+        paragraphs.extend([f"ENCABEZADO JURIDICO VALOR DEL ACTO {index}" for index in range(200)])
+        paragraphs.extend([f"LOS VENDEDORES: Carlos Perez comparece {index}" for index in range(120)])
+        classifier = _RecordingClassifier()
+        result = analyze_biblioteca_document(_docx_bytes(paragraphs), _fields(), ai_classifier=classifier)
+
+        self.assertEqual(classifier.calls, 1)
+        self.assertLessEqual(classifier.batch_sizes[0], MAX_AI_CANDIDATES)
+        self.assertGreater(result["stats"]["suggestions"], 0)
+        self.assertLessEqual(result["stats"]["suggestions"], 120)
+        self.assertTrue(any(item["source"] == "deterministic" for item in result["suggestions"]))
 
     def test_user_from_other_notary_receives_404_for_case_document(self):
         payload = biblioteca.CaseDocumentContext(kind="case_document", case_id=174, document_id=114, version_id=229)

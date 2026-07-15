@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -11,7 +12,9 @@ from docx import Document
 
 
 CONTEXT_CHARS = 90
-AI_BATCH_SIZE = 60
+ANALYSIS_TOTAL_BUDGET_SECONDS = 25.0
+AI_BUDGET_SECONDS = 10.0
+MAX_AI_CANDIDATES = 40
 MAX_OPERATIONAL_SUGGESTIONS = 120
 
 ROLE_KEYWORDS = (
@@ -85,6 +88,32 @@ TYPE_PRIORITY = {
     "person_name": 50,
 }
 
+AI_USEFUL_TYPES = {
+    "person_name",
+    "document_number",
+    "nit",
+    "matricula_inmobiliaria",
+    "codigo_catastral",
+    "money",
+    "date",
+    "deed_number",
+    "bank",
+    "email",
+    "phone",
+    "address",
+    "area",
+}
+
+AI_CONTEXT_KEYWORDS = ROLE_KEYWORDS + (
+    "INMUEBLE",
+    "PRECIO",
+    "VALOR",
+    "ESCRITURA",
+    "IDENTIFICACION",
+    "CEDULA",
+    "MATRICULA",
+)
+
 
 @dataclass(frozen=True)
 class DocumentBlock:
@@ -124,8 +153,25 @@ class _RawCandidate:
 
 
 class CandidateClassifier(Protocol):
-    def classify(self, candidates: list[Candidate], fields: list[FieldDefinition]) -> list[dict[str, Any]]:
+    def classify(
+        self,
+        candidates: list[Candidate],
+        fields: list[FieldDefinition],
+        timeout_seconds: float | None = None,
+    ) -> list[dict[str, Any]]:
         ...
+
+
+class AIClassifierTimeoutError(RuntimeError):
+    pass
+
+
+class AIClassifierProviderError(RuntimeError):
+    pass
+
+
+class AIClassifierInvalidResponseError(RuntimeError):
+    pass
 
 
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -226,30 +272,239 @@ def analyze_biblioteca_document(
     *,
     ai_classifier: CandidateClassifier | None = None,
     max_suggestions: int = MAX_OPERATIONAL_SUGGESTIONS,
+    total_budget_seconds: float = ANALYSIS_TOTAL_BUDGET_SECONDS,
+    ai_budget_seconds: float = AI_BUDGET_SECONDS,
+    max_ai_candidates: int = MAX_AI_CANDIDATES,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
+    extraction_started = time.perf_counter()
     field_defs = [_field_definition(item) for item in fields]
     field_by_code = {field.code: field for field in field_defs}
     candidates = extract_candidates(docx_bytes)
+    extraction_ms = _elapsed_ms(extraction_started)
+
+    deterministic_started = time.perf_counter()
     deterministic = {candidate.candidate_id: _deterministic_field_code(candidate, field_by_code) for candidate in candidates}
+    operational = _build_operational_suggestions(candidates, deterministic, {}, field_by_code)
+    deterministic_ms = _elapsed_ms(deterministic_started)
 
-    ai_results, ai_diag = _classify_with_ai(ai_classifier, candidates, field_defs, field_by_code)
+    eligible_ai, selected_ai = _select_ai_candidates(candidates, deterministic, max_ai_candidates)
+    elapsed_before_ai = time.perf_counter() - started
+    remaining_budget = max(0.0, total_budget_seconds - elapsed_before_ai)
+    effective_ai_budget = min(ai_budget_seconds, remaining_budget)
+    ai_results, ai_diag = _classify_with_ai_once(
+        ai_classifier,
+        selected_ai,
+        field_defs,
+        field_by_code,
+        eligible=len(eligible_ai),
+        omitted=max(0, len(eligible_ai) - len(selected_ai)),
+        timeout_seconds=effective_ai_budget,
+    )
 
+    if ai_results:
+        operational = _build_operational_suggestions(candidates, deterministic, ai_results, field_by_code)
+
+    operational.sort(key=lambda item: (-item["_priority"], item["location"]["block_index"], item["location"]["char_start"]))
+    omitted = max(0, len(operational) - max_suggestions)
+    suggestions = [{key: value for key, value in item.items() if key != "_priority"} for item in operational[:max_suggestions]]
+
+    classified_total = len(operational)
+    mode = "hybrid" if ai_results else "deterministic"
+    status = _analysis_status(ai_diag, bool(ai_results))
+    total_ms = _elapsed_ms(started)
+    return {
+        "analysis_id": "analysis_" + _short_hash(hashlib.sha256(docx_bytes).hexdigest())[:16],
+        "mode": mode,
+        "status": status,
+        "suggestions": suggestions,
+        "stats": {
+            "deterministic_candidates": len(candidates),
+            "classified_candidates": classified_total,
+            "unclassified_candidates": len(candidates) - classified_total,
+            "suggestions": len(suggestions),
+            "omitted_suggestions": omitted,
+            "excluded_low_priority": omitted,
+            "ai_candidates_eligible": len(eligible_ai),
+            "ai_candidates_sent": len(selected_ai),
+            "ai_candidates_omitted": max(0, len(eligible_ai) - len(selected_ai)),
+        },
+        "diagnostics": {
+            "ai": ai_diag,
+        },
+        "timing": {
+            "download_ms": 0,
+            "extraction_ms": extraction_ms,
+            "deterministic_ms": deterministic_ms,
+            "ai_ms": ai_diag["duration_ms"],
+            "total_ms": total_ms,
+        },
+    }
+
+
+class OpenAIBibliotecaClassifier:
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini") -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def classify(
+        self,
+        candidates: list[Candidate],
+        fields: list[FieldDefinition],
+        timeout_seconds: float | None = None,
+    ) -> list[dict[str, Any]]:
+        try:
+            from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
+        except Exception:  # pragma: no cover - exercised only when dependency is missing in production env
+            from openai import OpenAI
+            APIConnectionError = APIError = APITimeoutError = Exception
+
+        timeout = max(1.0, min(float(timeout_seconds or AI_BUDGET_SECONDS), AI_BUDGET_SECONDS))
+        client = OpenAI(api_key=self.api_key, timeout=timeout)
+        payload = {
+            "candidates": [
+                {
+                    "candidate_id": item.candidate_id,
+                    "original_text": item.original_text,
+                    "candidate_type": item.candidate_type,
+                    "context_before": item.context_before,
+                    "context_after": item.context_after,
+                }
+                for item in candidates
+            ],
+            "allowed_fields": [{"code": item.code, "label": item.label, "category": item.category} for item in fields],
+        }
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                temperature=0,
+                response_format={"type": "json_object"},
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Clasifica candidatos notariales. Responde JSON con key classifications. "
+                            "Cada item debe usar candidate_id existente, field_code permitido o null, "
+                            "confidence 0..1 y reason breve. No calcules ubicaciones."
+                        ),
+                    },
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+            )
+            content = response.choices[0].message.content or "{}"
+            parsed = json.loads(content)
+            classifications = parsed.get("classifications", [])
+            if not isinstance(classifications, list):
+                raise AIClassifierInvalidResponseError("invalid classifications")
+            return classifications
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AIClassifierTimeoutError("timeout") from exc
+        except json.JSONDecodeError as exc:
+            raise AIClassifierInvalidResponseError("invalid_json") from exc
+        except (APIConnectionError, APIError) as exc:
+            raise AIClassifierProviderError("provider_error") from exc
+        except Exception as exc:
+            if "timeout" in exc.__class__.__name__.lower():
+                raise AIClassifierTimeoutError("timeout") from exc
+            raise
+
+
+def _classify_with_ai_once(
+    ai_classifier: CandidateClassifier | None,
+    candidates: list[Candidate],
+    fields: list[FieldDefinition],
+    field_by_code: dict[str, FieldDefinition],
+    *,
+    eligible: int,
+    omitted: int,
+    timeout_seconds: float,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    diag: dict[str, Any] = {
+        "attempted": False,
+        "status": "not_configured" if ai_classifier is None else "not_attempted",
+        "eligible": eligible,
+        "sent": len(candidates),
+        "omitted": omitted,
+        "classified": 0,
+        "duration_ms": 0,
+    }
+    if ai_classifier is None or not candidates:
+        return {}, diag
+    if timeout_seconds <= 0:
+        diag["status"] = "budget_exhausted"
+        return {}, diag
+
+    started = time.perf_counter()
+    diag["attempted"] = True
+    ai_results: dict[str, dict[str, Any]] = {}
+    allowed_ids = {candidate.candidate_id for candidate in candidates}
+    try:
+        raw_results = _invoke_classifier(ai_classifier, candidates, fields, timeout_seconds)
+    except (AIClassifierTimeoutError, TimeoutError):
+        diag["status"] = "timeout"
+        diag["duration_ms"] = min(_elapsed_ms(started), int(timeout_seconds * 1000))
+        return {}, diag
+    except (AIClassifierInvalidResponseError, json.JSONDecodeError, ValueError):
+        diag["status"] = "invalid_json"
+        diag["duration_ms"] = _elapsed_ms(started)
+        return {}, diag
+    except Exception:
+        diag["status"] = "provider_error"
+        diag["duration_ms"] = _elapsed_ms(started)
+        return {}, diag
+
+    if not isinstance(raw_results, list):
+        diag["status"] = "invalid_json"
+        diag["duration_ms"] = _elapsed_ms(started)
+        return {}, diag
+    for raw in raw_results:
+        if not isinstance(raw, dict):
+            continue
+        candidate_id = raw.get("candidate_id")
+        if not isinstance(candidate_id, str) or candidate_id not in allowed_ids or candidate_id in ai_results:
+            continue
+        if _validated_ai_code(raw, field_by_code):
+            ai_results[candidate_id] = raw
+    diag["classified"] = len(ai_results)
+    diag["status"] = "completed"
+    diag["duration_ms"] = _elapsed_ms(started)
+    return ai_results, diag
+
+
+def _invoke_classifier(
+    ai_classifier: CandidateClassifier,
+    candidates: list[Candidate],
+    fields: list[FieldDefinition],
+    timeout_seconds: float,
+) -> list[dict[str, Any]]:
+    try:
+        return ai_classifier.classify(candidates, fields, timeout_seconds=timeout_seconds)
+    except TypeError as exc:
+        if "timeout" not in str(exc):
+            raise
+        return ai_classifier.classify(candidates, fields)
+
+
+def _build_operational_suggestions(
+    candidates: list[Candidate],
+    deterministic: dict[str, str | None],
+    ai_results: dict[str, dict[str, Any]],
+    field_by_code: dict[str, FieldDefinition],
+) -> list[dict[str, Any]]:
     operational: list[dict[str, Any]] = []
-    classified_total = 0
     for candidate in candidates:
         if not candidate.original_text.strip():
             continue
         ai_result = ai_results.get(candidate.candidate_id)
         ai_code = _validated_ai_code(ai_result, field_by_code)
         det_code = deterministic.get(candidate.candidate_id)
-        field_code = ai_code or det_code
+        field_code = det_code or ai_code
         field = field_by_code.get(field_code or "")
         if not field_code or field is None:
             continue
-        classified_total += 1
-        if ai_code and det_code and ai_code == det_code:
+        if det_code and ai_code and det_code == ai_code:
             source = "hybrid"
-        elif ai_code:
+        elif ai_code and not det_code:
             source = "ai"
         else:
             source = "deterministic"
@@ -271,133 +526,21 @@ def analyze_biblioteca_document(
                 "_priority": _suggestion_priority(candidate, source),
             },
         )
-
-    operational.sort(key=lambda item: (-item["_priority"], item["location"]["block_index"], item["location"]["char_start"]))
-    omitted = max(0, len(operational) - max_suggestions)
-    suggestions = [{key: value for key, value in item.items() if key != "_priority"} for item in operational[:max_suggestions]]
-
-    mode = "hybrid" if ai_results else "deterministic"
-    status = "completed"
-    if ai_diag["attempted"] and ai_diag["status"] != "completed":
-        status = "completed_with_ai_fallback" if ai_diag["classified"] == 0 else "completed_partial_ai"
-    return {
-        "analysis_id": "analysis_" + _short_hash(hashlib.sha256(docx_bytes).hexdigest())[:16],
-        "mode": mode,
-        "status": status,
-        "suggestions": suggestions,
-        "stats": {
-            "deterministic_candidates": len(candidates),
-            "classified_candidates": classified_total,
-            "unclassified_candidates": len(candidates) - classified_total,
-            "suggestions": len(suggestions),
-            "omitted_suggestions": omitted,
-            "excluded_low_priority": omitted,
-        },
-        "diagnostics": {
-            "ai": ai_diag,
-        },
-    }
+    return operational
 
 
-class OpenAIBibliotecaClassifier:
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini") -> None:
-        self.api_key = api_key
-        self.model = model
-
-    def classify(self, candidates: list[Candidate], fields: list[FieldDefinition]) -> list[dict[str, Any]]:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=self.api_key, timeout=25)
-        payload = {
-            "candidates": [
-                {
-                    "candidate_id": item.candidate_id,
-                    "original_text": item.original_text,
-                    "candidate_type": item.candidate_type,
-                    "context_before": item.context_before,
-                    "context_after": item.context_after,
-                }
-                for item in candidates
-            ],
-            "allowed_fields": [{"code": item.code, "label": item.label, "category": item.category} for item in fields],
-        }
-        response = client.chat.completions.create(
-            model=self.model,
-            temperature=0,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Clasifica candidatos notariales. Responde JSON con key classifications. "
-                        "Cada item debe usar candidate_id existente, field_code permitido o null, "
-                        "confidence 0..1 y reason breve. No calcules ubicaciones."
-                    ),
-                },
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-            ],
-        )
-        content = response.choices[0].message.content or "{}"
-        parsed = json.loads(content)
-        classifications = parsed.get("classifications", [])
-        return classifications if isinstance(classifications, list) else []
-
-
-def _classify_with_ai(
-    ai_classifier: CandidateClassifier | None,
+def _select_ai_candidates(
     candidates: list[Candidate],
-    fields: list[FieldDefinition],
-    field_by_code: dict[str, FieldDefinition],
-) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    diag: dict[str, Any] = {
-        "attempted": ai_classifier is not None,
-        "status": "not_configured" if ai_classifier is None else "completed",
-        "classified": 0,
-        "batches": 0,
-        "failed_batches": 0,
-    }
-    if ai_classifier is None or not candidates:
-        return {}, diag
-
-    ai_results: dict[str, dict[str, Any]] = {}
-    allowed_ids = {candidate.candidate_id for candidate in candidates}
-    for start in range(0, len(candidates), AI_BATCH_SIZE):
-        batch = candidates[start : start + AI_BATCH_SIZE]
-        diag["batches"] += 1
-        try:
-            raw_results = ai_classifier.classify(batch, fields)
-        except TimeoutError:
-            diag["status"] = "timeout"
-            diag["failed_batches"] += 1
-            continue
-        except json.JSONDecodeError:
-            diag["status"] = "invalid_json"
-            diag["failed_batches"] += 1
-            continue
-        except ValueError:
-            diag["status"] = "invalid_json"
-            diag["failed_batches"] += 1
-            continue
-        except Exception:
-            diag["status"] = "provider_error"
-            diag["failed_batches"] += 1
-            continue
-        if not isinstance(raw_results, list):
-            diag["status"] = "invalid_json"
-            diag["failed_batches"] += 1
-            continue
-        for raw in raw_results:
-            if not isinstance(raw, dict):
-                continue
-            candidate_id = raw.get("candidate_id")
-            if isinstance(candidate_id, str) and candidate_id in allowed_ids and _validated_ai_code(raw, field_by_code):
-                ai_results[candidate_id] = raw
-    diag["classified"] = len(ai_results)
-    if diag["failed_batches"] and diag["classified"]:
-        diag["status"] = "provider_error"
-    elif diag["failed_batches"] and not diag["classified"]:
-        diag["status"] = diag["status"] if diag["status"] != "completed" else "provider_error"
-    return ai_results, diag
+    deterministic: dict[str, str | None],
+    max_ai_candidates: int,
+) -> tuple[list[Candidate], list[Candidate]]:
+    eligible = [
+        candidate
+        for candidate in candidates
+        if deterministic.get(candidate.candidate_id) is None and _is_ai_candidate_eligible(candidate)
+    ]
+    eligible.sort(key=_ai_candidate_sort_key)
+    return eligible, eligible[:max_ai_candidates]
 
 
 def _match_span(match: re.Match[str]) -> tuple[int, int]:
@@ -456,6 +599,25 @@ def _field_definition(item: Any) -> FieldDefinition:
     )
 
 
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.perf_counter() - started) * 1000))
+
+
+def _analysis_status(ai_diag: dict[str, Any], has_ai_results: bool) -> str:
+    if has_ai_results:
+        return "completed_hybrid"
+    if not ai_diag.get("attempted"):
+        return "completed_deterministic"
+    status = ai_diag.get("status")
+    if status == "timeout":
+        return "completed_with_ai_timeout"
+    if status == "invalid_json":
+        return "completed_with_ai_invalid_response"
+    if status == "provider_error":
+        return "completed_with_ai_provider_fallback"
+    return "completed_deterministic"
+
+
 def _is_structural_or_low_evidence(candidate_type: str, original: str, block_text: str, start: int, end: int) -> bool:
     normalized = _normalize_ascii(original)
     if candidate_type != "person_name":
@@ -470,6 +632,24 @@ def _is_structural_or_low_evidence(candidate_type: str, original: str, block_tex
     if not _has_person_role_context(block_text, start, end):
         return True
     return False
+
+
+def _is_ai_candidate_eligible(candidate: Candidate) -> bool:
+    if candidate.candidate_type not in AI_USEFUL_TYPES:
+        return False
+    if not candidate.original_text.strip():
+        return False
+    context = _normalize_ascii(f"{candidate.context_before} {candidate.original_text} {candidate.context_after}")
+    if any(keyword in context for keyword in AI_CONTEXT_KEYWORDS):
+        return True
+    return candidate.candidate_type in {"matricula_inmobiliaria", "codigo_catastral", "money", "deed_number", "nit"}
+
+
+def _ai_candidate_sort_key(candidate: Candidate) -> tuple[int, int, int, str]:
+    context = _normalize_ascii(f"{candidate.context_before} {candidate.original_text} {candidate.context_after}")
+    context_score = sum(10 for keyword in AI_CONTEXT_KEYWORDS if keyword in context)
+    type_score = TYPE_PRIORITY.get(candidate.candidate_type, 0)
+    return (-(context_score + type_score), candidate.location["block_index"], candidate.location["char_start"], candidate.candidate_id)
 
 
 def _candidate_score(candidate_type: str, original: str, block_text: str, start: int, end: int) -> int:
