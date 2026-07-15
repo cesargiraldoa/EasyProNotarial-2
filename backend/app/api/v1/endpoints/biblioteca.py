@@ -24,7 +24,7 @@ from app.models.notarial_field_catalog import NotarialFieldCatalog
 from app.models.user import User
 from app.modules.minuta.router import _decode_file_token
 from app.services.biblioteca_motor.analysis import OpenAIBibliotecaClassifier, analyze_biblioteca_document
-from app.services.biblioteca_motor.review_document import cascade_field_controls_in_docx, prepare_review_document
+from app.services.biblioteca_motor.review_document import apply_review_decision_in_docx, cascade_field_controls_in_docx, prepare_review_document
 from app.services.document_persistence import persist_case_document_version
 from app.services.minuta.detector import analizar_documento
 from app.services.storage import download_storage_bytes
@@ -99,6 +99,31 @@ class AnalyzeAndPrepareResponse(BaseModel):
     timing: dict | None = None
 
 
+class CreateFieldRequest(BaseModel):
+    code: str = Field(min_length=2, max_length=120)
+    label: str = Field(min_length=2, max_length=200)
+    field_type: str = Field(default="text", max_length=40)
+    category: str = Field(default="otro", max_length=80)
+    description: str | None = None
+    options_json: str | None = None
+
+
+class ReviewDecisionBackendRequest(BaseModel):
+    document_context: CaseDocumentContext
+    action: Literal["accept", "reject", "change"]
+    occurrence_id: str
+    suggestion_tag: str | None = None
+    field_instance_id: str | None = None
+    field_code: str | None = None
+    visible_code: str | None = None
+    new_field: CreateFieldRequest | None = None
+
+
+class ReviewDecisionBackendResponse(BaseModel):
+    review_document: dict
+    audit: dict
+
+
 class CascadeBackendRequest(BaseModel):
     document_context: AnalyzeActualRequest
     field_instance_id: str
@@ -149,6 +174,58 @@ def list_field_catalog(
 
     rows = db.execute(sql, params).mappings().all()
     return [NotarialFieldCatalog(**dict(row)) for row in rows]
+
+
+@router.post("/campos", response_model=FieldCatalogItem)
+def create_field_catalog(
+    payload: CreateFieldRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _create_field_catalog_record(payload, db, current_user, commit=True)
+
+
+def _create_field_catalog_record(
+    payload: CreateFieldRequest,
+    db: Session,
+    current_user: User,
+    *,
+    commit: bool,
+) -> NotarialFieldCatalog:
+    code = _normalize_catalog_code(payload.code)
+    if code.startswith("PENDING_FIELD_"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No se puede crear un campo con codigo provisional.")
+    notary_id = current_user.default_notary_id
+    existing = (
+        db.query(NotarialFieldCatalog)
+        .filter(
+            NotarialFieldCatalog.code == code,
+            NotarialFieldCatalog.notary_id.is_(None) if notary_id is None else NotarialFieldCatalog.notary_id == notary_id,
+        )
+        .first()
+    )
+    if existing is not None:
+        return existing
+    field = NotarialFieldCatalog(
+        code=code,
+        label=payload.label.strip(),
+        field_type=(payload.field_type or "text").strip() or "text",
+        category=(payload.category or "otro").strip() or "otro",
+        description=payload.description.strip() if payload.description else None,
+        options_json=payload.options_json.strip() if payload.options_json else None,
+        scope="notary" if notary_id is not None else "global",
+        notary_id=notary_id,
+        is_active=True,
+        created_by_user_id=getattr(current_user, "id", None),
+        metadata_json=json.dumps({"source": "biblioteca_motor"}, ensure_ascii=False),
+    )
+    db.add(field)
+    if commit:
+        db.commit()
+        db.refresh(field)
+    else:
+        db.flush()
+    return field
 
 
 @router.post("/analizar", response_model=AnalizarDocumentoResponse)
@@ -274,6 +351,82 @@ def _build_sugerencias(resultado: dict) -> list[SugerenciaCampo]:
 
     sugerencias.sort(key=lambda s: (-s.confianza, 0 if s.metodo == "deterministico" else 1))
     return sugerencias
+
+
+def _normalize_catalog_code(value: str) -> str:
+    return re.sub(r"[^A-Z0-9_]+", "_", str(value or "").strip().upper()).strip("_")[:120]
+
+
+def _safe_snapshot(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _find_review_occurrence(snapshot: dict, occurrence_id: str, suggestion_tag: str | None) -> tuple[dict | None, dict | None]:
+    review = snapshot.get("biblioteca_review") if isinstance(snapshot.get("biblioteca_review"), dict) else {}
+    groups = review.get("groups") if isinstance(review.get("groups"), list) else []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        for occurrence in group.get("occurrences") or []:
+            if not isinstance(occurrence, dict):
+                continue
+            if occurrence.get("occurrence_id") == occurrence_id or (suggestion_tag and occurrence.get("tag") == suggestion_tag):
+                return occurrence, group
+    return None, None
+
+
+def _apply_decision_to_snapshot(
+    snapshot: dict,
+    occurrence_id: str,
+    action: str,
+    field_code: str,
+    visible_code: str,
+    field_instance_id: str,
+    audit: dict,
+) -> dict:
+    next_snapshot = json.loads(json.dumps(snapshot, ensure_ascii=False))
+    review = next_snapshot.setdefault("biblioteca_review", {})
+    for group in review.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        for occurrence in group.get("occurrences") or []:
+            if not isinstance(occurrence, dict) or occurrence.get("occurrence_id") != occurrence_id:
+                continue
+            occurrence["status"] = "rejected" if action == "reject" else "accepted" if action == "accept" else "changed"
+            occurrence["field_code"] = field_code or occurrence.get("field_code")
+            occurrence["visible_code"] = visible_code or occurrence.get("visible_code")
+            occurrence["field_instance_id"] = field_instance_id or occurrence.get("field_instance_id")
+            occurrence["decision_audit"] = audit
+            group["field_code"] = occurrence["field_code"]
+            group["visible_code"] = occurrence["visible_code"]
+            group["field_instance_id"] = occurrence["field_instance_id"]
+    decisions = review.setdefault("decisions", [])
+    if isinstance(decisions, list):
+        decisions.append({"occurrence_id": occurrence_id, **audit})
+    return next_snapshot
+
+
+def _catalog_code_exists(db: Session, current_user: User, code: str) -> bool:
+    if not code:
+        return False
+    notary_id = current_user.default_notary_id
+    query = db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.code == code, NotarialFieldCatalog.is_active.is_(True))
+    if notary_id is None:
+        query = query.filter(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None))
+    else:
+        query = query.filter(
+            or_(
+                sa.and_(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None)),
+                sa.and_(NotarialFieldCatalog.scope == "notary", NotarialFieldCatalog.notary_id == notary_id),
+            ),
+        )
+    return query.first() is not None
 
 
 @router.post("/analizar-actual", response_model=AnalyzeActualResponse)
@@ -403,6 +556,87 @@ def analizar_y_preparar_documento(
         "stats": stats,
         "diagnostics": diagnostics,
         "timing": timing,
+    }
+
+
+@router.post("/decidir", response_model=ReviewDecisionBackendResponse)
+def decidir_sugerencia_backend(
+    payload: ReviewDecisionBackendRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    case_obj, document_obj, version_obj = _resolve_case_document_objects(payload.document_context, db, current_user)
+    try:
+        docx_bytes = download_storage_bytes(version_obj.storage_path)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no disponible.") from exc
+
+    snapshot = _safe_snapshot(version_obj.placeholder_snapshot_json)
+    occurrence, group = _find_review_occurrence(snapshot, payload.occurrence_id, payload.suggestion_tag)
+    if occurrence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sugerencia no encontrada en la version documental.")
+
+    field_code = _normalize_catalog_code(payload.field_code or occurrence.get("field_code") or "")
+    visible_code = _normalize_catalog_code(payload.visible_code or occurrence.get("visible_code") or field_code)
+    field_instance_id = str(payload.field_instance_id or occurrence.get("field_instance_id") or "").strip()
+
+    if payload.new_field is not None:
+        created = _create_field_catalog_record(payload.new_field, db, current_user, commit=False)
+        field_code = created.code
+        visible_code = created.code
+
+    if payload.action in {"accept", "change"}:
+        if not field_code or field_code.startswith("PENDING_FIELD_"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Los campos provisionales deben asignarse a un campo existente o nuevo antes de aceptarse.")
+        if not _catalog_code_exists(db, current_user, field_code):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="El campo asignado no existe en el catalogo autorizado.")
+        if not field_instance_id:
+            field_instance_id = str(occurrence.get("field_instance_id") or field_code).strip()
+
+    decision = {
+        "action": payload.action,
+        "suggestion_tag": payload.suggestion_tag or occurrence.get("tag"),
+        "occurrence_id": payload.occurrence_id,
+        "field_instance_id": field_instance_id,
+        "field_code": field_code,
+        "visible_code": visible_code,
+        "original_text": occurrence.get("original_text"),
+        "location": occurrence.get("location") or {},
+    }
+    try:
+        applied = apply_review_decision_in_docx(docx_bytes, decision)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"No fue posible aplicar la decision: {exc}") from exc
+
+    audit = {
+        **applied.audit,
+        "user_id": getattr(current_user, "id", None),
+        "source_version_id": version_obj.id,
+    }
+    next_snapshot = _apply_decision_to_snapshot(snapshot, payload.occurrence_id, payload.action, field_code, visible_code, field_instance_id, audit)
+    new_version = persist_case_document_version(
+        db,
+        case_obj,
+        document_obj.category,
+        document_obj.title,
+        version_obj.file_format or "docx",
+        applied.docx_bytes,
+        version_obj.original_filename or f"{document_obj.title}.docx",
+        getattr(current_user, "id", None),
+        version_obj.generated_from_template_id,
+        placeholder_snapshot_json=json.dumps(next_snapshot, ensure_ascii=False),
+    )
+    db.commit()
+    db.refresh(new_version)
+    return {
+        "review_document": {
+            "kind": "case_document",
+            "case_id": case_obj.id,
+            "document_id": document_obj.id,
+            "version_id": new_version.id,
+        },
+        "audit": audit,
     }
 
 

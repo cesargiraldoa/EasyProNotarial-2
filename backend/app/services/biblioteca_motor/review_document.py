@@ -14,8 +14,9 @@ from lxml import etree
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
-SUGGESTION_TAG_PREFIX = "easypro:suggestion:v1:"
-FIELD_TAG_PREFIX = "easypro:field:v1:"
+SUGGESTION_TAG_PREFIX = "easypro:suggestion:v2:"
+FIELD_TAG_PREFIX = "easypro:field:v2:"
+PROVISIONAL_FIELD_PREFIX = "PENDING_FIELD_"
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,12 @@ class ReviewDocumentResult:
     groups: list[dict[str, Any]]
     wrapped_count: int
     skipped: list[dict[str, str]]
+
+
+@dataclass(frozen=True)
+class ReviewDecisionResult:
+    docx_bytes: bytes
+    audit: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -74,7 +81,7 @@ def prepare_review_document(
                 "start": start,
                 "end": end,
                 "tag": _suggestion_tag(analysis_id, suggestion, group["group_id"], occurrence["occurrence_id"]),
-                "alias": f"EasyPro sugerencia - {suggestion.get('field_code')}",
+                "alias": f"EasyPro sugerencia - {suggestion.get('visible_code') or suggestion.get('field_code')}",
                 "suggestion_id": suggestion_id,
                 "occurrence": occurrence,
             },
@@ -108,23 +115,34 @@ def build_review_groups(suggestions: list[dict[str, Any]], *, analysis_id: str) 
     occurrence_count = 0
     for suggestion in suggestions:
         field_code = str(suggestion.get("field_code") or "").strip()
+        field_instance_id = str(suggestion.get("field_instance_id") or field_code).strip()
+        visible_code = str(suggestion.get("visible_code") or field_code).strip()
+        base_field_code = str(suggestion.get("base_field_code") or field_code).strip()
         original_text = str(suggestion.get("original_text") or "").strip()
         suggestion_id = str(suggestion.get("suggestion_id") or "").strip()
         candidate_id = str(suggestion.get("candidate_id") or "").strip()
-        if not field_code or not original_text or not suggestion_id or not candidate_id:
+        if not field_instance_id or not field_code or not original_text or not suggestion_id or not candidate_id:
             continue
         group_id = "grp_" + hashlib.sha256(
-            f"{field_code}|{_canonical_value(original_text)}|{suggestion.get('category') or ''}".encode("utf-8"),
+            f"{field_instance_id}|{_canonical_value(original_text)}|{suggestion.get('category') or ''}".encode("utf-8"),
         ).hexdigest()[:16]
         group = groups.setdefault(
             group_id,
             {
                 "group_id": group_id,
-                "field_instance_id": field_code,
+                "field_instance_id": field_instance_id,
+                "base_field_code": base_field_code,
+                "visible_code": visible_code,
                 "field_code": field_code,
                 "field_label": suggestion.get("field_label") or field_code,
                 "detected_value": original_text,
                 "category": suggestion.get("category") or "otro",
+                "catalog_status": suggestion.get("catalog_status") or "matched",
+                "requires_field_assignment": bool(suggestion.get("requires_field_assignment")),
+                "entity_id": suggestion.get("entity_id"),
+                "entity_type": suggestion.get("entity_type"),
+                "role": suggestion.get("role"),
+                "role_ordinal": suggestion.get("role_ordinal"),
                 "confidence": float(suggestion.get("confidence") or 0),
                 "source": suggestion.get("source") or "deterministic",
                 "occurrences": [],
@@ -132,13 +150,23 @@ def build_review_groups(suggestions: list[dict[str, Any]], *, analysis_id: str) 
         )
         group["confidence"] = max(float(group["confidence"]), float(suggestion.get("confidence") or 0))
         occurrence_count += 1
+        occurrence_id = str(suggestion.get("occurrence_id") or f"occ_{occurrence_count:03d}")
         group["occurrences"].append(
             {
-                "occurrence_id": f"occ_{occurrence_count:03d}",
+                "occurrence_id": occurrence_id,
                 "suggestion_id": suggestion_id,
                 "candidate_id": candidate_id,
                 "field_code": field_code,
-                "field_instance_id": field_code,
+                "field_instance_id": field_instance_id,
+                "base_field_code": base_field_code,
+                "visible_code": visible_code,
+                "field_label": suggestion.get("field_label") or field_code,
+                "catalog_status": suggestion.get("catalog_status") or "matched",
+                "requires_field_assignment": bool(suggestion.get("requires_field_assignment")),
+                "entity_id": suggestion.get("entity_id"),
+                "entity_type": suggestion.get("entity_type"),
+                "role": suggestion.get("role"),
+                "role_ordinal": suggestion.get("role_ordinal"),
                 "original_text": original_text,
                 "location": suggestion.get("location") or {},
                 "context_before": suggestion.get("context_before") or "",
@@ -159,13 +187,87 @@ def accept_suggestions_in_docx(docx_bytes: bytes, accepted: list[dict[str, str]]
             continue
         field_instance_id = _safe_component(action.get("field_instance_id") or "")
         occurrence_id = _safe_component(action.get("occurrence_id") or "")
-        if not field_instance_id or not occurrence_id:
+        visible_code = _safe_component(action.get("visible_code") or action.get("field_code") or field_instance_id)
+        field_code = _safe_component(action.get("field_code") or visible_code)
+        if (
+            not field_instance_id
+            or not occurrence_id
+            or field_code.startswith(PROVISIONAL_FIELD_PREFIX)
+            or visible_code.startswith(PROVISIONAL_FIELD_PREFIX)
+        ):
             continue
-        _set_control_tag(sdt, f"{FIELD_TAG_PREFIX}{field_instance_id}:{occurrence_id}")
-        _set_control_alias(sdt, f"EasyPro campo - {field_instance_id}")
-        _replace_control_text(sdt, f"{{{{{field_instance_id}}}}}")
+        _set_control_tag(sdt, f"{FIELD_TAG_PREFIX}{field_instance_id}:{occurrence_id}:{visible_code}:{field_code}")
+        _set_control_alias(sdt, f"EasyPro campo - {visible_code}")
+        _replace_control_text(sdt, f"{{{{{visible_code}}}}}")
         _remove_highlight(sdt)
     return _write_document_xml(entries, root)
+
+
+def apply_review_decision_in_docx(docx_bytes: bytes, decision: dict[str, Any]) -> ReviewDecisionResult:
+    action = str(decision.get("action") or "").strip().lower()
+    if action not in {"accept", "reject", "change"}:
+        raise ValueError("decision_action_invalid")
+    suggestion_tag = str(decision.get("suggestion_tag") or "").strip()
+    occurrence_id = str(decision.get("occurrence_id") or "").strip()
+    original_text = str(decision.get("original_text") or "").strip()
+    location = decision.get("location") if isinstance(decision.get("location"), dict) else {}
+
+    root, entries = _load_document_xml(docx_bytes)
+    sdt = _find_suggestion_control(root, suggestion_tag, occurrence_id)
+    if sdt is None:
+        raise ValueError("suggestion_control_not_found")
+
+    control_text = _control_text(sdt)
+    if original_text and control_text != original_text:
+        raise ValueError("suggestion_text_mismatch")
+    if location and original_text:
+        paragraphs = _top_level_paragraphs(root)
+        cells = _table_cells(root)
+        paragraph, start, end, reason = _resolve_target(paragraphs, cells, location, original_text)
+        if paragraph is None or start is None or end is None:
+            raise ValueError(reason or "location_not_verified")
+
+    audit = {
+        "action": action,
+        "suggestion_tag": _control_tag(sdt),
+        "occurrence_id": occurrence_id,
+        "original_text_sha256": hashlib.sha256(control_text.encode("utf-8")).hexdigest() if control_text else None,
+        "validated_text": bool(not original_text or control_text == original_text),
+        "validated_location": bool(location),
+    }
+    if action == "reject":
+        _remove_highlight(sdt)
+        _unwrap_control(sdt)
+        audit["status"] = "rejected"
+        return ReviewDecisionResult(_write_document_xml(entries, root), audit)
+
+    field_instance_id = _safe_component(decision.get("field_instance_id") or "")
+    visible_code = _safe_component(decision.get("visible_code") or decision.get("field_code") or "")
+    field_code = _safe_component(decision.get("field_code") or visible_code)
+    if (
+        not field_instance_id
+        or not visible_code
+        or not field_code
+        or field_code.startswith(PROVISIONAL_FIELD_PREFIX)
+        or visible_code.startswith(PROVISIONAL_FIELD_PREFIX)
+    ):
+        raise ValueError("provisional_field_requires_assignment")
+    final_occurrence_id = _safe_component(occurrence_id or decision.get("occurrence_id") or "")
+    if not final_occurrence_id:
+        raise ValueError("occurrence_id_required")
+    _set_control_tag(sdt, f"{FIELD_TAG_PREFIX}{field_instance_id}:{final_occurrence_id}:{visible_code}:{field_code}")
+    _set_control_alias(sdt, f"EasyPro campo - {visible_code}")
+    _replace_control_text(sdt, f"{{{{{visible_code}}}}}")
+    _remove_highlight(sdt)
+    audit.update(
+        {
+            "status": "accepted" if action == "accept" else "changed",
+            "field_instance_id": field_instance_id,
+            "visible_code": visible_code,
+            "field_code": field_code,
+        },
+    )
+    return ReviewDecisionResult(_write_document_xml(entries, root), audit)
 
 
 def reject_suggestions_in_docx(docx_bytes: bytes, suggestion_tags: list[str]) -> bytes:
@@ -458,6 +560,20 @@ def _control_tag(sdt: etree._Element) -> str | None:
     return tag.get(f"{W}val") if tag is not None else None
 
 
+def _control_text(sdt: etree._Element) -> str:
+    return "".join(sdt.xpath(".//w:sdtContent//w:t/text()", namespaces=NS))
+
+
+def _find_suggestion_control(root: etree._Element, suggestion_tag: str, occurrence_id: str) -> etree._Element | None:
+    for sdt in _iter_easypro_controls(root, SUGGESTION_TAG_PREFIX):
+        tag = _control_tag(sdt) or ""
+        if suggestion_tag and tag == suggestion_tag:
+            return sdt
+        if occurrence_id and f":{_safe_component(occurrence_id)}:" in f"{tag}:":
+            return sdt
+    return None
+
+
 def _set_control_tag(sdt: etree._Element, value: str) -> None:
     pr = sdt.find("w:sdtPr", NS)
     if pr is None:
@@ -487,9 +603,12 @@ def _suggestion_tag(analysis_id: str, suggestion: dict[str, Any], group_id: str,
             _safe_component(analysis_id),
             _safe_component(suggestion.get("suggestion_id") or ""),
             _safe_component(suggestion.get("candidate_id") or ""),
+            _safe_component(suggestion.get("field_instance_id") or ""),
             _safe_component(suggestion.get("field_code") or ""),
+            _safe_component(suggestion.get("visible_code") or suggestion.get("field_code") or ""),
             _safe_component(group_id),
             _safe_component(occurrence_id),
+            _safe_component(suggestion.get("catalog_status") or "matched"),
         ],
     )
 

@@ -10,8 +10,16 @@ from typing import Any, Protocol
 
 from docx import Document
 
+from app.services.biblioteca_motor.contracts import DetectedCandidate as Candidate
+from app.services.biblioteca_motor.contracts import FieldDefinition
+from app.services.biblioteca_motor.identity import (
+    build_identity_model,
+    fallback_field_instance,
+    occurrence_id_for,
+    provisional_visible_code,
+)
 
-CONTEXT_CHARS = 90
+CONTEXT_CHARS = 180
 ANALYSIS_TOTAL_BUDGET_SECONDS = 25.0
 AI_BUDGET_SECONDS = 10.0
 MAX_AI_CANDIDATES = 40
@@ -85,6 +93,7 @@ TYPE_PRIORITY = {
     "phone": 76,
     "area": 74,
     "address": 70,
+    "legal_person_name": 68,
     "bank": 65,
     "person_name": 50,
 }
@@ -101,6 +110,7 @@ CANDIDATE_CATEGORIES = {
     "date": "fecha",
     "deed_number": "escritura",
     "bank": "entidad",
+    "legal_person_name": "persona_juridica",
     "email": "contacto",
     "phone": "contacto",
 }
@@ -115,6 +125,7 @@ AI_USEFUL_TYPES = {
     "date",
     "deed_number",
     "bank",
+    "legal_person_name",
     "email",
     "phone",
     "address",
@@ -141,23 +152,6 @@ class DocumentBlock:
     table_index: int | None = None
     row_index: int | None = None
     cell_index: int | None = None
-
-
-@dataclass(frozen=True)
-class Candidate:
-    candidate_id: str
-    original_text: str
-    candidate_type: str
-    context_before: str
-    context_after: str
-    location: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class FieldDefinition:
-    code: str
-    label: str
-    category: str
 
 
 @dataclass(frozen=True)
@@ -199,6 +193,7 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("money", re.compile(r"(?:\$|COP\s*)\s?\d{1,3}(?:[.,]\d{3})+(?:,\d{2})?|\b\d{1,3}(?:[.,]\d{3})+\s+PESOS\b", re.IGNORECASE)),
     ("date", re.compile(r"\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", re.IGNORECASE)),
     ("deed_number", re.compile(r"\b(?:escritura(?:\s+p[úu]blica)?\s*(?:n[úu]mero|no\.?)?\s*)[:#-]?\s*(\d{2,8})\b", re.IGNORECASE)),
+    ("legal_person_name", re.compile(r"\b(?:la\s+)?(?:sociedad\s+)?([A-Z][A-Z0-9&.,'-]*(?:\s+[A-Z][A-Z0-9&.,'-]*){0,7}\s+(?:S\.?\s*A\.?\s*S\.?|S\.?\s*A\.?|LTDA\.?|LIMITADA))\b", re.IGNORECASE)),
     ("bank", re.compile(r"\bBanco\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,3}\b")),
     ("phone", re.compile(r"\b(?:\+57\s*)?(?:3\d{2}|60\d)\s?\d{3}\s?\d{4}\b")),
     ("address", re.compile(r"\b(?:Calle|Carrera|Avenida|Diagonal|Transversal|Autopista)\s+\d+[A-Za-z]?(?:\s*(?:#|No\.?|Nro\.?)\s*\d+[A-Za-z]?(?:-\d+)?)?(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9#.-]+){0,8}", re.IGNORECASE)),
@@ -512,23 +507,39 @@ def _build_operational_suggestions(
     field_by_code: dict[str, FieldDefinition],
 ) -> list[dict[str, Any]]:
     operational: list[dict[str, Any]] = []
+    identity_model = build_identity_model(candidates, field_by_code)
     for candidate in candidates:
         if not candidate.original_text.strip():
             continue
         ai_result = ai_results.get(candidate.candidate_id)
         ai_code = _validated_ai_code(ai_result, field_by_code)
         det_code = deterministic.get(candidate.candidate_id)
-        field_code = det_code or ai_code
-        field = field_by_code.get(field_code or "")
-        is_provisional = not field_code or field is None
+        identity = identity_model.candidate_identities.get(candidate.candidate_id)
+
+        if identity and identity.field_instance.catalog_status == "matched":
+            field_instance = identity.field_instance
+            field = field_by_code.get(field_instance.field_code)
+        elif det_code or ai_code:
+            field_code = det_code or ai_code or ""
+            field = field_by_code.get(field_code)
+            field_instance = fallback_field_instance(candidate, field_code, field)
+        elif identity:
+            field_instance = identity.field_instance
+            field = field_by_code.get(field_instance.field_code)
+        else:
+            field = None
+            field_instance = fallback_field_instance(candidate, "", None)
+
+        is_provisional = field_instance.catalog_status != "matched" or field is None
 
         if is_provisional:
-            field_code = _provisional_field_code(candidate)
+            field_code = provisional_visible_code(candidate)
             field_label = "Campo nuevo por definir"
-            category = CANDIDATE_CATEGORIES.get(candidate.candidate_type, "otro")
+            category = field_instance.category or CANDIDATE_CATEGORIES.get(candidate.candidate_type, "otro")
             source = "provisional"
             reason = _clean_reason(ai_result) or "Dato variable detectado sin equivalencia en la biblioteca de campos."
         else:
+            field_code = field_instance.field_code
             field_label = field.label
             category = field.category
             if det_code and ai_code and det_code == ai_code:
@@ -541,10 +552,13 @@ def _build_operational_suggestions(
 
         operational.append(
             {
-                "suggestion_id": "sug_" + _short_hash(candidate.candidate_id + ":" + field_code)[:16],
+                "suggestion_id": "sug_" + _short_hash(candidate.candidate_id + ":" + field_instance.field_instance_id)[:16],
                 "candidate_id": candidate.candidate_id,
                 "candidate_type": candidate.candidate_type,
                 "original_text": candidate.original_text,
+                "field_instance_id": field_instance.field_instance_id,
+                "base_field_code": field_instance.base_field_code,
+                "visible_code": field_instance.visible_code,
                 "field_code": field_code,
                 "field_label": field_label,
                 "category": category,
@@ -557,6 +571,12 @@ def _build_operational_suggestions(
                 "context_before": candidate.context_before,
                 "context_after": candidate.context_after,
                 "reason": reason,
+                "entity_id": identity.entity.entity_id if identity and identity.entity else field_instance.entity_id,
+                "entity_type": identity.entity.entity_type if identity and identity.entity else None,
+                "role": identity.role_assignment.role if identity and identity.role_assignment else field_instance.role,
+                "role_ordinal": identity.role_assignment.ordinal if identity and identity.role_assignment else field_instance.role_ordinal,
+                "occurrence_id": occurrence_id_for(candidate.candidate_id, field_instance.field_instance_id),
+                "review_status": "pending_review",
                 "_priority": _suggestion_priority(candidate, source),
             },
         )
@@ -622,14 +642,17 @@ def _field_definition(item: Any) -> FieldDefinition:
         raw_code = item.get("code", "")
         raw_label = item.get("label", "")
         raw_category = item.get("category", "otro")
+        raw_field_type = item.get("field_type", "text")
     else:
         raw_code = getattr(item, "code", "")
         raw_label = getattr(item, "label", "")
         raw_category = getattr(item, "category", "otro")
+        raw_field_type = getattr(item, "field_type", "text")
     return FieldDefinition(
         code=str(raw_code or "").strip(),
         label=str(raw_label or raw_code or "").strip(),
         category=str(raw_category or "otro").strip() or "otro",
+        field_type=str(raw_field_type or "text").strip() or "text",
     )
 
 
@@ -710,7 +733,7 @@ def _spans_overlap(start: int, end: int, other_start: int, other_end: int) -> bo
 
 
 def _has_person_role_context(block_text: str, start: int, end: int) -> bool:
-    window = _normalize_ascii(block_text[max(0, start - 80) : min(len(block_text), end + 80)])
+    window = _normalize_ascii(block_text[max(0, start - 180) : min(len(block_text), end + 180)])
     return any(keyword in window for keyword in ROLE_KEYWORDS)
 
 
@@ -771,13 +794,6 @@ def _validated_ai_code(result: dict[str, Any] | None, field_by_code: dict[str, F
     if isinstance(code, str) and code.strip() in field_by_code:
         return code.strip()
     return None
-
-
-def _provisional_field_code(candidate: Candidate) -> str:
-    normalized_value = _normalize_ascii(candidate.original_text)
-    digest = _short_hash(f"{candidate.candidate_type}:{normalized_value}")[:12].upper()
-    candidate_type = re.sub(r"[^A-Z0-9]+", "_", candidate.candidate_type.upper()).strip("_") or "OTRO"
-    return f"{PROVISIONAL_FIELD_PREFIX}{candidate_type}_{digest}"
 
 
 def _suggestion_priority(candidate: Candidate, source: str) -> int:

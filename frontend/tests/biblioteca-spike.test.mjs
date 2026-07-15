@@ -60,13 +60,22 @@ function loadSpike(options = {}) {
   const elements = new Map();
   const executeCalls = [];
   const commandCalls = [];
+  const buttonControls = [];
   const controls = options.controls || [];
+  function FakeButtonContentControl() {
+    this.icons = null;
+    this.attachOnClick = (handler) => {
+      this.handler = handler;
+      buttonControls.push(this);
+    };
+  }
   const window = {
     setTimeout,
     clearTimeout,
     navigator: { clipboard: { writeText: async () => undefined } },
     Asc: {
       scope: {},
+      ButtonContentControl: options.enableContentControlButtons ? FakeButtonContentControl : undefined,
       plugin: {
         info: {},
         executeMethod(name, args, callback) {
@@ -143,6 +152,7 @@ function loadSpike(options = {}) {
     constants: window.__EasyProBibliotecaSpike.constants,
     executeCalls,
     commandCalls,
+    buttonControls,
     controls,
     elements,
   };
@@ -273,6 +283,28 @@ test("tag is written and read from Content Controls", async () => {
   assert.equal(controls[0].Tag, constants.SPIKE_TAG);
   assert.equal(api.getReport().content_control.created, true);
   assert.equal(api.getReport().content_control.tag_read, true);
+});
+
+test("inline Content Control buttons are detected through supported API", () => {
+  const { api, buttonControls } = loadSpike({ enableContentControlButtons: true });
+
+  const result = api.detectInlineButtons();
+
+  assert.equal(result.ok, true);
+  assert.equal(api.getReport().capabilities.content_control_button_supported, true);
+  assert.equal(api.getReport().content_control.inline_button_registered, true);
+  assert.equal(buttonControls.length, 1);
+  assert.equal(buttonControls[0].icons, "resources/check.svg");
+});
+
+test("missing inline Content Control buttons are reported as unsupported", () => {
+  const { api } = loadSpike();
+
+  const result = api.detectInlineButtons();
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "button_content_control_unavailable");
+  assert.equal(api.getReport().capabilities.content_control_button_supported, false);
 });
 
 test("content update and restore use InsertAndReplaceContentControls", async () => {

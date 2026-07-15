@@ -28,7 +28,8 @@
         content_control_tag_write_supported: false,
         content_control_tag_read_supported: false,
         content_control_update_supported: false,
-        content_control_list_supported: false
+        content_control_list_supported: false,
+        content_control_button_supported: false
       },
       range: {
         resolved: false,
@@ -43,7 +44,8 @@
         tag_read: false,
         content_updated: false,
         content_restored: false,
-        persisted_after_reopen: false
+        persisted_after_reopen: false,
+        inline_button_registered: false
       },
       errors: []
     };
@@ -339,6 +341,36 @@
     } else {
       setStatus("Detectar lista de Content Controls", "UNSUPPORTED", controls.error || "content_control_list_unavailable");
     }
+    detectInlineButtons();
+  }
+
+  function detectInlineButtons() {
+    if (!window.Asc || typeof window.Asc.ButtonContentControl !== "function") {
+      state.capabilities.content_control_button_supported = false;
+      state.content_control.inline_button_registered = false;
+      setStatus("Detectar botones inline de Content Control", "UNSUPPORTED", "ButtonContentControl no esta disponible.");
+      return { ok: false, error: "button_content_control_unavailable" };
+    }
+    try {
+      var button = new window.Asc.ButtonContentControl();
+      if (!button || typeof button.attachOnClick !== "function") {
+        state.capabilities.content_control_button_supported = false;
+        state.content_control.inline_button_registered = false;
+        setStatus("Detectar botones inline de Content Control", "UNSUPPORTED", "attachOnClick no esta disponible.");
+        return { ok: false, error: "button_click_unavailable" };
+      }
+      button.icons = "resources/check.svg";
+      button.attachOnClick(function () {});
+      state.capabilities.content_control_button_supported = true;
+      state.content_control.inline_button_registered = true;
+      setStatus("Detectar botones inline de Content Control", "PASS", "ButtonContentControl y attachOnClick disponibles.");
+      return { ok: true };
+    } catch (error) {
+      state.capabilities.content_control_button_supported = false;
+      state.content_control.inline_button_registered = false;
+      setStatus("Detectar botones inline de Content Control", "UNSUPPORTED", safeError(error));
+      return { ok: false, error: "button_content_control_exception" };
+    }
   }
 
   async function locateRange() {
@@ -591,6 +623,7 @@
       setContent: setContent,
       verifyPersistence: verifyPersistence,
       cleanupSpike: cleanupSpike,
+      detectInlineButtons: detectInlineButtons,
       safeSearchCommand: safeSearchCommand,
       selectRangeCommand: selectRangeCommand,
       highlightCommand: highlightCommand,

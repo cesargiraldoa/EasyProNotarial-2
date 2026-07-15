@@ -16,6 +16,17 @@ from app.services.biblioteca_motor.analysis import (
     extract_candidates,
     extract_docx_blocks,
 )
+from app.services.biblioteca_motor.contracts import (
+    DetectedCandidate,
+    FieldDefinition,
+    FieldInstance,
+    FieldOccurrence,
+    LegalEntity,
+    LegalRoleAssignment,
+    ReviewDecision,
+    ReviewSuggestion,
+    to_dict,
+)
 
 
 def _docx_bytes(paragraphs: list[str], table_cells: list[str] | None = None) -> bytes:
@@ -38,6 +49,25 @@ def _fields():
         {"code": "BANCO", "label": "Banco", "category": "valor"},
         {"code": "MATRICULA_INMOBILIARIA", "label": "Matricula inmobiliaria", "category": "inmueble"},
         {"code": "CEDULA_COMPRADOR_1", "label": "Cedula comprador 1", "category": "persona"},
+    ]
+
+
+def _identity_fields():
+    return [
+        {"code": "COMPRADOR_1", "label": "Comprador 1", "category": "persona"},
+        {"code": "COMPRADOR_2", "label": "Comprador 2", "category": "persona"},
+        {"code": "VENDEDOR_1", "label": "Vendedor 1", "category": "persona"},
+        {"code": "VENDEDOR_2", "label": "Vendedor 2", "category": "persona"},
+        {"code": "CEDULA_COMPRADOR_1", "label": "Cedula comprador 1", "category": "persona"},
+        {"code": "CEDULA_COMPRADOR_2", "label": "Cedula comprador 2", "category": "persona"},
+        {"code": "CEDULA_VENDEDOR_1", "label": "Cedula vendedor 1", "category": "persona"},
+        {"code": "CEDULA_VENDEDOR_2", "label": "Cedula vendedor 2", "category": "persona"},
+        {"code": "BANCO", "label": "Banco", "category": "entidad"},
+        {"code": "NIT", "label": "NIT", "category": "persona_juridica"},
+        {"code": "RAZON_SOCIAL", "label": "Razon social", "category": "persona_juridica"},
+        {"code": "MATRICULA_INMOBILIARIA", "label": "Matricula", "category": "inmueble"},
+        {"code": "CEDULA_CATASTRAL", "label": "Cedula catastral", "category": "inmueble"},
+        {"code": "VALOR_VENTA", "label": "Valor venta", "category": "valor"},
     ]
 
 
@@ -179,13 +209,14 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertEqual(result["suggestions"][0]["source"], "ai")
 
     def test_unknown_ai_field_code_remains_as_provisional_suggestion(self):
-        docx = _docx_bytes(["LOS VENDEDORES: Carlos Perez comparece al otorgamiento."])
+        docx = _docx_bytes(["LOS COMPRADORES: correo notaria@example.com para notificaciones."])
+        limited_fields = [{"code": "COMPRADOR_1", "label": "Comprador 1", "category": "persona"}]
 
         def classify(candidates, fields):
             return [{"candidate_id": candidates[0].candidate_id, "field_code": "NO_EXISTE", "confidence": 0.8}]
 
-        result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_Classifier(classify))
-        suggestion = next(item for item in result["suggestions"] if item["original_text"] == "Carlos Perez")
+        result = analyze_biblioteca_document(docx, limited_fields, ai_classifier=_Classifier(classify))
+        suggestion = next(item for item in result["suggestions"] if item["original_text"] == "notaria@example.com")
 
         self.assertTrue(suggestion["field_code"].startswith(PROVISIONAL_FIELD_PREFIX))
         self.assertEqual(suggestion["catalog_status"], "unmapped")
@@ -251,12 +282,136 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
 
         self.assertTrue([item for item in candidates if item.candidate_type == "person_name" and item.original_text == "DANIELA CAMPO"])
 
+    def test_canonical_contracts_are_serializable_and_separate_identity_concepts(self):
+        location = {
+            "block_type": "paragraph",
+            "block_index": 1,
+            "paragraph_index": 1,
+            "char_start": 0,
+            "char_end": 13,
+            "location_key": "paragraph:1:0:13:1",
+            "block_hash": "abc",
+        }
+        candidate = DetectedCandidate("cand_1", "DANIELA CAMPO", "person_name", "", "", location)
+        entity = LegalEntity("ent_1", "natural_person", "DANIELA CAMPO", "DANIELA CAMPO", document_number="123")
+        role = LegalRoleAssignment("role_1", "ent_1", "COMPRADOR", 1, "COMPRADOR_1")
+        definition = FieldDefinition("COMPRADOR_1", "Comprador 1", "persona")
+        instance = FieldInstance(
+            "fi_1",
+            "NOMBRE",
+            "COMPRADOR_1",
+            "COMPRADOR_1",
+            "Comprador 1",
+            "persona",
+            "matched",
+            entity_id=entity.entity_id,
+            role=role.role,
+            role_ordinal=role.ordinal,
+            role_assignment_ids=(role.assignment_id,),
+        )
+        occurrence = FieldOccurrence("occ_1", instance.field_instance_id, candidate.candidate_id, candidate.original_text, location)
+        suggestion = ReviewSuggestion(
+            "sug_1",
+            candidate.candidate_id,
+            candidate.candidate_type,
+            candidate.original_text,
+            instance.field_instance_id,
+            instance.base_field_code,
+            instance.visible_code,
+            definition.code,
+            definition.label,
+            definition.category,
+            "matched",
+            False,
+            0.97,
+            "deterministic",
+            True,
+            location,
+            "",
+            "",
+            entity_id=entity.entity_id,
+            entity_type=entity.entity_type,
+            role=role.role,
+            role_ordinal=role.ordinal,
+            occurrence_id=occurrence.occurrence_id,
+        )
+        decision = ReviewDecision("dec_1", "accept", occurrence.occurrence_id, instance.field_instance_id, definition.code)
+
+        self.assertEqual(to_dict(suggestion)["field_instance_id"], "fi_1")
+        self.assertEqual(to_dict(suggestion)["visible_code"], "COMPRADOR_1")
+        self.assertEqual(to_dict(decision)["assigned_field_code"], "COMPRADOR_1")
+
     def test_overlapping_spans_are_deduplicated_by_priority(self):
         docx = _docx_bytes(["LOS COMPRADORES: Banco Demo con NIT 900123456-7"])
         candidates = extract_candidates(docx)
         spans = [(item.location["char_start"], item.location["char_end"]) for item in candidates]
 
         self.assertEqual(len(spans), len(set(spans)))
+
+    def test_identity_groups_multiple_buyers_sellers_repeated_entity_and_roles(self):
+        docx = _docx_bytes(
+            [
+                "LOS COMPRADORES: DANIELA CAMPO identificada con cedula numero 1.234.567 y CARLOS RUIZ identificado con cedula numero 8.765.432 compran.",
+                "DANIELA CAMPO firma nuevamente como COMPRADORA.",
+                "LOS VENDEDORES: LUIS PEREZ con cedula numero 4.444.444 y MARIA ROJAS con cedula numero 5.555.555 venden.",
+                "OTORGANTES: DANIELA CAMPO y LUIS PEREZ comparecen.",
+            ],
+        )
+
+        result = analyze_biblioteca_document(docx, _identity_fields(), ai_classifier=None, max_suggestions=120)
+        suggestions = result["suggestions"]
+        danielas = [item for item in suggestions if item["original_text"] == "DANIELA CAMPO"]
+        carlos = next(item for item in suggestions if item["original_text"] == "CARLOS RUIZ")
+        luis = [item for item in suggestions if item["original_text"] == "LUIS PEREZ"]
+        maria = next(item for item in suggestions if item["original_text"] == "MARIA ROJAS")
+        cedula_daniela = next(item for item in suggestions if item["original_text"] == "1.234.567")
+        cedula_carlos = next(item for item in suggestions if item["original_text"] == "8.765.432")
+        cedula_luis = next(item for item in suggestions if item["original_text"] == "4.444.444")
+        cedula_maria = next(item for item in suggestions if item["original_text"] == "5.555.555")
+
+        self.assertEqual(len(danielas), 3)
+        self.assertEqual(len({item["field_instance_id"] for item in danielas}), 1)
+        self.assertEqual(len({item["entity_id"] for item in danielas}), 1)
+        self.assertEqual({item["visible_code"] for item in danielas}, {"COMPRADOR_1"})
+        self.assertIn("OTORGANTE", {item["role"] for item in danielas})
+        self.assertEqual(carlos["visible_code"], "COMPRADOR_2")
+        self.assertNotEqual(danielas[0]["field_instance_id"], carlos["field_instance_id"])
+        self.assertEqual(cedula_daniela["entity_id"], danielas[0]["entity_id"])
+        self.assertEqual(cedula_carlos["entity_id"], carlos["entity_id"])
+        self.assertEqual(cedula_daniela["visible_code"], "CEDULA_COMPRADOR_1")
+        self.assertEqual(cedula_carlos["visible_code"], "CEDULA_COMPRADOR_2")
+        self.assertEqual({item["visible_code"] for item in luis}, {"VENDEDOR_1"})
+        self.assertEqual(maria["visible_code"], "VENDEDOR_2")
+        self.assertEqual(cedula_luis["visible_code"], "CEDULA_VENDEDOR_1")
+        self.assertEqual(cedula_maria["visible_code"], "CEDULA_VENDEDOR_2")
+        self.assertNotEqual(luis[0]["entity_id"], maria["entity_id"])
+
+    def test_identity_groups_banks_and_legal_entities_with_nit(self):
+        docx = _docx_bytes(
+            [
+                "El ACREEDOR Banco Andino con NIT 900123456-7 comparece y Banco Andino aprueba el credito.",
+                "La sociedad INVERSIONES DEL NORTE SAS con NIT 901222333-4 actua como ACREEDOR.",
+            ],
+        )
+
+        result = analyze_biblioteca_document(docx, _identity_fields(), ai_classifier=None, max_suggestions=120)
+        suggestions = result["suggestions"]
+        banks = [item for item in suggestions if item["original_text"] == "Banco Andino"]
+        bank_nit = next(item for item in suggestions if item["original_text"] == "NIT 900123456-7")
+        legal_name = next(item for item in suggestions if item["original_text"] == "INVERSIONES DEL NORTE SAS")
+        legal_nit = next(item for item in suggestions if item["original_text"] == "NIT 901222333-4")
+
+        self.assertEqual(len(banks), 2)
+        self.assertEqual(len({item["field_instance_id"] for item in banks}), 1)
+        self.assertEqual(len({item["entity_id"] for item in banks}), 1)
+        self.assertEqual(bank_nit["entity_id"], banks[0]["entity_id"])
+        self.assertEqual({item["visible_code"] for item in banks}, {"BANCO_ACREEDOR_1"})
+        self.assertEqual(bank_nit["visible_code"], "NIT")
+        self.assertEqual(legal_name["entity_id"], legal_nit["entity_id"])
+        self.assertEqual(legal_name["visible_code"], "RAZON_SOCIAL_ACREEDOR_2")
+        self.assertEqual(legal_name["field_code"], "RAZON_SOCIAL")
+        self.assertEqual(legal_nit["visible_code"], "NIT_ACREEDOR_2")
+        self.assertEqual(result["stats"]["provisional_suggestions"], 0)
 
     def test_stats_keep_total_and_unclassified_candidates(self):
         docx = _docx_bytes(["LOS COMPRADORES: Daniela Campo. Banco Demo aprobo el credito."])
@@ -400,6 +555,51 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertIn("/biblioteca/analizar", paths)
         self.assertIn("/biblioteca/analizar-actual", paths)
         self.assertIn("/biblioteca/analizar-y-preparar", paths)
+        self.assertIn("/biblioteca/decidir", paths)
+        self.assertIn("/biblioteca/actualizar-campo", paths)
+
+    def test_review_decision_snapshot_persists_occurrence_and_audit(self):
+        snapshot = {
+            "biblioteca_review": {
+                "groups": [
+                    {
+                        "group_id": "grp_1",
+                        "field_instance_id": "fi_old",
+                        "field_code": "COMPRADOR_1",
+                        "visible_code": "COMPRADOR_1",
+                        "occurrences": [
+                            {
+                                "occurrence_id": "occ_1",
+                                "field_instance_id": "fi_old",
+                                "field_code": "COMPRADOR_1",
+                                "visible_code": "COMPRADOR_1",
+                                "status": "prepared",
+                            },
+                        ],
+                    },
+                ],
+                "decisions": [],
+            },
+        }
+        audit = {"status": "changed", "field_instance_id": "fi_new", "field_code": "VENDEDOR_1"}
+
+        next_snapshot = biblioteca._apply_decision_to_snapshot(
+            snapshot,
+            "occ_1",
+            "change",
+            "VENDEDOR_1",
+            "VENDEDOR_1",
+            "fi_new",
+            audit,
+        )
+        occurrence = next_snapshot["biblioteca_review"]["groups"][0]["occurrences"][0]
+
+        self.assertEqual(snapshot["biblioteca_review"]["groups"][0]["field_instance_id"], "fi_old")
+        self.assertEqual(occurrence["status"], "changed")
+        self.assertEqual(occurrence["field_instance_id"], "fi_new")
+        self.assertEqual(next_snapshot["biblioteca_review"]["groups"][0]["field_code"], "VENDEDOR_1")
+        self.assertEqual(next_snapshot["biblioteca_review"]["decisions"][0]["occurrence_id"], "occ_1")
+        self.assertEqual(next_snapshot["biblioteca_review"]["decisions"][0]["status"], "changed")
 
 
 if __name__ == "__main__":

@@ -11,9 +11,11 @@
   var DEFAULT_API_BASE_URL = "https://easypronotarial-2-production.up.railway.app";
   var CATALOG_PATH = "/api/v1/biblioteca/campos";
   var ANALYZE_AND_PREPARE_PATH = "/api/v1/biblioteca/analizar-y-preparar";
+  var DECISION_PATH = "/api/v1/biblioteca/decidir";
   var CASCADE_BACKEND_PATH = "/api/v1/biblioteca/actualizar-campo";
-  var SUGGESTION_TAG_PREFIX = "easypro:suggestion:v1:";
-  var FIELD_TAG_PREFIX = "easypro:field:v1:";
+  var SUGGESTION_TAG_PREFIX = "easypro:suggestion:v2:";
+  var FIELD_TAG_PREFIX = "easypro:field:v2:";
+  var PROVISIONAL_FIELD_PREFIX = "PENDING_FIELD_";
   var DEFAULT_HOST_ORIGINS = [
     "https://easypronotarial.com",
     "http://localhost:5179",
@@ -33,6 +35,7 @@
   var authResolve = null;
   var authReject = null;
   var listenersPreparados = false;
+  var botonesInlinePreparados = false;
   var analisisEnCurso = false;
 
   function getPluginConfig() {
@@ -266,7 +269,7 @@
   function parseSuggestionTag(control) {
     if (!control.tag || control.tag.indexOf(SUGGESTION_TAG_PREFIX) !== 0) return null;
     var parts = control.tag.split(":");
-    if (parts.length < 9) return null;
+    if (parts.length < 12) return null;
     return {
       type: "suggestion",
       internal_id: control.internal_id,
@@ -276,10 +279,13 @@
       analysis_id: parts[3],
       suggestion_id: parts[4],
       candidate_id: parts[5],
-      field_code: parts[6],
-      group_id: parts[7],
-      occurrence_id: parts[8],
       field_instance_id: parts[6],
+      field_code: parts[7],
+      visible_code: parts[8],
+      group_id: parts[9],
+      occurrence_id: parts[10],
+      catalog_status: parts[11] || "matched",
+      requires_field_assignment: (parts[11] || "") !== "matched" || String(parts[7] || "").indexOf(PROVISIONAL_FIELD_PREFIX) === 0,
       status: "prepared"
     };
   }
@@ -296,6 +302,8 @@
       text: control.text,
       field_instance_id: parts[3],
       occurrence_id: parts[4],
+      visible_code: parts[5] || parts[3],
+      field_code: parts[6] || parts[5] || parts[3],
       status: "accepted"
     };
   }
@@ -333,6 +341,9 @@
           group_id: groupId,
           field_instance_id: item.field_instance_id,
           field_code: item.field_code,
+          visible_code: item.visible_code || item.field_code,
+          catalog_status: item.catalog_status || "matched",
+          requires_field_assignment: Boolean(item.requires_field_assignment),
           detected_value: item.text || "",
           occurrences: []
         };
@@ -504,6 +515,48 @@
     return response.json();
   }
 
+  async function decidirSugerenciaBackend(token, documentContext, occurrence, action, overrides, fetchImpl) {
+    var safeContext = validarDocumentContext(documentContext);
+    if (!safeContext || safeContext.kind !== "case_document") throw crearError("missing_document_context");
+    var fetcher = fetchImpl || window.fetch.bind(window);
+    var payload = {
+      document_context: safeContext,
+      action: action,
+      occurrence_id: occurrence.occurrence_id,
+      suggestion_tag: occurrence.tag,
+      field_instance_id: occurrence.field_instance_id,
+      field_code: occurrence.field_code,
+      visible_code: occurrence.visible_code || occurrence.field_code
+    };
+    if (overrides && typeof overrides === "object") {
+      Object.keys(overrides).forEach(function (key) {
+        payload[key] = overrides[key];
+      });
+    }
+    var response = await fetcher(obtenerApiBaseUrl() + DECISION_PATH, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      credentials: "omit",
+      cache: "no-store",
+      body: JSON.stringify(payload)
+    });
+    if (response.status === 409) throw crearError("stale_suggestion");
+    if (response.status === 422) throw crearError("field_assignment_required");
+    if (!response.ok) throw crearError("backend_unavailable");
+    return response.json();
+  }
+
+  function esProvisional(occurrence) {
+    if (!occurrence) return true;
+    return Boolean(occurrence.requires_field_assignment)
+      || String(occurrence.field_code || "").indexOf(PROVISIONAL_FIELD_PREFIX) === 0
+      || String(occurrence.catalog_status || "matched") !== "matched";
+  }
+
   function mensajeError(error) {
     var kind = error && error.kind;
     if (kind === "no_session") return "No hay una sesion activa. Cierre el editor y vuelva a abrirlo desde Ecosistema Notarial.";
@@ -542,12 +595,12 @@
       title.textContent = group.detected_value || "Sugerencia";
       var field = document.createElement("div");
       field.className = "campo-sugerido";
-      field.textContent = group.field_instance_id + " · " + group.occurrences.length + " aparicion(es)";
+      field.textContent = (group.visible_code || group.field_code || group.field_instance_id) + " · " + group.occurrences.length + " aparicion(es)";
       var badges = document.createElement("div");
       badges.className = "badges";
       var badge = document.createElement("span");
       badge.className = "badge " + categoriaClass(group.category);
-      badge.textContent = "revision";
+      badge.textContent = group.requires_field_assignment ? "provisional" : "revision";
       badges.appendChild(badge);
       var actions = document.createElement("div");
       actions.className = "actions";
@@ -573,9 +626,17 @@
         event.stopPropagation();
         rechazarGrupo(group);
       };
+      var change = document.createElement("button");
+      change.className = "btn";
+      change.textContent = "Cambiar";
+      change.onclick = function (event) {
+        event.stopPropagation();
+        cambiarOcurrencia(group.occurrences[0]);
+      };
       actions.appendChild(go);
       actions.appendChild(yes);
       actions.appendChild(no);
+      actions.appendChild(change);
       card.appendChild(title);
       card.appendChild(field);
       card.appendChild(badges);
@@ -623,7 +684,7 @@
   }
 
   function fieldTag(fieldInstanceId, occurrenceId) {
-    return FIELD_TAG_PREFIX + fieldInstanceId + ":" + occurrenceId;
+    return FIELD_TAG_PREFIX + fieldInstanceId + ":" + occurrenceId + ":" + fieldInstanceId + ":" + fieldInstanceId;
   }
 
   async function reemplazarControl(internalId, tag, alias, text) {
@@ -638,54 +699,67 @@
 
   async function aceptarOcurrencia(occurrence) {
     if (!occurrence || !occurrence.internal_id) return false;
-    var fieldInstanceId = occurrence.field_instance_id || occurrence.field_code;
-    var tag = fieldTag(fieldInstanceId, occurrence.occurrence_id);
-    var ok = await reemplazarControl(
-      occurrence.internal_id,
-      tag,
-      "EasyPro campo - " + fieldInstanceId,
-      "{{" + fieldInstanceId + "}}"
-    );
-    if (ok) {
-      delete suggestionControls[occurrence.occurrence_id];
-      if (!fieldControls[fieldInstanceId]) fieldControls[fieldInstanceId] = [];
-      fieldControls[fieldInstanceId].push({
-        type: "field",
-        internal_id: occurrence.internal_id,
-        tag: tag,
-        alias: "EasyPro campo - " + fieldInstanceId,
-        text: "{{" + fieldInstanceId + "}}",
-        field_instance_id: fieldInstanceId,
-        occurrence_id: occurrence.occurrence_id,
-        status: "accepted"
-      });
+    if (esProvisional(occurrence)) {
+      mostrarEstado("Asigne el dato a un campo existente o cree uno nuevo antes de aceptar.", "error");
+      return false;
     }
-    return ok;
+    try {
+      var token = await solicitarToken();
+      var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "accept");
+      solicitarRecarga(result.review_document, occurrence.analysis_id);
+      mostrarEstado("Decision guardada. Recargando version...", "ok");
+      return true;
+    } catch (error) {
+      mostrarEstado(error && error.kind === "stale_suggestion" ? "El texto cambio despues del analisis. Ejecute el barrido nuevamente." : mensajeError(error), "error");
+      return false;
+    }
   }
 
   async function aceptarGrupo(group) {
-    var okCount = 0;
-    for (var i = 0; i < group.occurrences.length; i += 1) {
-      if (await aceptarOcurrencia(group.occurrences[i])) okCount += 1;
-    }
-    await reconstruirDesdeControles();
-    mostrarEstado("Aceptadas " + String(okCount) + " aparicion(es).", okCount ? "ok" : "error");
+    if (!group || !group.occurrences.length) return;
+    await aceptarOcurrencia(group.occurrences[0]);
   }
 
   async function rechazarOcurrencia(occurrence) {
     if (!occurrence || !occurrence.internal_id) return false;
-    var response = await executeMethodAsync("RemoveContentControls", [[occurrence.internal_id]]);
-    if (response.ok) delete suggestionControls[occurrence.occurrence_id];
-    return response.ok;
+    try {
+      var token = await solicitarToken();
+      var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "reject");
+      solicitarRecarga(result.review_document, occurrence.analysis_id);
+      mostrarEstado("Rechazo guardado. Recargando version...", "ok");
+      return true;
+    } catch (error) {
+      mostrarEstado(error && error.kind === "stale_suggestion" ? "El texto cambio despues del analisis. Ejecute el barrido nuevamente." : mensajeError(error), "error");
+      return false;
+    }
   }
 
   async function rechazarGrupo(group) {
-    var okCount = 0;
-    for (var i = 0; i < group.occurrences.length; i += 1) {
-      if (await rechazarOcurrencia(group.occurrences[i])) okCount += 1;
+    if (!group || !group.occurrences.length) return;
+    await rechazarOcurrencia(group.occurrences[0]);
+  }
+
+  async function cambiarOcurrencia(occurrence, explicitFieldCode) {
+    if (!occurrence || !occurrence.internal_id) return false;
+    var fieldCode = explicitFieldCode;
+    if (!fieldCode && typeof window.prompt === "function") {
+      fieldCode = window.prompt("Codigo de campo", occurrence.visible_code && occurrence.visible_code.indexOf(PROVISIONAL_FIELD_PREFIX) !== 0 ? occurrence.visible_code : "");
     }
-    await reconstruirDesdeControles();
-    mostrarEstado("Rechazadas " + String(okCount) + " aparicion(es).", okCount ? "ok" : "error");
+    fieldCode = String(fieldCode || "").trim().toUpperCase();
+    if (!fieldCode) return false;
+    try {
+      var token = await solicitarToken();
+      var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "change", {
+        field_code: fieldCode,
+        visible_code: fieldCode
+      });
+      solicitarRecarga(result.review_document, occurrence.analysis_id);
+      mostrarEstado("Cambio guardado. Recargando version...", "ok");
+      return true;
+    } catch (error) {
+      mostrarEstado(error && error.kind === "field_assignment_required" ? "El campo seleccionado no esta disponible en el catalogo." : mensajeError(error), "error");
+      return false;
+    }
   }
 
   async function navegarAControl(control) {
@@ -703,21 +777,6 @@
   }
 
   async function aplicarCascada(fieldInstanceId, value) {
-    var controls = fieldControls[fieldInstanceId] || [];
-    var payload = controls.map(function (control) {
-      return {
-        InternalId: control.internal_id,
-        Tag: control.tag,
-        Alias: control.alias || "EasyPro campo - " + fieldInstanceId,
-        Text: value
-      };
-    });
-    var response = payload.length ? await executeMethodAsync("InsertAndReplaceContentControls", [payload]) : { ok: false };
-    if (response.ok) {
-      await reconstruirDesdeControles();
-      mostrarEstado("Campo actualizado en cascada.", "ok");
-      return;
-    }
     try {
       var token = await solicitarToken();
       var backend = await actualizarCampoBackend(token, documentContextEnMemoria, fieldInstanceId, value);
@@ -751,6 +810,53 @@
       renderSugerencias(gruposActuales);
     }
     return result;
+  }
+
+  function buscarSugerenciaPorControlId(contentControlId) {
+    var id = String(contentControlId || "");
+    var keys = Object.keys(suggestionControls);
+    for (var index = 0; index < keys.length; index += 1) {
+      var occurrence = suggestionControls[keys[index]];
+      if (String(occurrence.internal_id) === id) return occurrence;
+    }
+    return null;
+  }
+
+  async function resolverAccionInline(contentControlId, action) {
+    await reconstruirDesdeControles();
+    var occurrence = buscarSugerenciaPorControlId(contentControlId);
+    if (!occurrence) {
+      mostrarEstado("No fue posible leer la sugerencia seleccionada.", "error");
+      return;
+    }
+    if (action === "accept") {
+      await aceptarOcurrencia(occurrence);
+      return;
+    }
+    if (action === "reject") {
+      await rechazarOcurrencia(occurrence);
+      return;
+    }
+    await cambiarOcurrencia(occurrence);
+  }
+
+  function registrarBotonesContentControls() {
+    if (botonesInlinePreparados) return false;
+    if (!window.Asc || typeof window.Asc.ButtonContentControl !== "function") return false;
+    var acciones = [
+      { action: "accept", icon: "resources/check.svg" },
+      { action: "reject", icon: "resources/close.svg" },
+      { action: "change", icon: "resources/edit.svg" }
+    ];
+    acciones.forEach(function (item) {
+      var button = new window.Asc.ButtonContentControl();
+      button.icons = item.icon;
+      button.attachOnClick(function (contentControlId) {
+        resolverAccionInline(contentControlId, item.action);
+      });
+    });
+    botonesInlinePreparados = true;
+    return true;
   }
 
   async function cargarCatalogo() {
@@ -799,6 +905,7 @@
 
   window.Asc.plugin.init = function () {
     prepararListeners();
+    registrarBotonesContentControls();
     prepararDom();
     cargarCatalogo();
   };
@@ -820,6 +927,7 @@
       HOST_SOURCE: HOST_SOURCE,
       CATALOG_PATH: CATALOG_PATH,
       ANALYZE_AND_PREPARE_PATH: ANALYZE_AND_PREPARE_PATH,
+      DECISION_PATH: DECISION_PATH,
       CASCADE_BACKEND_PATH: CASCADE_BACKEND_PATH
     },
     test: {
@@ -828,6 +936,7 @@
       cargarCatalogoConToken: cargarCatalogoConToken,
       analizarYPrepararConToken: analizarYPrepararConToken,
       actualizarCampoBackend: actualizarCampoBackend,
+      decidirSugerenciaBackend: decidirSugerenciaBackend,
       normalizarCatalogo: normalizarCatalogo,
       normalizarPreparacion: normalizarPreparacion,
       validarDocumentContext: validarDocumentContext,
@@ -844,9 +953,12 @@
       rechazarOcurrencia: rechazarOcurrencia,
       aceptarGrupo: aceptarGrupo,
       rechazarGrupo: rechazarGrupo,
+      cambiarOcurrencia: cambiarOcurrencia,
       navegarAControl: navegarAControl,
       aplicarCascada: aplicarCascada,
       insertarCampoEstructurado: insertarCampoEstructurado,
+      registrarBotonesContentControls: registrarBotonesContentControls,
+      resolverAccionInline: resolverAccionInline,
       solicitarRecarga: solicitarRecarga,
       getSuggestionControls: function () { return suggestionControls; },
       getFieldControls: function () { return fieldControls; },
