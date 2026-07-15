@@ -1,5 +1,6 @@
 export const EASYPRO_ONLYOFFICE_AUTH_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_AUTH_REQUEST";
 export const EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE = "EASYPRO_ONLYOFFICE_AUTH_RESPONSE";
+export const EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_RELOAD_REQUEST";
 export const EASYPRO_ONLYOFFICE_PLUGIN_SOURCE = "motor-biblioteca";
 export const EASYPRO_ONLYOFFICE_HOST_SOURCE = "easypro-host";
 export const PRODUCTION_ONLYOFFICE_ORIGIN = "https://onlyoffice.easypronotarial.com";
@@ -33,6 +34,13 @@ export type OnlyOfficeAuthResponsePayload =
       source: typeof EASYPRO_ONLYOFFICE_HOST_SOURCE;
       error: "NO_SESSION";
     };
+
+export type OnlyOfficeReloadRequestPayload = {
+  type: typeof EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE;
+  source: typeof EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
+  analysis_id?: string;
+  review_document: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>;
+};
 
 type PostMessageTarget = {
   postMessage: (message: OnlyOfficeAuthResponsePayload, targetOrigin: string) => void;
@@ -91,6 +99,22 @@ export function isOnlyOfficeAuthRequest(
     && data.source === EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
 }
 
+export function isOnlyOfficeReloadRequest(
+  event: BridgeMessageEvent,
+  allowedOrigins: Set<string>,
+): event is BridgeMessageEvent & { data: OnlyOfficeReloadRequestPayload } {
+  if (!allowedOrigins.has(event.origin)) return false;
+  if (!event.data || typeof event.data !== "object") return false;
+  const data = event.data as Partial<OnlyOfficeReloadRequestPayload>;
+  const review = data.review_document as Partial<OnlyOfficeDocumentContext> | undefined;
+  return data.type === EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE
+    && data.source === EASYPRO_ONLYOFFICE_PLUGIN_SOURCE
+    && review?.kind === "case_document"
+    && Number.isFinite(Number(review.case_id))
+    && Number.isFinite(Number(review.document_id))
+    && Number.isFinite(Number(review.version_id));
+}
+
 export function buildOnlyOfficeAuthResponse(
   token: string | null | undefined,
   documentContext?: OnlyOfficeDocumentContext | null,
@@ -115,13 +139,28 @@ export function createOnlyOfficePluginAuthBridgeHandler(options: {
   allowedOrigins: Set<string>;
   getSessionToken: () => string | null;
   getDocumentContext?: () => OnlyOfficeDocumentContext | null;
+  reloadCaseDocument?: (context: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>, analysisId?: string) => void;
 }) {
   return function handleOnlyOfficePluginAuth(event: BridgeMessageEvent) {
-    if (!isOnlyOfficeAuthRequest(event, options.allowedOrigins)) return;
-    event.source.postMessage(
-      buildOnlyOfficeAuthResponse(options.getSessionToken(), options.getDocumentContext?.() ?? null),
-      event.origin,
-    );
+    if (isOnlyOfficeAuthRequest(event, options.allowedOrigins)) {
+      event.source.postMessage(
+        buildOnlyOfficeAuthResponse(options.getSessionToken(), options.getDocumentContext?.() ?? null),
+        event.origin,
+      );
+      return;
+    }
+    if (options.reloadCaseDocument && isOnlyOfficeReloadRequest(event, options.allowedOrigins)) {
+      if (!options.getSessionToken()) return;
+      options.reloadCaseDocument(
+        {
+          kind: "case_document",
+          case_id: Number(event.data.review_document.case_id),
+          document_id: Number(event.data.review_document.document_id),
+          version_id: Number(event.data.review_document.version_id),
+        },
+        event.data.analysis_id,
+      );
+    }
   };
 }
 
@@ -130,11 +169,13 @@ export function installOnlyOfficePluginAuthBridge(options: {
   allowedOrigins: Set<string>;
   getSessionToken: () => string | null;
   getDocumentContext?: () => OnlyOfficeDocumentContext | null;
+  reloadCaseDocument?: (context: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>, analysisId?: string) => void;
 }) {
   const handler = createOnlyOfficePluginAuthBridgeHandler({
     allowedOrigins: options.allowedOrigins,
     getSessionToken: options.getSessionToken,
     getDocumentContext: options.getDocumentContext,
+    reloadCaseDocument: options.reloadCaseDocument,
   });
   options.target.addEventListener("message", handler);
   return () => options.target.removeEventListener("message", handler);

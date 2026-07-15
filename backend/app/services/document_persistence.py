@@ -70,15 +70,12 @@ def persist_case_document_version(
     db.add(version)
     db.flush()
     storage_backend = "supabase" if str(storage_path).startswith("supabase://") else "local"
-    bucket = str(storage_path).split("/")[2] if str(storage_path).startswith("supabase://") else None
     logger.info(
         "Versión documental persistida",
         extra={
             "case_id": case.id,
             "document_id": document.id,
             "version_id": version.id,
-            "storage_path": storage_path,
-            "bucket": bucket,
             "storage_backend": storage_backend,
             "file_format": file_format,
         },

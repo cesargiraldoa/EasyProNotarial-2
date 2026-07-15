@@ -6,6 +6,7 @@ import {
   EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE,
   EASYPRO_ONLYOFFICE_HOST_SOURCE,
   EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+  EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE,
   createOnlyOfficePluginAuthBridgeHandler,
   installOnlyOfficePluginAuthBridge,
   resolveAllowedOnlyOfficeOrigins,
@@ -142,6 +143,62 @@ test("bridge responds with typed error and no token when session is missing", ()
     source: EASYPRO_ONLYOFFICE_HOST_SOURCE,
     error: "NO_SESSION",
   });
+});
+
+test("bridge accepts reload request only from authorized OnlyOffice origin", () => {
+  const reloads = [];
+  const handler = createOnlyOfficePluginAuthBridgeHandler({
+    allowedOrigins: resolveAllowedOnlyOfficeOrigins(),
+    getSessionToken: () => "jwt-real",
+    reloadCaseDocument: (context, analysisId) => reloads.push({ context, analysisId }),
+  });
+
+  handler({
+    origin: "https://attacker.example",
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      analysis_id: "analysis_1",
+      review_document: { kind: "case_document", case_id: 1, document_id: 2, version_id: 3 },
+    },
+  });
+  handler({
+    origin: onlyOfficeOrigin,
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      analysis_id: "analysis_1",
+      review_document: { kind: "case_document", case_id: 1, document_id: 2, version_id: 3 },
+    },
+  });
+
+  assert.deepEqual(reloads, [{
+    context: { kind: "case_document", case_id: 1, document_id: 2, version_id: 3 },
+    analysisId: "analysis_1",
+  }]);
+});
+
+test("bridge ignores reload request when host session is missing", () => {
+  const reloads = [];
+  const handler = createOnlyOfficePluginAuthBridgeHandler({
+    allowedOrigins: resolveAllowedOnlyOfficeOrigins(),
+    getSessionToken: () => null,
+    reloadCaseDocument: (context) => reloads.push(context),
+  });
+
+  handler({
+    origin: onlyOfficeOrigin,
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      review_document: { kind: "case_document", case_id: 1, document_id: 2, version_id: 3 },
+    },
+  });
+
+  assert.equal(reloads.length, 0);
 });
 
 test("bridge cleanup removes the exact listener", () => {

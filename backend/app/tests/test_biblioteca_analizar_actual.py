@@ -384,6 +384,7 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
 
         self.assertIn("/biblioteca/analizar", paths)
         self.assertIn("/biblioteca/analizar-actual", paths)
+        self.assertIn("/biblioteca/analizar-y-preparar", paths)
 
 
 if __name__ == "__main__":

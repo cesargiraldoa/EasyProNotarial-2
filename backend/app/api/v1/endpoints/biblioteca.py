@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import hashlib
+import json
 import logging
 import tempfile
 import time
@@ -23,6 +24,8 @@ from app.models.notarial_field_catalog import NotarialFieldCatalog
 from app.models.user import User
 from app.modules.minuta.router import _decode_file_token
 from app.services.biblioteca_motor.analysis import OpenAIBibliotecaClassifier, analyze_biblioteca_document
+from app.services.biblioteca_motor.review_document import cascade_field_controls_in_docx, prepare_review_document
+from app.services.document_persistence import persist_case_document_version
 from app.services.minuta.detector import analizar_documento
 from app.services.storage import download_storage_bytes
 
@@ -85,6 +88,26 @@ class AnalyzeActualResponse(BaseModel):
     stats: dict
     diagnostics: dict | None = None
     timing: dict | None = None
+
+
+class AnalyzeAndPrepareResponse(BaseModel):
+    analysis_id: str
+    review_document: dict
+    groups: list[dict]
+    stats: dict
+    diagnostics: dict | None = None
+    timing: dict | None = None
+
+
+class CascadeBackendRequest(BaseModel):
+    document_context: AnalyzeActualRequest
+    field_instance_id: str
+    value: str
+
+
+class CascadeBackendResponse(BaseModel):
+    review_document: dict
+    updated_controls: int
 
 
 @router.get("/campos", response_model=list[FieldCatalogItem])
@@ -286,6 +309,154 @@ def analizar_documento_actual(
     return result
 
 
+@router.post("/analizar-y-preparar", response_model=AnalyzeAndPrepareResponse)
+def analizar_y_preparar_documento(
+    payload: AnalyzeActualRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.kind != "case_document":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La version de revision requiere un documento de caso versionado.",
+        )
+    case_obj, document_obj, version_obj = _resolve_case_document_objects(payload, db, current_user)
+    download_started = time.perf_counter()
+    try:
+        docx_bytes = download_storage_bytes(version_obj.storage_path)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no disponible.") from exc
+    download_ms = max(0, int((time.perf_counter() - download_started) * 1000))
+
+    fields = _field_catalog_for_user(db, current_user)
+    settings = get_settings()
+    classifier = OpenAIBibliotecaClassifier(settings.openai_api_key) if settings.openai_api_key else None
+    result = analyze_biblioteca_document(docx_bytes, fields, ai_classifier=classifier)
+    result["timing"]["download_ms"] = download_ms
+    result["timing"]["total_ms"] = int(result["timing"].get("total_ms", 0)) + download_ms
+
+    review_started = time.perf_counter()
+    try:
+        review = prepare_review_document(docx_bytes, result.get("suggestions") or [], analysis_id=result["analysis_id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No fue posible preparar el documento de revision.") from exc
+    review_ms = max(0, int((time.perf_counter() - review_started) * 1000))
+
+    stats = {
+        **(result.get("stats") or {}),
+        "groups": len(review.groups),
+        "wrapped_suggestions": review.wrapped_count,
+        "skipped_suggestions": len(review.skipped),
+    }
+    diagnostics = {
+        **(result.get("diagnostics") or {}),
+        "review": {"wrapped": review.wrapped_count, "skipped": len(review.skipped)},
+    }
+    snapshot = {
+        "biblioteca_review": {
+            "analysis_id": result["analysis_id"],
+            "source_version_id": version_obj.id,
+            "groups": review.groups,
+            "stats": stats,
+        },
+    }
+    new_version = persist_case_document_version(
+        db,
+        case_obj,
+        document_obj.category,
+        document_obj.title,
+        version_obj.file_format or "docx",
+        review.docx_bytes,
+        version_obj.original_filename or f"{document_obj.title}.docx",
+        getattr(current_user, "id", None),
+        version_obj.generated_from_template_id,
+        placeholder_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+    )
+    db.commit()
+    db.refresh(new_version)
+
+    timing = {
+        **(result.get("timing") or {}),
+        "review_ms": review_ms,
+        "total_ms": int((result.get("timing") or {}).get("total_ms") or 0) + review_ms,
+    }
+    logger.info(
+        "biblioteca review prepared analysis_id=%s kind=case_document candidates=%s suggestions=%s groups=%s wrapped=%s ai_status=%s total_ms=%s",
+        result["analysis_id"],
+        stats.get("deterministic_candidates"),
+        stats.get("suggestions"),
+        stats.get("groups"),
+        stats.get("wrapped_suggestions"),
+        (diagnostics.get("ai") or {}).get("status"),
+        timing.get("total_ms"),
+    )
+
+    return {
+        "analysis_id": result["analysis_id"],
+        "review_document": {
+            "kind": "case_document",
+            "case_id": case_obj.id,
+            "document_id": document_obj.id,
+            "version_id": new_version.id,
+        },
+        "groups": review.groups,
+        "stats": stats,
+        "diagnostics": diagnostics,
+        "timing": timing,
+    }
+
+
+@router.post("/actualizar-campo", response_model=CascadeBackendResponse)
+def actualizar_campo_backend(
+    payload: CascadeBackendRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.document_context.kind != "case_document":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La cascada backend requiere un documento de caso versionado.",
+        )
+    case_obj, document_obj, version_obj = _resolve_case_document_objects(payload.document_context, db, current_user)
+    try:
+        docx_bytes = download_storage_bytes(version_obj.storage_path)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no disponible.") from exc
+    updated_docx, updated_controls = cascade_field_controls_in_docx(docx_bytes, payload.field_instance_id, payload.value)
+    new_version = persist_case_document_version(
+        db,
+        case_obj,
+        document_obj.category,
+        document_obj.title,
+        version_obj.file_format or "docx",
+        updated_docx,
+        version_obj.original_filename or f"{document_obj.title}.docx",
+        getattr(current_user, "id", None),
+        version_obj.generated_from_template_id,
+        placeholder_snapshot_json=json.dumps(
+            {
+                "biblioteca_cascade": {
+                    "source_version_id": version_obj.id,
+                    "field_instance_id": payload.field_instance_id,
+                    "updated_controls": updated_controls,
+                },
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.commit()
+    db.refresh(new_version)
+    return {
+        "review_document": {
+            "kind": "case_document",
+            "case_id": case_obj.id,
+            "document_id": document_obj.id,
+            "version_id": new_version.id,
+        },
+        "updated_controls": updated_controls,
+    }
+
+
 def _resolve_current_document(
     payload: CaseDocumentContext | MinutaDocumentContext,
     db: Session,
@@ -323,6 +494,30 @@ def _resolve_case_document(
         "document_id": payload.document_id,
         "version_id": payload.version_id,
     }
+
+
+def _resolve_case_document_objects(
+    payload: CaseDocumentContext,
+    db: Session,
+    current_user: User,
+) -> tuple[Case, CaseDocument, CaseDocumentVersion]:
+    row = (
+        db.query(Case, CaseDocument, CaseDocumentVersion)
+        .join(CaseDocument, CaseDocument.case_id == Case.id)
+        .join(CaseDocumentVersion, CaseDocumentVersion.case_document_id == CaseDocument.id)
+        .filter(
+            Case.id == payload.case_id,
+            CaseDocument.id == payload.document_id,
+            CaseDocumentVersion.id == payload.version_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    case_obj, document_obj, version_obj = row
+    if not _user_can_access_notary(current_user, case_obj.notary_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Documento no encontrado.")
+    return case_obj, document_obj, version_obj
 
 
 def _resolve_minuta_document(

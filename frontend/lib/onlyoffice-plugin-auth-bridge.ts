@@ -19,6 +19,13 @@ export function useOnlyOfficePluginAuthBridge(documentContext: OnlyOfficeDocumen
       allowedOrigins,
       getSessionToken: getToken,
       getDocumentContext: () => documentContext,
+      reloadCaseDocument: (context) => {
+        const currentPath = window.location.pathname;
+        const targetPath = currentPath.includes("/dashboard/onlyoffice-editor/")
+          ? `/dashboard/onlyoffice-editor/${context.case_id}/${context.document_id}/${context.version_id}`
+          : `/dashboard/casos/${context.case_id}/editor/${context.document_id}/${context.version_id}`;
+        window.location.assign(targetPath);
+      },
     });
   }, [documentContext]);
 }

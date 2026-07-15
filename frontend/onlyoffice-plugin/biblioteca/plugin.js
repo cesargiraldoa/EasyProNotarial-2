@@ -3,15 +3,17 @@
 
   var AUTH_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_AUTH_REQUEST";
   var AUTH_RESPONSE_TYPE = "EASYPRO_ONLYOFFICE_AUTH_RESPONSE";
+  var RELOAD_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_RELOAD_REQUEST";
   var PLUGIN_SOURCE = "motor-biblioteca";
   var HOST_SOURCE = "easypro-host";
   var AUTH_TIMEOUT_MS = 5000;
   var ANALYSIS_TIMEOUT_MS = 60000;
-  var MARK_BATCH_SIZE = 25;
-  var SUGGESTIONS_PAGE_SIZE = 80;
   var DEFAULT_API_BASE_URL = "https://easypronotarial-2-production.up.railway.app";
   var CATALOG_PATH = "/api/v1/biblioteca/campos";
-  var ANALYZE_CURRENT_PATH = "/api/v1/biblioteca/analizar-actual";
+  var ANALYZE_AND_PREPARE_PATH = "/api/v1/biblioteca/analizar-y-preparar";
+  var CASCADE_BACKEND_PATH = "/api/v1/biblioteca/actualizar-campo";
+  var SUGGESTION_TAG_PREFIX = "easypro:suggestion:v1:";
+  var FIELD_TAG_PREFIX = "easypro:field:v1:";
   var DEFAULT_HOST_ORIGINS = [
     "https://easypronotarial.com",
     "http://localhost:5179",
@@ -21,25 +23,11 @@
   var camposCatalogo = [];
   var tokenEnMemoria = null;
   var documentContextEnMemoria = null;
-  var sugerenciasActuales = [];
-  var markerRegistry = {};
-  var activeSuggestionId = null;
-  var renderLimit = SUGGESTIONS_PAGE_SIZE;
-  var latestDiagnostics = {
-    runtime: "plugin.js",
-    suggestions: 0,
-    marked: 0,
-    stale: 0,
-    failed: 0,
-    stats: null,
-    ai: null,
-    capabilities: {
-      search_supported: false,
-      select_supported: false,
-      highlight_supported: false,
-      comment_supported: false
-    }
-  };
+  var suggestionControls = {};
+  var fieldControls = {};
+  var gruposActuales = [];
+  var fieldsActuales = [];
+  var activeControlId = null;
   var authPromise = null;
   var authTimer = null;
   var authResolve = null;
@@ -63,17 +51,13 @@
 
   function origenesHostPermitidos() {
     var config = getPluginConfig();
-    var origenes = DEFAULT_HOST_ORIGINS.slice();
+    var origins = DEFAULT_HOST_ORIGINS.slice();
     if (Array.isArray(config.hostOrigins)) {
-      config.hostOrigins.forEach(function (origin) {
-        origenes.push(origin);
-      });
+      config.hostOrigins.forEach(function (origin) { origins.push(origin); });
     }
-    return origenes
-      .map(normalizarOrigen)
-      .filter(function (origin, index, all) {
-        return origin && all.indexOf(origin) === index;
-      });
+    return origins.map(normalizarOrigen).filter(function (origin, index, all) {
+      return origin && all.indexOf(origin) === index;
+    });
   }
 
   function obtenerApiBaseUrl() {
@@ -105,10 +89,7 @@
       }
     }
     if (value.kind === "minuta" && typeof value.editor_token === "string" && value.editor_token.trim()) {
-      return {
-        kind: "minuta",
-        editor_token: value.editor_token.trim()
-      };
+      return { kind: "minuta", editor_token: value.editor_token.trim() };
     }
     return null;
   }
@@ -116,58 +97,43 @@
   function resolverAuth(token, documentContext) {
     tokenEnMemoria = token;
     documentContextEnMemoria = documentContext || null;
-    if (authTimer) {
-      window.clearTimeout(authTimer);
-    }
+    if (authTimer) window.clearTimeout(authTimer);
     authTimer = null;
     var resolve = authResolve;
     authPromise = null;
     authResolve = null;
     authReject = null;
-    if (resolve) {
-      resolve(token);
-    }
+    if (resolve) resolve(token);
   }
 
   function rechazarAuth(kind) {
-    if (authTimer) {
-      window.clearTimeout(authTimer);
-    }
+    if (authTimer) window.clearTimeout(authTimer);
     authTimer = null;
     var reject = authReject;
     authPromise = null;
     authResolve = null;
     authReject = null;
-    if (reject) {
-      reject(crearError(kind));
-    }
+    if (reject) reject(crearError(kind));
   }
 
   function handleAuthMessage(event) {
-    var allowedOrigins = origenesHostPermitidos();
-    if (allowedOrigins.indexOf(event.origin) === -1) return;
-
+    var allowed = origenesHostPermitidos();
+    if (allowed.indexOf(event.origin) === -1) return;
     var data = event.data || {};
     if (data.type !== AUTH_RESPONSE_TYPE || data.source !== HOST_SOURCE) return;
-
     if (typeof data.token === "string" && data.token.trim()) {
       resolverAuth(data.token.trim(), validarDocumentContext(data.document_context));
       return;
     }
-
     if (data.error === "NO_SESSION") {
       rechazarAuth("no_session");
       return;
     }
-
     rechazarAuth("auth_failed");
   }
 
   function agregarTarget(targets, target) {
-    if (!target) return;
-    if (targets.indexOf(target) === -1) {
-      targets.push(target);
-    }
+    if (target && targets.indexOf(target) === -1) targets.push(target);
   }
 
   function obtenerTargetsDeSolicitud() {
@@ -182,20 +148,36 @@
         agregarTarget(targets, current);
       }
     } catch (error) {
-      // Cross-origin traversal is best-effort; direct parent/top remain enough for postMessage.
+      // Best effort only; no cross-origin properties are read beyond parent references.
     }
     return targets;
   }
 
   function enviarSolicitudAuth() {
+    var message = { type: AUTH_REQUEST_TYPE, source: PLUGIN_SOURCE };
+    var origins = origenesHostPermitidos();
+    obtenerTargetsDeSolicitud().forEach(function (target) {
+      origins.forEach(function (origin) {
+        try {
+          target.postMessage(message, origin);
+        } catch (error) {
+          // Ignore frames that cannot receive the request.
+        }
+      });
+    });
+  }
+
+  function solicitarRecarga(reviewDocument, analysisId) {
+    var context = validarDocumentContext(reviewDocument);
+    if (!context || context.kind !== "case_document") return;
     var message = {
-      type: AUTH_REQUEST_TYPE,
-      source: PLUGIN_SOURCE
+      type: RELOAD_REQUEST_TYPE,
+      source: PLUGIN_SOURCE,
+      analysis_id: analysisId || null,
+      review_document: context
     };
     var origins = origenesHostPermitidos();
-    var targets = obtenerTargetsDeSolicitud();
-
-    targets.forEach(function (target) {
+    obtenerTargetsDeSolicitud().forEach(function (target) {
       origins.forEach(function (origin) {
         try {
           target.postMessage(message, origin);
@@ -214,15 +196,8 @@
 
   function solicitarToken() {
     prepararListeners();
-
-    if (tokenEnMemoria) {
-      return Promise.resolve(tokenEnMemoria);
-    }
-
-    if (authPromise) {
-      return authPromise;
-    }
-
+    if (tokenEnMemoria) return Promise.resolve(tokenEnMemoria);
+    if (authPromise) return authPromise;
     authPromise = new Promise(function (resolve, reject) {
       authResolve = resolve;
       authReject = reject;
@@ -231,7 +206,6 @@
       }, Number(getPluginConfig().authTimeoutMs || AUTH_TIMEOUT_MS));
       enviarSolicitudAuth();
     });
-
     return authPromise;
   }
 
@@ -248,279 +222,157 @@
     var btn = document.getElementById("btnAnalizar");
     if (btn) {
       btn.disabled = value;
-      btn.textContent = value ? "Analizando documento..." : "Analizar documento";
+      btn.textContent = value ? "Preparando version de revision..." : "Analizar documento";
     }
   }
 
-  function categoriaClass(categoria) {
-    return "cat-" + (categoria || "otro");
-  }
-
-  function confianzaClass(confianza) {
-    if (confianza > 0.95) return "conf-alta";
-    if (confianza > 0.85) return "conf-media";
-    return "conf-baja";
-  }
-
-  function safeSuggestionId(item, index) {
-    if (item && typeof item.suggestion_id === "string" && item.suggestion_id.trim()) {
-      return item.suggestion_id.trim();
-    }
-    if (item && typeof item.candidate_id === "string" && item.candidate_id.trim()) {
-      return "sug_" + item.candidate_id.trim();
-    }
-    return "sug_" + index;
-  }
-
-  function normalizarSugerencia(item, index) {
-    var location = item && item.location && typeof item.location === "object" ? item.location : {};
-    return {
-      suggestion_id: safeSuggestionId(item, index),
-      candidate_id: item.candidate_id || "",
-      original_text: item.original_text || item.texto_original || "",
-      field_code: item.field_code || item.campo_sugerido || null,
-      field_label: item.field_label || item.field_code || item.campo_sugerido || "Revisión humana",
-      category: item.category || item.categoria || "otro",
-      confidence: Number(item.confidence != null ? item.confidence : item.confianza || 0),
-      source: item.source || item.metodo || "deterministic",
-      context_before: item.context_before || "",
-      context_after: item.context_after || "",
-      location: {
-        block_type: location.block_type || null,
-        block_index: Number(location.block_index || 0),
-        paragraph_index: location.paragraph_index == null ? null : Number(location.paragraph_index),
-        table_index: location.table_index == null ? null : Number(location.table_index),
-        row_index: location.row_index == null ? null : Number(location.row_index),
-        cell_index: location.cell_index == null ? null : Number(location.cell_index),
-        char_start: Number(location.char_start || 0),
-        char_end: Number(location.char_end || 0),
-        occurrence_index: Number(location.occurrence_index || item.occurrence_index || 1),
-        location_key: location.location_key || "",
-        block_hash: location.block_hash || ""
+  function executeMethodAsync(name, args) {
+    return new Promise(function (resolve) {
+      if (!window.Asc || !window.Asc.plugin || typeof window.Asc.plugin.executeMethod !== "function") {
+        resolve({ ok: false, error: "executeMethod_unavailable" });
+        return;
       }
-    };
-  }
-
-  function prepararSugerencias(data) {
-    return (Array.isArray(data) ? data : [])
-      .map(normalizarSugerencia)
-      .filter(function (item) {
-        return Boolean(item.field_code && item.original_text);
-      });
-  }
-
-  function estadoMarca(suggestionId) {
-    return markerRegistry[suggestionId] ? markerRegistry[suggestionId].status : "pending_mark";
-  }
-
-  function etiquetaEstadoMarca(status) {
-    if (status === "marked") return "Marcado";
-    if (status === "stale") return "Documento cambió";
-    if (status === "mark_failed") return "No marcado";
-    return "Pendiente";
-  }
-
-  function actualizarDiagnostico() {
-    var total = sugerenciasActuales.length;
-    var values = Object.keys(markerRegistry).map(function (key) { return markerRegistry[key]; });
-    latestDiagnostics.suggestions = total;
-    latestDiagnostics.marked = values.filter(function (item) { return item.status === "marked"; }).length;
-    latestDiagnostics.stale = values.filter(function (item) { return item.status === "stale"; }).length;
-    latestDiagnostics.failed = values.filter(function (item) { return item.status === "mark_failed"; }).length;
-
-    var el = document.getElementById("diagnosticoMotor");
-    if (!el) return;
-    if (!getPluginConfig().diagnostics) {
-      el.style.display = "none";
-      return;
-    }
-    el.style.display = "block";
-    el.textContent = "Runtime: " + latestDiagnostics.runtime
-      + " · sugerencias: " + latestDiagnostics.suggestions
-      + " · marcadas: " + latestDiagnostics.marked
-      + " · stale: " + latestDiagnostics.stale
-      + " · fallidas: " + latestDiagnostics.failed
-      + " · search: " + String(latestDiagnostics.capabilities.search_supported)
-      + " · select: " + String(latestDiagnostics.capabilities.select_supported)
-      + " · highlight: " + String(latestDiagnostics.capabilities.highlight_supported)
-      + " · comment: " + String(latestDiagnostics.capabilities.comment_supported);
-  }
-
-  function resumenAnalisis(stats, ai) {
-    var total = Number(stats && stats.deterministic_candidates || 0);
-    var classified = Number(stats && stats.classified_candidates || 0);
-    var suggestions = Number(stats && stats.suggestions || 0);
-    var omitted = Number(stats && stats.omitted_suggestions || 0);
-    var text = "Analisis recibido: " + String(suggestions) + " sugerencias de "
-      + String(total) + " candidatos; clasificados: " + String(classified) + ".";
-    if (omitted > 0) {
-      text += " " + String(omitted) + " quedaron fuera por prioridad.";
-    }
-    if (ai && ai.attempted) {
-      text += " IA: " + String(ai.status || "n/a") + ", clasificados: " + String(ai.classified || 0) + ".";
-    }
-    return text;
-  }
-
-  function registrarEstadoMarca(suggestion, status, markerId, reason, canNavigate) {
-    markerRegistry[suggestion.suggestion_id] = {
-      suggestion_id: suggestion.suggestion_id,
-      candidate_id: suggestion.candidate_id,
-      field_code: suggestion.field_code,
-      original_text: suggestion.original_text,
-      location_key: suggestion.location.location_key,
-      block_hash: suggestion.location.block_hash,
-      marker_id: markerId || ("marker_" + suggestion.suggestion_id),
-      status: status,
-      reason: reason || "",
-      can_navigate: Boolean(canNavigate) || status === "marked"
-    };
-  }
-
-  function resaltarTarjetaActiva(suggestionId) {
-    activeSuggestionId = suggestionId;
-    renderSugerencias(sugerenciasActuales);
-  }
-
-  function renderSugerencias(data) {
-    var sugerencias = prepararSugerencias(data);
-    var wrapper = document.getElementById("sugerencias");
-    var contador = document.getElementById("contador");
-    var lista = document.getElementById("listaSugerencias");
-
-    if (!wrapper || !contador || !lista) return;
-
-    wrapper.style.display = "block";
-    contador.textContent = String(sugerencias.length);
-    lista.innerHTML = "";
-
-    var visibleCount = Math.min(sugerencias.length, renderLimit);
-    sugerencias.slice(0, visibleCount).forEach(function (item) {
-      var status = estadoMarca(item.suggestion_id);
-      var card = document.createElement("div");
-      card.className = "sugerencia-card" + (activeSuggestionId === item.suggestion_id ? " activa" : "");
-      card.dataset.suggestionId = item.suggestion_id;
-      card.dataset.texto = item.original_text;
-      card.dataset.campo = item.field_code || "";
-      card.dataset.categoria = item.category;
-      card.dataset.candidateId = item.candidate_id || "";
-      card.onclick = function () {
-        navegarAMarca(item.suggestion_id);
-      };
-
-      var texto = document.createElement("div");
-      texto.className = "texto-original";
-      texto.textContent = item.original_text;
-
-      var campo = document.createElement("div");
-      campo.className = "campo-sugerido";
-      campo.textContent = item.field_label;
-
-      var badges = document.createElement("div");
-      badges.className = "badges";
-
-      var categoria = document.createElement("span");
-      categoria.className = "badge " + categoriaClass(item.category);
-      categoria.textContent = item.category;
-
-      var confianza = document.createElement("span");
-      confianza.className = "badge " + confianzaClass(item.confidence);
-      confianza.textContent = Math.round(item.confidence * 100) + "%";
-
-      var origen = document.createElement("span");
-      origen.className = "badge";
-      origen.textContent = item.source === "ai" ? "IA" : item.source === "hybrid" ? "Híbrido" : "Determinístico";
-
-      var estado = document.createElement("span");
-      estado.className = "badge estado-" + status;
-      estado.textContent = etiquetaEstadoMarca(status);
-
-      badges.appendChild(categoria);
-      badges.appendChild(confianza);
-      badges.appendChild(origen);
-      badges.appendChild(estado);
-
-      var notice = document.createElement("div");
-      notice.className = "empty-state";
-      notice.textContent = markerRegistry[item.suggestion_id] && markerRegistry[item.suggestion_id].reason === "safe_highlight_unavailable"
-        ? "La versión actual de OnlyOffice no permite aplicar una marca temporal segura."
-        : "Disponible en el siguiente bloque.";
-
-      var actions = document.createElement("div");
-      actions.className = "actions";
-
-      var go = document.createElement("button");
-      go.className = "btn";
-      go.textContent = "Ir al texto";
-      go.disabled = !markerRegistry[item.suggestion_id] || !markerRegistry[item.suggestion_id].can_navigate;
-      go.onclick = function (event) {
-        event.stopPropagation();
-        navegarAMarca(item.suggestion_id);
-      };
-
-      var yes = document.createElement("button");
-      yes.className = "btn btn-yes";
-      yes.textContent = "Sí";
-      yes.disabled = true;
-      yes.title = "Disponible en el siguiente bloque.";
-
-      var no = document.createElement("button");
-      no.className = "btn btn-no";
-      no.textContent = "No";
-      no.disabled = true;
-      no.title = "Disponible en el siguiente bloque.";
-
-      actions.appendChild(go);
-      actions.appendChild(yes);
-      actions.appendChild(no);
-      card.appendChild(texto);
-      card.appendChild(campo);
-      card.appendChild(badges);
-      card.appendChild(notice);
-      card.appendChild(actions);
-      lista.appendChild(card);
+      try {
+        window.Asc.plugin.executeMethod(name, args || [], function (result) {
+          if (result === false || (result && typeof result === "object" && result.error)) {
+            resolve({ ok: false, error: result && result.error ? String(result.error) : "method_failed", value: result });
+            return;
+          }
+          resolve({ ok: true, value: result });
+        });
+      } catch (error) {
+        resolve({ ok: false, error: "executeMethod_exception" });
+      }
     });
-    if (sugerencias.length > visibleCount) {
-      var more = document.createElement("button");
-      more.className = "btn";
-      more.textContent = "Mostrar " + String(sugerencias.length - visibleCount) + " sugerencias mas";
-      more.onclick = function () {
-        renderLimit = sugerencias.length;
-        renderSugerencias(sugerencias);
-      };
-      lista.appendChild(more);
+  }
+
+  function normalizeControls(value) {
+    var controls = Array.isArray(value) ? value : [];
+    return controls
+      .map(function (control) {
+        var tag = String(control.Tag || control.tag || "");
+        var internalId = control.InternalId || control.InternalID || control.Id || control.id;
+        if (!tag || !internalId) return null;
+        return {
+          internal_id: internalId,
+          tag: tag,
+          alias: control.Alias || control.alias || "",
+          text: control.Text || control.text || ""
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function parseSuggestionTag(control) {
+    if (!control.tag || control.tag.indexOf(SUGGESTION_TAG_PREFIX) !== 0) return null;
+    var parts = control.tag.split(":");
+    if (parts.length < 9) return null;
+    return {
+      type: "suggestion",
+      internal_id: control.internal_id,
+      tag: control.tag,
+      alias: control.alias,
+      text: control.text,
+      analysis_id: parts[3],
+      suggestion_id: parts[4],
+      candidate_id: parts[5],
+      field_code: parts[6],
+      group_id: parts[7],
+      occurrence_id: parts[8],
+      field_instance_id: parts[6],
+      status: "prepared"
+    };
+  }
+
+  function parseFieldTag(control) {
+    if (!control.tag || control.tag.indexOf(FIELD_TAG_PREFIX) !== 0) return null;
+    var parts = control.tag.split(":");
+    if (parts.length < 5) return null;
+    return {
+      type: "field",
+      internal_id: control.internal_id,
+      tag: control.tag,
+      alias: control.alias,
+      text: control.text,
+      field_instance_id: parts[3],
+      occurrence_id: parts[4],
+      status: "accepted"
+    };
+  }
+
+  async function leerContentControls() {
+    var response = await executeMethodAsync("GetAllContentControls", []);
+    if (!response.ok) {
+      suggestionControls = {};
+      fieldControls = {};
+      return { ok: false, error: response.error };
     }
-    actualizarDiagnostico();
+    var controls = normalizeControls(response.value);
+    suggestionControls = {};
+    fieldControls = {};
+    controls.forEach(function (control) {
+      var suggestion = parseSuggestionTag(control);
+      var field = parseFieldTag(control);
+      if (suggestion) suggestionControls[suggestion.occurrence_id] = suggestion;
+      if (field) {
+        if (!fieldControls[field.field_instance_id]) fieldControls[field.field_instance_id] = [];
+        fieldControls[field.field_instance_id].push(field);
+      }
+    });
+    gruposActuales = agruparSugerencias(Object.keys(suggestionControls).map(function (key) { return suggestionControls[key]; }));
+    fieldsActuales = agruparCampos(fieldControls);
+    return { ok: true, controls: controls };
+  }
+
+  function agruparSugerencias(items) {
+    var groups = {};
+    items.forEach(function (item) {
+      var groupId = item.group_id || item.field_instance_id;
+      if (!groups[groupId]) {
+        groups[groupId] = {
+          group_id: groupId,
+          field_instance_id: item.field_instance_id,
+          field_code: item.field_code,
+          detected_value: item.text || "",
+          occurrences: []
+        };
+      }
+      groups[groupId].occurrences.push(item);
+    });
+    return Object.keys(groups).map(function (key) { return groups[key]; });
+  }
+
+  function agruparCampos(map) {
+    return Object.keys(map).sort().map(function (fieldId) {
+      return {
+        field_instance_id: fieldId,
+        controls: map[fieldId],
+        value: map[fieldId][0] ? map[fieldId][0].text : ""
+      };
+    });
   }
 
   function renderCatalogo(campos) {
     var lista = document.getElementById("listaCampos");
     if (!lista) return;
     lista.innerHTML = "";
-
     if (!campos.length) {
       var empty = document.createElement("div");
       empty.className = "empty-state";
-      empty.textContent = "El catálogo de campos está vacío.";
+      empty.textContent = "No hay campos disponibles.";
       lista.appendChild(empty);
       return;
     }
-
     campos.forEach(function (campo) {
       var item = document.createElement("div");
       item.className = "campo-item";
-      item.onclick = function () {
-        insertarCampo(campo.code, campo.label);
-      };
-
+      item.onclick = function () { insertarCampoEstructurado(campo.code); };
       var code = document.createElement("div");
       code.className = "campo-code";
       code.textContent = campo.code;
-
       var label = document.createElement("div");
       label.className = "campo-label";
       label.textContent = campo.label;
-
       item.appendChild(code);
       item.appendChild(label);
       lista.appendChild(item);
@@ -535,19 +387,15 @@
       return;
     }
     renderCatalogo(camposCatalogo.filter(function (campo) {
-      return String(campo.code || "").toLowerCase().includes(q)
-        || String(campo.label || "").toLowerCase().includes(q);
+      return String(campo.code || "").toLowerCase().indexOf(q) !== -1
+        || String(campo.label || "").toLowerCase().indexOf(q) !== -1;
     }));
   }
 
   function normalizarCatalogo(payload) {
-    if (!Array.isArray(payload)) {
-      throw crearError("invalid_json");
-    }
+    if (!Array.isArray(payload)) throw crearError("invalid_json");
     return payload
-      .filter(function (campo) {
-        return campo && typeof campo.code === "string" && campo.code.trim();
-      })
+      .filter(function (campo) { return campo && typeof campo.code === "string" && campo.code.trim(); })
       .map(function (campo) {
         return {
           code: campo.code.trim(),
@@ -563,29 +411,16 @@
     try {
       response = await fetcher(obtenerApiBaseUrl() + CATALOG_PATH, {
         method: "GET",
-        headers: {
-          Authorization: "Bearer " + token,
-          Accept: "application/json"
-        },
+        headers: { Authorization: "Bearer " + token, Accept: "application/json" },
         credentials: "omit",
         cache: "no-store"
       });
     } catch (error) {
       throw crearError("network_error");
     }
-
-    if (response.status === 401) {
-      throw crearError("unauthorized");
-    }
-
-    if (response.status === 403) {
-      throw crearError("forbidden");
-    }
-
-    if (!response.ok) {
-      throw crearError("backend_unavailable");
-    }
-
+    if (response.status === 401) throw crearError("unauthorized");
+    if (response.status === 403) throw crearError("forbidden");
+    if (!response.ok) throw crearError("backend_unavailable");
     try {
       return normalizarCatalogo(await response.json());
     } catch (error) {
@@ -594,35 +429,28 @@
     }
   }
 
-  function normalizarAnalisis(payload) {
-    if (!payload || typeof payload !== "object" || !Array.isArray(payload.suggestions)) {
-      throw crearError("invalid_json");
-    }
+  function normalizarPreparacion(payload) {
+    if (!payload || typeof payload !== "object" || !payload.review_document) throw crearError("invalid_json");
     return {
-      suggestions: payload.suggestions,
+      analysis_id: payload.analysis_id || "",
+      review_document: payload.review_document,
+      groups: Array.isArray(payload.groups) ? payload.groups : [],
       stats: payload.stats && typeof payload.stats === "object" ? payload.stats : {},
-      ai: payload.diagnostics && payload.diagnostics.ai && typeof payload.diagnostics.ai === "object"
-        ? payload.diagnostics.ai
-        : (payload.ai && typeof payload.ai === "object" ? payload.ai : {}),
-      status: typeof payload.status === "string" ? payload.status : "completed",
-      mode: typeof payload.mode === "string" ? payload.mode : "deterministic"
+      diagnostics: payload.diagnostics && typeof payload.diagnostics === "object" ? payload.diagnostics : {},
+      timing: payload.timing && typeof payload.timing === "object" ? payload.timing : {}
     };
   }
 
-  async function analizarActualConToken(token, documentContext, fetchImpl) {
-    if (typeof token !== "string" || !token.trim()) {
-      throw crearError("no_session");
-    }
+  async function analizarYPrepararConToken(token, documentContext, fetchImpl) {
+    if (typeof token !== "string" || !token.trim()) throw crearError("no_session");
     var safeContext = validarDocumentContext(documentContext);
-    if (!safeContext) {
-      throw crearError("missing_document_context");
-    }
+    if (!safeContext) throw crearError("missing_document_context");
     var fetcher = fetchImpl || window.fetch.bind(window);
     var timeoutId = null;
     var response;
     try {
       response = await Promise.race([
-        fetcher(obtenerApiBaseUrl() + ANALYZE_CURRENT_PATH, {
+        fetcher(obtenerApiBaseUrl() + ANALYZE_AND_PREPARE_PATH, {
           method: "POST",
           headers: {
             Authorization: "Bearer " + token.trim(),
@@ -634,349 +462,295 @@
           body: JSON.stringify(safeContext)
         }),
         new Promise(function (_resolve, reject) {
-          timeoutId = window.setTimeout(function () {
-            reject(crearError("analysis_timeout"));
-          }, Number(getPluginConfig().analysisTimeoutMs || ANALYSIS_TIMEOUT_MS));
+          timeoutId = window.setTimeout(function () { reject(crearError("analysis_timeout")); }, Number(getPluginConfig().analysisTimeoutMs || ANALYSIS_TIMEOUT_MS));
         })
       ]);
     } catch (error) {
       if (error && error.kind === "analysis_timeout") throw error;
       throw crearError("network_error");
     } finally {
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
+      if (timeoutId) window.clearTimeout(timeoutId);
     }
-
-    if (response.status === 401) {
-      throw crearError("unauthorized");
-    }
-    if (response.status === 403) {
-      throw crearError("forbidden");
-    }
-    if (response.status === 404) {
-      throw crearError("document_not_found");
-    }
-    if (!response.ok) {
-      throw crearError("backend_unavailable");
-    }
-
+    if (response.status === 401) throw crearError("unauthorized");
+    if (response.status === 403) throw crearError("forbidden");
+    if (response.status === 404) throw crearError("document_not_found");
+    if (!response.ok) throw crearError("backend_unavailable");
     try {
-      return normalizarAnalisis(await response.json());
+      return normalizarPreparacion(await response.json());
     } catch (error) {
       if (error && error.kind) throw error;
       throw crearError("invalid_json");
     }
   }
 
-  function parseCommandResult(value) {
-    if (typeof value === "string" && value.trim()) {
-      try {
-        return JSON.parse(value);
-      } catch (error) {
-        return { ok: false, error: "invalid_command_json" };
-      }
-    }
-    return value && typeof value === "object" ? value : { ok: false, error: "empty_command_result" };
-  }
-
-  function callOnlyOfficeCommand(scopeKey, payload, command) {
-    return new Promise(function (resolve) {
-      if (!window.Asc || !window.Asc.plugin || typeof window.Asc.plugin.callCommand !== "function") {
-        resolve({ ok: false, error: "callCommand_unavailable" });
-        return;
-      }
-      window.Asc.scope = window.Asc.scope || {};
-      window.Asc.scope[scopeKey] = JSON.stringify(payload);
-      try {
-        window.Asc.plugin.callCommand(command, false, true, function (returnValue) {
-          resolve(parseCommandResult(returnValue));
-        });
-      } catch (error) {
-        resolve({ ok: false, error: "callCommand_exception" });
-      }
+  async function actualizarCampoBackend(token, documentContext, fieldInstanceId, value, fetchImpl) {
+    var fetcher = fetchImpl || window.fetch.bind(window);
+    var response = await fetcher(obtenerApiBaseUrl() + CASCADE_BACKEND_PATH, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      credentials: "omit",
+      cache: "no-store",
+      body: JSON.stringify({
+        document_context: validarDocumentContext(documentContext),
+        field_instance_id: fieldInstanceId,
+        value: value
+      })
     });
-  }
-
-  function onlyOfficeMarkCommand() {
-    function parsePayload() {
-      try {
-        return JSON.parse(Asc.scope.easyproMarkPayload || "[]");
-      } catch (error) {
-        return [];
-      }
-    }
-    function normalize(value) {
-      return String(value || "").replace(/\s+/g, " ").trim();
-    }
-    function getRangeText(range) {
-      if (range && typeof range.GetText === "function") {
-        return range.GetText();
-      }
-      if (range && typeof range.text === "string") {
-        return range.text;
-      }
-      return null;
-    }
-    function rangeMatchesSuggestion(range, suggestion) {
-      var text = getRangeText(range);
-      if (text !== null && text !== suggestion.original_text) {
-        return false;
-      }
-      if (range && range.location_key && suggestion.location && suggestion.location.location_key) {
-        return range.location_key === suggestion.location.location_key;
-      }
-      if (range && range.block_hash && suggestion.location && suggestion.location.block_hash) {
-        if (range.block_hash !== suggestion.location.block_hash) return false;
-      }
-      if (range && typeof range.context_before === "string" && suggestion.context_before) {
-        if (normalize(range.context_before).slice(-40) !== normalize(suggestion.context_before).slice(-40)) return false;
-      }
-      if (range && typeof range.context_after === "string" && suggestion.context_after) {
-        if (normalize(range.context_after).slice(0, 40) !== normalize(suggestion.context_after).slice(0, 40)) return false;
-      }
-      if (range && suggestion.location) {
-        if (typeof range.char_start === "number" && range.char_start !== suggestion.location.char_start) return false;
-        if (typeof range.char_end === "number" && range.char_end !== suggestion.location.char_end) return false;
-      }
-      return true;
-    }
-    function hasStrongEvidence(range, suggestion) {
-      if (!range || !suggestion || !suggestion.location) return false;
-      if (range.location_key && suggestion.location.location_key && range.location_key === suggestion.location.location_key) {
-        return true;
-      }
-      if (range.block_hash && suggestion.location.block_hash && range.block_hash === suggestion.location.block_hash) {
-        return true;
-      }
-      if (typeof range.char_start === "number" && typeof range.char_end === "number") {
-        return range.char_start === suggestion.location.char_start && range.char_end === suggestion.location.char_end;
-      }
-      if (typeof range.context_before === "string" && typeof range.context_after === "string" && suggestion.context_before && suggestion.context_after) {
-        return normalize(range.context_before).slice(-40) === normalize(suggestion.context_before).slice(-40)
-          && normalize(range.context_after).slice(0, 40) === normalize(suggestion.context_after).slice(0, 40);
-      }
-      return false;
-    }
-    function chooseRange(ranges, suggestion) {
-      var verified = [];
-      for (var i = 0; i < ranges.length; i += 1) {
-        if (rangeMatchesSuggestion(ranges[i], suggestion)) verified.push(ranges[i]);
-      }
-      if (verified.length === 1 && (ranges.length === 1 || hasStrongEvidence(verified[0], suggestion))) return verified[0];
-      if (ranges.length === 1 && rangeMatchesSuggestion(ranges[0], suggestion)) return ranges[0];
-      var occurrence = suggestion.location && suggestion.location.occurrence_index ? Number(suggestion.location.occurrence_index) : 1;
-      if (verified.length >= occurrence && hasStrongEvidence(verified[occurrence - 1], suggestion)) return verified[occurrence - 1];
-      return null;
-    }
-    function applyYellow(range) {
-      if (range && typeof range.SetHighlight === "function") {
-        range.SetHighlight(255, 242, 102);
-        return "SetHighlight";
-      }
-      return null;
-    }
-    function capabilityProbe(doc, sampleRange) {
-      return {
-        search_supported: !!(doc && typeof doc.Search === "function"),
-        select_supported: !!(sampleRange && typeof sampleRange.Select === "function"),
-        highlight_supported: !!(sampleRange && typeof sampleRange.SetHighlight === "function"),
-        comment_supported: !!(sampleRange && typeof sampleRange.AddComment === "function")
-      };
-    }
-    var suggestions = parsePayload();
-    var results = [];
-    var runtime = "unknown";
-    var capabilities = {
-      search_supported: false,
-      select_supported: false,
-      highlight_supported: false,
-      comment_supported: false
-    };
-    try {
-      var doc = Api.GetDocument();
-      runtime = "Api.GetDocument";
-      for (var s = 0; s < suggestions.length; s += 1) {
-        var suggestion = suggestions[s];
-        var ranges = doc.Search(suggestion.original_text, false) || [];
-        var target = chooseRange(ranges, suggestion);
-        capabilities = capabilityProbe(doc, target || ranges[0]);
-        if (!target) {
-          results.push({ suggestion_id: suggestion.suggestion_id, status: "stale", reason: "location_not_verified" });
-          continue;
-        }
-        var method = applyYellow(target);
-        if (!method) {
-          results.push({
-            suggestion_id: suggestion.suggestion_id,
-            status: "mark_failed",
-            marker_id: "oo_" + suggestion.suggestion_id,
-            reason: "safe_highlight_unavailable",
-            can_navigate: typeof target.Select === "function"
-          });
-          continue;
-        }
-        results.push({
-          suggestion_id: suggestion.suggestion_id,
-          status: "marked",
-          marker_id: "oo_" + suggestion.suggestion_id,
-          method: method,
-          can_navigate: typeof target.Select === "function"
-        });
-      }
-      return JSON.stringify({ ok: true, runtime: runtime, capabilities: capabilities, results: results });
-    } catch (error) {
-      return JSON.stringify({ ok: false, runtime: runtime, capabilities: capabilities, error: "onlyoffice_command_failed", results: results });
-    }
-  }
-
-  function onlyOfficeClearCommand() {
-    function parsePayload() {
-      try {
-        return JSON.parse(Asc.scope.easyproClearPayload || "[]");
-      } catch (error) {
-        return [];
-      }
-    }
-    function clearRange(range) {
-      if (range && typeof range.SetHighlight === "function") {
-        range.SetHighlight(null);
-        return true;
-      }
-      return false;
-    }
-    var markers = parsePayload();
-    try {
-      var doc = Api.GetDocument();
-      markers.forEach(function (marker) {
-        var ranges = doc.Search(marker.original_text, false) || [];
-        ranges.forEach(function (range) {
-          if (range.location_key && marker.location_key && range.location_key !== marker.location_key) return;
-          clearRange(range);
-        });
-      });
-      return JSON.stringify({ ok: true });
-    } catch (error) {
-      return JSON.stringify({ ok: false, error: "clear_failed" });
-    }
-  }
-
-  function onlyOfficeNavigateCommand() {
-    function parsePayload() {
-      try {
-        return JSON.parse(Asc.scope.easyproNavigatePayload || "{}");
-      } catch (error) {
-        return {};
-      }
-    }
-    var marker = parsePayload();
-    try {
-      var doc = Api.GetDocument();
-      var ranges = doc.Search(marker.original_text, false) || [];
-      var target = null;
-      for (var i = 0; i < ranges.length; i += 1) {
-        if (!ranges[i].location_key || !marker.location_key || ranges[i].location_key === marker.location_key) {
-          target = ranges[i];
-          break;
-        }
-      }
-      if (!target) return JSON.stringify({ ok: false, error: "marker_not_found" });
-      if (typeof target.Select === "function") {
-        target.Select();
-        return JSON.stringify({ ok: true, method: "Select" });
-      }
-      return JSON.stringify({ ok: false, error: "navigation_unavailable" });
-    } catch (error) {
-      return JSON.stringify({ ok: false, error: "navigation_failed" });
-    }
-  }
-
-  async function limpiarMarcasTemporales() {
-    var markers = Object.keys(markerRegistry).map(function (key) { return markerRegistry[key]; })
-      .filter(function (marker) { return marker.status === "marked"; });
-    if (markers.length) {
-      await callOnlyOfficeCommand("easyproClearPayload", markers, onlyOfficeClearCommand);
-    }
-    markerRegistry = {};
-    activeSuggestionId = null;
-    actualizarDiagnostico();
-  }
-
-  async function marcarSugerenciasEnDocumento(sugerencias) {
-    var operativas = (Array.isArray(sugerencias) ? sugerencias : []).filter(function (suggestion) {
-      return Boolean(suggestion && suggestion.field_code && suggestion.original_text);
-    });
-    if (!operativas.length) {
-      actualizarDiagnostico();
-      return;
-    }
-    operativas.forEach(function (suggestion) {
-      registrarEstadoMarca(suggestion, "pending_mark");
-    });
-    for (var start = 0; start < operativas.length; start += MARK_BATCH_SIZE) {
-      var batch = operativas.slice(start, start + MARK_BATCH_SIZE);
-      mostrarEstado("Marcando " + String(Math.min(start + batch.length, operativas.length)) + " de " + String(operativas.length), "");
-      var result = await callOnlyOfficeCommand("easyproMarkPayload", batch, onlyOfficeMarkCommand);
-      if (result && result.runtime) {
-        latestDiagnostics.runtime = result.runtime;
-      }
-      if (result && result.capabilities) {
-        latestDiagnostics.capabilities = {
-          search_supported: Boolean(result.capabilities.search_supported),
-          select_supported: Boolean(result.capabilities.select_supported),
-          highlight_supported: Boolean(result.capabilities.highlight_supported),
-          comment_supported: Boolean(result.capabilities.comment_supported)
-        };
-      }
-      var byId = {};
-      (result && Array.isArray(result.results) ? result.results : []).forEach(function (item) {
-        byId[item.suggestion_id] = item;
-      });
-      batch.forEach(function (suggestion) {
-        var item = byId[suggestion.suggestion_id];
-        if (!result || result.ok === false) {
-          registrarEstadoMarca(suggestion, "mark_failed", null, result && result.error);
-        } else if (!item) {
-          registrarEstadoMarca(suggestion, "mark_failed", null, "missing_result");
-        } else {
-          registrarEstadoMarca(suggestion, item.status, item.marker_id, item.reason, item.can_navigate);
-        }
-      });
-      renderSugerencias(sugerenciasActuales);
-    }
-    actualizarDiagnostico();
-  }
-
-  async function navegarAMarca(suggestionId) {
-    var marker = markerRegistry[suggestionId];
-    if (!marker || !marker.can_navigate) return;
-    var result = await callOnlyOfficeCommand("easyproNavigatePayload", marker, onlyOfficeNavigateCommand);
-    if (result && result.ok) {
-      resaltarTarjetaActiva(suggestionId);
-      return;
-    }
-    marker.status = "mark_failed";
-    renderSugerencias(sugerenciasActuales);
+    if (!response.ok) throw crearError("backend_unavailable");
+    return response.json();
   }
 
   function mensajeError(error) {
     var kind = error && error.kind;
-    if (kind === "no_session") {
-      return "No hay una sesión activa. Cierre el editor y vuelva a abrirlo desde Ecosistema Notarial.";
-    }
-    if (kind === "missing_document_context" || kind === "document_not_found") {
-      return "No fue posible identificar el documento abierto desde Ecosistema Notarial.";
-    }
-    if (kind === "auth_timeout" || kind === "auth_failed" || kind === "analysis_timeout" || kind === "network_error" || kind === "backend_unavailable" || kind === "invalid_json") {
-      return "No fue posible conectar el Motor de Biblioteca con Ecosistema Notarial.";
-    }
-    if (kind === "unauthorized") {
-      return "La sesión venció. Vuelva a abrir el documento desde Ecosistema Notarial.";
-    }
-    if (kind === "forbidden") {
-      return "No fue posible conectar el Motor de Biblioteca con Ecosistema Notarial.";
-    }
+    if (kind === "no_session") return "No hay una sesion activa. Cierre el editor y vuelva a abrirlo desde Ecosistema Notarial.";
+    if (kind === "missing_document_context" || kind === "document_not_found") return "No fue posible identificar el documento abierto desde Ecosistema Notarial.";
+    if (kind === "unauthorized") return "La sesion vencio. Vuelva a abrir el documento desde Ecosistema Notarial.";
+    if (kind === "analysis_timeout") return "No fue posible obtener el analisis del documento.";
     return "No fue posible conectar el Motor de Biblioteca con Ecosistema Notarial.";
+  }
+
+  function categoriaClass(categoria) {
+    return "cat-" + (categoria || "otro");
+  }
+
+  function renderSugerencias(groups) {
+    var contenedor = document.getElementById("sugerencias");
+    var lista = document.getElementById("listaSugerencias");
+    var contador = document.getElementById("contador");
+    if (!contenedor || !lista || !contador) return;
+    var total = (groups || []).reduce(function (sum, group) { return sum + group.occurrences.length; }, 0);
+    contenedor.style.display = "block";
+    contador.textContent = String((groups || []).length);
+    lista.innerHTML = "";
+    if (!(groups || []).length && !fieldsActuales.length) {
+      var empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "No hay sugerencias ni campos estructurados en esta version.";
+      lista.appendChild(empty);
+      return;
+    }
+    (groups || []).forEach(function (group) {
+      var card = document.createElement("div");
+      card.className = "sugerencia-card";
+      card.dataset.groupId = group.group_id;
+      var title = document.createElement("div");
+      title.className = "texto-original";
+      title.textContent = group.detected_value || "Sugerencia";
+      var field = document.createElement("div");
+      field.className = "campo-sugerido";
+      field.textContent = group.field_instance_id + " · " + group.occurrences.length + " aparicion(es)";
+      var badges = document.createElement("div");
+      badges.className = "badges";
+      var badge = document.createElement("span");
+      badge.className = "badge " + categoriaClass(group.category);
+      badge.textContent = "revision";
+      badges.appendChild(badge);
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      var go = document.createElement("button");
+      go.className = "btn";
+      go.textContent = "Ir al texto";
+      go.disabled = !group.occurrences.length;
+      go.onclick = function (event) {
+        event.stopPropagation();
+        navegarAControl(group.occurrences[0]);
+      };
+      var yes = document.createElement("button");
+      yes.className = "btn btn-yes";
+      yes.textContent = "Si";
+      yes.onclick = function (event) {
+        event.stopPropagation();
+        aceptarGrupo(group);
+      };
+      var no = document.createElement("button");
+      no.className = "btn btn-no";
+      no.textContent = "No";
+      no.onclick = function (event) {
+        event.stopPropagation();
+        rechazarGrupo(group);
+      };
+      actions.appendChild(go);
+      actions.appendChild(yes);
+      actions.appendChild(no);
+      card.appendChild(title);
+      card.appendChild(field);
+      card.appendChild(badges);
+      card.appendChild(actions);
+      lista.appendChild(card);
+    });
+    renderCamposEstructurados(lista);
+    var diagnostico = document.getElementById("diagnosticoMotor");
+    if (diagnostico) {
+      diagnostico.style.display = "block";
+      diagnostico.textContent = "Grupos: " + String((groups || []).length) + " · apariciones pendientes: " + String(total);
+    }
+  }
+
+  function renderCamposEstructurados(lista) {
+    if (!fieldsActuales.length) return;
+    var section = document.createElement("div");
+    section.className = "empty-state";
+    section.textContent = "Campos estructurados";
+    lista.appendChild(section);
+    fieldsActuales.forEach(function (field) {
+      var card = document.createElement("div");
+      card.className = "sugerencia-card";
+      var title = document.createElement("div");
+      title.className = "texto-original";
+      title.textContent = field.field_instance_id + " · " + field.controls.length + " aparicion(es)";
+      var input = document.createElement("input");
+      input.className = "search";
+      input.value = field.value || "";
+      var actions = document.createElement("div");
+      actions.className = "actions";
+      var apply = document.createElement("button");
+      apply.className = "btn btn-primary";
+      apply.textContent = "Aplicar en cascada";
+      apply.onclick = function (event) {
+        event.stopPropagation();
+        aplicarCascada(field.field_instance_id, input.value);
+      };
+      actions.appendChild(apply);
+      card.appendChild(title);
+      card.appendChild(input);
+      card.appendChild(actions);
+      lista.appendChild(card);
+    });
+  }
+
+  function fieldTag(fieldInstanceId, occurrenceId) {
+    return FIELD_TAG_PREFIX + fieldInstanceId + ":" + occurrenceId;
+  }
+
+  async function reemplazarControl(internalId, tag, alias, text) {
+    var response = await executeMethodAsync("InsertAndReplaceContentControls", [[{
+      InternalId: internalId,
+      Tag: tag,
+      Alias: alias,
+      Text: text
+    }]]);
+    return response.ok;
+  }
+
+  async function aceptarOcurrencia(occurrence) {
+    if (!occurrence || !occurrence.internal_id) return false;
+    var fieldInstanceId = occurrence.field_instance_id || occurrence.field_code;
+    var tag = fieldTag(fieldInstanceId, occurrence.occurrence_id);
+    var ok = await reemplazarControl(
+      occurrence.internal_id,
+      tag,
+      "EasyPro campo - " + fieldInstanceId,
+      "{{" + fieldInstanceId + "}}"
+    );
+    if (ok) {
+      delete suggestionControls[occurrence.occurrence_id];
+      if (!fieldControls[fieldInstanceId]) fieldControls[fieldInstanceId] = [];
+      fieldControls[fieldInstanceId].push({
+        type: "field",
+        internal_id: occurrence.internal_id,
+        tag: tag,
+        alias: "EasyPro campo - " + fieldInstanceId,
+        text: "{{" + fieldInstanceId + "}}",
+        field_instance_id: fieldInstanceId,
+        occurrence_id: occurrence.occurrence_id,
+        status: "accepted"
+      });
+    }
+    return ok;
+  }
+
+  async function aceptarGrupo(group) {
+    var okCount = 0;
+    for (var i = 0; i < group.occurrences.length; i += 1) {
+      if (await aceptarOcurrencia(group.occurrences[i])) okCount += 1;
+    }
+    await reconstruirDesdeControles();
+    mostrarEstado("Aceptadas " + String(okCount) + " aparicion(es).", okCount ? "ok" : "error");
+  }
+
+  async function rechazarOcurrencia(occurrence) {
+    if (!occurrence || !occurrence.internal_id) return false;
+    var response = await executeMethodAsync("RemoveContentControls", [[occurrence.internal_id]]);
+    if (response.ok) delete suggestionControls[occurrence.occurrence_id];
+    return response.ok;
+  }
+
+  async function rechazarGrupo(group) {
+    var okCount = 0;
+    for (var i = 0; i < group.occurrences.length; i += 1) {
+      if (await rechazarOcurrencia(group.occurrences[i])) okCount += 1;
+    }
+    await reconstruirDesdeControles();
+    mostrarEstado("Rechazadas " + String(okCount) + " aparicion(es).", okCount ? "ok" : "error");
+  }
+
+  async function navegarAControl(control) {
+    if (!control || !control.internal_id) return false;
+    var moved = await executeMethodAsync("MoveCursorToContentControl", [control.internal_id]);
+    if (!moved.ok) {
+      moved = await executeMethodAsync("SelectContentControl", [control.internal_id]);
+    }
+    if (moved.ok) {
+      activeControlId = control.internal_id;
+      return true;
+    }
+    mostrarEstado("No fue posible navegar al campo en OnlyOffice.", "error");
+    return false;
+  }
+
+  async function aplicarCascada(fieldInstanceId, value) {
+    var controls = fieldControls[fieldInstanceId] || [];
+    var payload = controls.map(function (control) {
+      return {
+        InternalId: control.internal_id,
+        Tag: control.tag,
+        Alias: control.alias || "EasyPro campo - " + fieldInstanceId,
+        Text: value
+      };
+    });
+    var response = payload.length ? await executeMethodAsync("InsertAndReplaceContentControls", [payload]) : { ok: false };
+    if (response.ok) {
+      await reconstruirDesdeControles();
+      mostrarEstado("Campo actualizado en cascada.", "ok");
+      return;
+    }
+    try {
+      var token = await solicitarToken();
+      var backend = await actualizarCampoBackend(token, documentContextEnMemoria, fieldInstanceId, value);
+      solicitarRecarga(backend.review_document, null);
+      mostrarEstado("Campo actualizado en backend. Recargando version...", "ok");
+    } catch (error) {
+      mostrarEstado("No fue posible aplicar la cascada.", "error");
+    }
+  }
+
+  async function insertarCampoEstructurado(codigoCampo) {
+    if (!codigoCampo) return;
+    var occurrenceId = "manual_" + Date.now();
+    var tag = fieldTag(codigoCampo, occurrenceId);
+    var add = await executeMethodAsync("AddContentControl", [1, { Tag: tag, Alias: "EasyPro campo - " + codigoCampo }]);
+    if (!add.ok) {
+      mostrarEstado("OnlyOffice no permitio crear el campo estructurado en el cursor.", "error");
+      return;
+    }
+    var internalId = add.value && (add.value.InternalId || add.value.InternalID || add.value.Id || add.value.id);
+    if (internalId) {
+      await reemplazarControl(internalId, tag, "EasyPro campo - " + codigoCampo, "{{" + codigoCampo + "}}");
+    }
+    await reconstruirDesdeControles();
+    mostrarEstado("Campo estructurado insertado.", "ok");
+  }
+
+  async function reconstruirDesdeControles() {
+    var result = await leerContentControls();
+    if (result.ok) {
+      renderSugerencias(gruposActuales);
+    }
+    return result;
   }
 
   async function cargarCatalogo() {
@@ -985,75 +759,29 @@
       var token = await solicitarToken();
       camposCatalogo = await cargarCatalogoConToken(token);
       renderCatalogo(camposCatalogo);
-      if (camposCatalogo.length) {
-        mostrarEstado("Catálogo cargado.", "ok");
-      } else {
-        mostrarEstado("El catálogo de campos está vacío.", "");
-      }
+      await reconstruirDesdeControles();
+      mostrarEstado(camposCatalogo.length ? "Catalogo cargado." : "El catalogo de campos esta vacio.", camposCatalogo.length ? "ok" : "");
     } catch (error) {
       renderCatalogo([]);
       mostrarEstado(mensajeError(error), "error");
     }
   }
 
-  function insertarCampo(codigoCampo) {
-    if (!codigoCampo) return;
-    window.Asc.plugin.executeMethod("PasteText", ["{{" + codigoCampo + "}}"], function () {});
-  }
-
-  function aceptarSugerencia() {
-    mostrarEstado("Las acciones Sí/No se habilitarán en el siguiente bloque.", "");
-  }
-
   async function analizarDocumento() {
     if (analisisEnCurso) return;
     setAnalisisEnCurso(true);
-    await limpiarMarcasTemporales();
-    sugerenciasActuales = [];
-    renderLimit = SUGGESTIONS_PAGE_SIZE;
-    renderSugerencias(sugerenciasActuales);
-    mostrarEstado("Analizando documento...", "");
+    mostrarEstado("Analizando documento y preparando version de revision...", "");
     try {
       var token = await solicitarToken();
-      var analysis;
-      try {
-        analysis = await analizarActualConToken(token, documentContextEnMemoria);
-      } catch (error) {
-        mostrarEstado(error && error.kind === "analysis_timeout"
-          ? "No fue posible obtener el analisis del documento."
-          : "No fue posible obtener el analisis del documento.", "error");
+      var result = await analizarYPrepararConToken(token, documentContextEnMemoria);
+      if (!result.review_document || !result.review_document.version_id) {
+        mostrarEstado("El analisis fue recibido, pero no pudo preparar la version de revision.", "error");
         return;
       }
-      latestDiagnostics.stats = analysis.stats || null;
-      latestDiagnostics.ai = analysis.ai || null;
-      try {
-        sugerenciasActuales = prepararSugerencias(analysis.suggestions);
-        renderSugerencias(sugerenciasActuales);
-      } catch (error) {
-        mostrarEstado("El analisis fue recibido, pero no pudo mostrarse.", "error");
-        return;
-      }
-      mostrarEstado(resumenAnalisis(analysis.stats, analysis.ai), sugerenciasActuales.length ? "ok" : "");
-      try {
-        await marcarSugerenciasEnDocumento(sugerenciasActuales);
-        renderSugerencias(sugerenciasActuales);
-      } catch (error) {
-        mostrarEstado("Las sugerencias fueron cargadas, pero OnlyOffice no pudo aplicar las marcas.", "error");
-        return;
-      }
-      var values = Object.keys(markerRegistry).map(function (key) { return markerRegistry[key]; });
-      var failed = values.filter(function (item) { return item.status === "mark_failed"; }).length;
-      var marked = values.filter(function (item) { return item.status === "marked"; }).length;
-      if (failed > 0 && marked === 0 && sugerenciasActuales.length > 0) {
-        mostrarEstado("Las sugerencias fueron cargadas, pero OnlyOffice no pudo aplicar las marcas. " + resumenAnalisis(analysis.stats, analysis.ai), "error");
-      } else {
-        mostrarEstado(
-          sugerenciasActuales.length ? resumenAnalisis(analysis.stats, analysis.ai) : "No se encontraron sugerencias operativas en el documento.",
-          sugerenciasActuales.length ? "ok" : ""
-        );
-      }
+      solicitarRecarga(result.review_document, result.analysis_id);
+      mostrarEstado("Version de revision preparada. Recargando editor...", "ok");
     } catch (error) {
-      mostrarEstado(mensajeError(error), "error");
+      mostrarEstado(error && error.kind === "analysis_timeout" ? "No fue posible obtener el analisis del documento." : mensajeError(error), "error");
     } finally {
       setAnalisisEnCurso(false);
     }
@@ -1061,14 +789,9 @@
 
   function prepararDom() {
     var buscar = document.getElementById("buscarCampo");
-    if (buscar) {
-      buscar.addEventListener("input", filtrarCatalogo);
-    }
-
+    if (buscar) buscar.addEventListener("input", filtrarCatalogo);
     var btnAnalizar = document.getElementById("btnAnalizar");
-    if (btnAnalizar) {
-      btnAnalizar.addEventListener("click", analizarDocumento);
-    }
+    if (btnAnalizar) btnAnalizar.addEventListener("click", analizarDocumento);
   }
 
   window.Asc = window.Asc || {};
@@ -1085,69 +808,64 @@
 
   window.cargarCatalogo = cargarCatalogo;
   window.renderSugerencias = renderSugerencias;
-  window.aceptarSugerencia = aceptarSugerencia;
-  window.insertarCampo = insertarCampo;
+  window.insertarCampo = insertarCampoEstructurado;
   window.analizarDocumento = analizarDocumento;
 
   window.__EasyProBibliotecaPlugin = {
     constants: {
       AUTH_REQUEST_TYPE: AUTH_REQUEST_TYPE,
       AUTH_RESPONSE_TYPE: AUTH_RESPONSE_TYPE,
+      RELOAD_REQUEST_TYPE: RELOAD_REQUEST_TYPE,
       PLUGIN_SOURCE: PLUGIN_SOURCE,
       HOST_SOURCE: HOST_SOURCE,
       CATALOG_PATH: CATALOG_PATH,
-      ANALYZE_CURRENT_PATH: ANALYZE_CURRENT_PATH
+      ANALYZE_AND_PREPARE_PATH: ANALYZE_AND_PREPARE_PATH,
+      CASCADE_BACKEND_PATH: CASCADE_BACKEND_PATH
     },
     test: {
       handleAuthMessage: handleAuthMessage,
       solicitarToken: solicitarToken,
       cargarCatalogoConToken: cargarCatalogoConToken,
-      analizarActualConToken: analizarActualConToken,
+      analizarYPrepararConToken: analizarYPrepararConToken,
+      actualizarCampoBackend: actualizarCampoBackend,
       normalizarCatalogo: normalizarCatalogo,
-      normalizarAnalisis: normalizarAnalisis,
+      normalizarPreparacion: normalizarPreparacion,
       validarDocumentContext: validarDocumentContext,
       mensajeError: mensajeError,
       renderSugerencias: renderSugerencias,
       analizarDocumento: analizarDocumento,
-      prepararSugerencias: prepararSugerencias,
-      marcarSugerenciasEnDocumento: marcarSugerenciasEnDocumento,
-      limpiarMarcasTemporales: limpiarMarcasTemporales,
-      navegarAMarca: navegarAMarca,
-      getMarkerRegistry: function () {
-        return markerRegistry;
-      },
-      getDiagnostics: function () {
-        return latestDiagnostics;
-      },
+      leerContentControls: leerContentControls,
+      reconstruirDesdeControles: reconstruirDesdeControles,
+      agruparSugerencias: agruparSugerencias,
+      agruparCampos: agruparCampos,
+      parseSuggestionTag: parseSuggestionTag,
+      parseFieldTag: parseFieldTag,
+      aceptarOcurrencia: aceptarOcurrencia,
+      rechazarOcurrencia: rechazarOcurrencia,
+      aceptarGrupo: aceptarGrupo,
+      rechazarGrupo: rechazarGrupo,
+      navegarAControl: navegarAControl,
+      aplicarCascada: aplicarCascada,
+      insertarCampoEstructurado: insertarCampoEstructurado,
+      solicitarRecarga: solicitarRecarga,
+      getSuggestionControls: function () { return suggestionControls; },
+      getFieldControls: function () { return fieldControls; },
+      getGroups: function () { return gruposActuales; },
+      getFields: function () { return fieldsActuales; },
+      getActiveControlId: function () { return activeControlId; },
       reset: function () {
         tokenEnMemoria = null;
         documentContextEnMemoria = null;
-        sugerenciasActuales = [];
-        markerRegistry = {};
-        activeSuggestionId = null;
-        renderLimit = SUGGESTIONS_PAGE_SIZE;
-        latestDiagnostics = {
-          runtime: "plugin.js",
-          suggestions: 0,
-          marked: 0,
-          stale: 0,
-          failed: 0,
-          stats: null,
-          ai: null,
-          capabilities: {
-            search_supported: false,
-            select_supported: false,
-            highlight_supported: false,
-            comment_supported: false
-          }
-        };
+        suggestionControls = {};
+        fieldControls = {};
+        gruposActuales = [];
+        fieldsActuales = [];
+        activeControlId = null;
         authPromise = null;
         authResolve = null;
         authReject = null;
         analisisEnCurso = false;
-        if (authTimer) {
-          window.clearTimeout(authTimer);
-        }
+        if (authTimer) window.clearTimeout(authTimer);
         authTimer = null;
       }
     }
