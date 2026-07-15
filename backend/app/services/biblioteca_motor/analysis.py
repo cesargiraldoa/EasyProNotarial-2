@@ -16,6 +16,7 @@ ANALYSIS_TOTAL_BUDGET_SECONDS = 25.0
 AI_BUDGET_SECONDS = 10.0
 MAX_AI_CANDIDATES = 40
 MAX_OPERATIONAL_SUGGESTIONS = 120
+PROVISIONAL_FIELD_PREFIX = "PENDING_FIELD_"
 
 ROLE_KEYWORDS = (
     "COMPRADOR",
@@ -86,6 +87,22 @@ TYPE_PRIORITY = {
     "address": 70,
     "bank": 65,
     "person_name": 50,
+}
+
+CANDIDATE_CATEGORIES = {
+    "person_name": "persona",
+    "document_number": "persona",
+    "nit": "persona_juridica",
+    "matricula_inmobiliaria": "inmueble",
+    "codigo_catastral": "inmueble",
+    "area": "inmueble",
+    "address": "ubicacion",
+    "money": "valor",
+    "date": "fecha",
+    "deed_number": "escritura",
+    "bank": "entidad",
+    "email": "contacto",
+    "phone": "contacto",
 }
 
 AI_USEFUL_TYPES = {
@@ -309,7 +326,8 @@ def analyze_biblioteca_document(
     omitted = max(0, len(operational) - max_suggestions)
     suggestions = [{key: value for key, value in item.items() if key != "_priority"} for item in operational[:max_suggestions]]
 
-    classified_total = len(operational)
+    catalogued_total = sum(1 for item in operational if item["catalog_status"] == "matched")
+    provisional_total = sum(1 for item in operational if item["catalog_status"] == "unmapped")
     mode = "hybrid" if ai_results else "deterministic"
     status = _analysis_status(ai_diag, bool(ai_results))
     total_ms = _elapsed_ms(started)
@@ -320,8 +338,10 @@ def analyze_biblioteca_document(
         "suggestions": suggestions,
         "stats": {
             "deterministic_candidates": len(candidates),
-            "classified_candidates": classified_total,
-            "unclassified_candidates": len(candidates) - classified_total,
+            "classified_candidates": catalogued_total,
+            "unclassified_candidates": provisional_total,
+            "catalogued_suggestions": catalogued_total,
+            "provisional_suggestions": provisional_total,
             "suggestions": len(suggestions),
             "omitted_suggestions": omitted,
             "excluded_low_priority": omitted,
@@ -355,7 +375,7 @@ class OpenAIBibliotecaClassifier:
     ) -> list[dict[str, Any]]:
         try:
             from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
-        except Exception:  # pragma: no cover - exercised only when dependency is missing in production env
+        except Exception:  # pragma: no cover
             from openai import OpenAI
             APIConnectionError = APIError = APITimeoutError = Exception
 
@@ -500,29 +520,43 @@ def _build_operational_suggestions(
         det_code = deterministic.get(candidate.candidate_id)
         field_code = det_code or ai_code
         field = field_by_code.get(field_code or "")
-        if not field_code or field is None:
-            continue
-        if det_code and ai_code and det_code == ai_code:
-            source = "hybrid"
-        elif ai_code and not det_code:
-            source = "ai"
+        is_provisional = not field_code or field is None
+
+        if is_provisional:
+            field_code = _provisional_field_code(candidate)
+            field_label = "Campo nuevo por definir"
+            category = CANDIDATE_CATEGORIES.get(candidate.candidate_type, "otro")
+            source = "provisional"
+            reason = _clean_reason(ai_result) or "Dato variable detectado sin equivalencia en la biblioteca de campos."
         else:
-            source = "deterministic"
+            field_label = field.label
+            category = field.category
+            if det_code and ai_code and det_code == ai_code:
+                source = "hybrid"
+            elif ai_code and not det_code:
+                source = "ai"
+            else:
+                source = "deterministic"
+            reason = _clean_reason(ai_result)
+
         operational.append(
             {
                 "suggestion_id": "sug_" + _short_hash(candidate.candidate_id + ":" + field_code)[:16],
                 "candidate_id": candidate.candidate_id,
+                "candidate_type": candidate.candidate_type,
                 "original_text": candidate.original_text,
                 "field_code": field_code,
-                "field_label": field.label,
-                "category": field.category,
-                "confidence": _confidence(source, True),
+                "field_label": field_label,
+                "category": category,
+                "catalog_status": "unmapped" if is_provisional else "matched",
+                "requires_field_assignment": is_provisional,
+                "confidence": _confidence(source, not is_provisional),
                 "source": source,
-                "needs_human_review": source != "hybrid",
+                "needs_human_review": True if is_provisional else source != "hybrid",
                 "location": candidate.location,
                 "context_before": candidate.context_before,
                 "context_after": candidate.context_after,
-                "reason": _clean_reason(ai_result),
+                "reason": reason,
                 "_priority": _suggestion_priority(candidate, source),
             },
         )
@@ -739,18 +773,29 @@ def _validated_ai_code(result: dict[str, Any] | None, field_by_code: dict[str, F
     return None
 
 
+def _provisional_field_code(candidate: Candidate) -> str:
+    normalized_value = _normalize_ascii(candidate.original_text)
+    digest = _short_hash(f"{candidate.candidate_type}:{normalized_value}")[:12].upper()
+    candidate_type = re.sub(r"[^A-Z0-9]+", "_", candidate.candidate_type.upper()).strip("_") or "OTRO"
+    return f"{PROVISIONAL_FIELD_PREFIX}{candidate_type}_{digest}"
+
+
 def _suggestion_priority(candidate: Candidate, source: str) -> int:
     score = TYPE_PRIORITY.get(candidate.candidate_type, 0)
     if source == "hybrid":
         score += 40
     elif source == "ai":
         score += 25
+    elif source == "provisional":
+        score -= 10
     if candidate.candidate_type == "person_name":
         score += 10
     return score
 
 
 def _confidence(source: str, has_field: bool) -> float:
+    if source == "provisional":
+        return 0.55
     if not has_field:
         return 0.0
     if source == "hybrid":
