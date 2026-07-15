@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Motor Biblioteca — Spike Técnico</title>
+  <style>
+    :root {
+      --blue: #0d2e5d;
+      --green: #047857;
+      --red: #b91c1c;
+      --yellow: #92400e;
+      --gray: #4b5563;
+      --line: #e5e7eb;
+      --soft: #f3f4f6;
+      --text: #111827;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #fff;
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+    }
+
+    .header {
+      background: var(--blue);
+      color: #fff;
+      padding: 12px;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      margin-top: 3px;
+      opacity: 0.78;
+    }
+
+    .section {
+      padding: 10px 12px;
+    }
+
+    .warning {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      color: #92400e;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 8px;
+    }
+
+    .actions {
+      display: grid;
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .btn {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .btn:hover {
+      border-color: var(--blue);
+      background: #f8fafc;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .btn-danger {
+      border-color: #fecaca;
+      color: var(--red);
+    }
+
+    .status-line {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 10px 12px;
+    }
+
+    .status-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 8px;
+    }
+
+    .status-name {
+      font-weight: 700;
+    }
+
+    .status-reason {
+      color: var(--gray);
+      font-size: 11px;
+      margin-top: 2px;
+      word-break: break-word;
+    }
+
+    .PASS { border-color: #bbf7d0; background: #f0fdf4; }
+    .FAIL { border-color: #fecaca; background: #fef2f2; }
+    .UNSUPPORTED { border-color: #fde68a; background: #fffbeb; }
+
+    .report {
+      border-top: 1px solid var(--line);
+      padding: 10px 12px;
+    }
+
+    textarea {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 11px;
+      height: 180px;
+      padding: 8px;
+      resize: vertical;
+      width: 100%;
+    }
+
+    .footer {
+      color: var(--gray);
+      font-size: 11px;
+      padding: 10px 12px 12px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">Motor Biblioteca — Spike Técnico</div>
+    <div class="subtitle">OnlyOffice runtime probe aislado</div>
+  </div>
+
+  <div class="section">
+    <div class="warning">
+      Use solo un DOCX temporal anonimizado con una unica aparicion de EASYPRO_SPIKE_RANGE_2026.
+      Este plugin no usa JWT, backend ni catalogo.
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnDetect" type="button">1. Detectar capacidades</button>
+      <button class="btn" id="btnLocate" type="button">2. Localizar rango</button>
+      <button class="btn" id="btnSelect" type="button">3. Seleccionar rango</button>
+      <button class="btn" id="btnHighlight" type="button">4. Aplicar highlight</button>
+      <button class="btn" id="btnClearHighlight" type="button">5. Retirar highlight</button>
+      <button class="btn" id="btnCreateControl" type="button">6. Crear Content Control</button>
+      <button class="btn" id="btnReadControls" type="button">7. Leer Content Controls</button>
+      <button class="btn" id="btnUpdateContent" type="button">8. Actualizar contenido</button>
+      <button class="btn" id="btnRestoreContent" type="button">9. Restaurar contenido</button>
+      <button class="btn" id="btnVerifyPersistence" type="button">10. Verificar persistencia despues de reapertura</button>
+      <button class="btn" id="btnCopyReport" type="button">11. Copiar informe tecnico</button>
+      <button class="btn btn-danger" id="btnCleanup" type="button">Limpiar spike</button>
+    </div>
+  </div>
+
+  <div class="status-line" id="statusList"></div>
+
+  <div class="report">
+    <textarea id="reportJson" readonly></textarea>
+  </div>
+
+  <div class="footer">Motor Biblioteca Spike v0.1.0</div>
+
+  <script type="text/javascript" src="../v1/plugins.js"></script>
+  <script src="plugin.js?v=0.1.0"></script>
+</body>
+</html>
