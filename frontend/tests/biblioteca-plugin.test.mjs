@@ -51,13 +51,12 @@ function loadPlugin(options = {}) {
     top: postedTarget,
     setTimeout,
     clearTimeout,
-    prompt: options.prompt,
     addEventListener(type, handler) {
       listeners.set(type, handler);
     },
     fetch: options.fetch,
     Asc: {
-      ButtonContentControl: options.enableContentControlButtons ? FakeButtonContentControl : undefined,
+      ButtonContentControl: options.enableContentControlButtons === false ? undefined : FakeButtonContentControl,
       plugin: {
         executeMethod(name, args, callback) {
           executeCalls.push({ name, args });
@@ -157,7 +156,7 @@ function loadPlugin(options = {}) {
   });
   const script = readFileSync(resolve("onlyoffice-plugin/biblioteca/plugin.js"), "utf8");
   vm.runInContext(script, context);
-  return { api: window.__EasyProBibliotecaPlugin.test, constants: window.__EasyProBibliotecaPlugin.constants, postedTarget, window, elements, executeCalls, controls, buttonControls };
+  return { api: window.__EasyProBibliotecaPlugin.test, constants: window.__EasyProBibliotecaPlugin.constants, postedTarget, window, elements, getElement: (id) => document.getElementById(id), executeCalls, controls, buttonControls };
 }
 
 function auth(api, constants) {
@@ -290,6 +289,7 @@ test("accept delegates the exact occurrence decision to backend and requests rel
     return decisionResponse(236);
   };
   await auth(api, constants);
+  api.registrarBotonesContentControls();
   await api.leerContentControls();
   const occurrence = api.getGroups()[0].occurrences[0];
 
@@ -317,6 +317,7 @@ test("accept blocks provisional fields until they are assigned", async () => {
     return decisionResponse(236);
   };
   await api.leerContentControls();
+  api.registrarBotonesContentControls();
 
   const ok = await api.aceptarOcurrencia(api.getGroups()[0].occurrences[0]);
 
@@ -332,6 +333,7 @@ test("reject delegates the occurrence decision to backend", async () => {
     return decisionResponse(237);
   };
   await auth(api, constants);
+  api.registrarBotonesContentControls();
   await api.leerContentControls();
 
   const ok = await api.rechazarOcurrencia(api.getGroups()[0].occurrences[0]);
@@ -349,6 +351,7 @@ test("change assigns another catalog field through backend", async () => {
     return decisionResponse(238);
   };
   await auth(api, constants);
+  api.registrarBotonesContentControls();
   await api.leerContentControls();
 
   const ok = await api.cambiarOcurrencia(api.getGroups()[0].occurrences[0], "VENDEDOR_1");
@@ -359,6 +362,55 @@ test("change assigns another catalog field through backend", async () => {
   assert.equal(calls[0].body.visible_code, "VENDEDOR_1");
 });
 
+test("change without explicit field opens auxiliary selector without backend decision", async () => {
+  const { api, elements } = loadPlugin({ controls: [suggestionControl()] });
+  api.registrarBotonesContentControls();
+  await api.leerContentControls();
+
+  const ok = await api.cambiarOcurrencia(api.getGroups()[0].occurrences[0]);
+
+  assert.equal(ok, false);
+  assert.equal(api.getCambioOccurrence().occurrence_id, "occ_001");
+  assert.equal(elements.get("panelCambio").className, "change-panel visible");
+});
+
+test("change can create and assign a new field transactionally", async () => {
+  const { api, constants, window, getElement } = loadPlugin({ controls: [suggestionControl()] });
+  const calls = [];
+  window.fetch = async (url, init) => {
+    calls.push({ url, init, body: JSON.parse(init.body) });
+    if (/\/api\/v1\/biblioteca\/campos$/.test(url)) {
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return [{ code: "COMPRADOR_1", label: "Comprador 1", category: "persona" }];
+        },
+      };
+    }
+    return decisionResponse(241);
+  };
+  await auth(api, constants);
+  api.registrarBotonesContentControls();
+  await api.leerContentControls();
+  await api.cambiarOcurrencia(api.getGroups()[0].occurrences[0]);
+  getElement("nuevoCampoCode").value = "EMAIL_COMPRADOR_1";
+  getElement("nuevoCampoLabel").value = "Email comprador 1";
+  getElement("nuevoCampoCategory").value = "contacto";
+  getElement("nuevoCampoType").value = "email";
+
+  const ok = await api.crearYAsignarCampo();
+
+  assert.equal(ok, true);
+  assert.equal(calls.at(-1).body.action, "change");
+  assert.deepEqual(calls.at(-1).body.new_field, {
+    code: "EMAIL_COMPRADOR_1",
+    label: "Email comprador 1",
+    category: "contacto",
+    field_type: "email",
+  });
+});
+
 test("navigation uses Content Control id instead of text search", async () => {
   const { api, executeCalls } = loadPlugin({ controls: [suggestionControl()] });
   await api.leerContentControls();
@@ -366,6 +418,22 @@ test("navigation uses Content Control id instead of text search", async () => {
   await api.navegarAControl(api.getGroups()[0].occurrences[0]);
 
   assert.equal(executeCalls.some((call) => call.name === "MoveCursorToContentControl"), true);
+});
+
+test("decision actions are blocked when OnlyOffice inline buttons are unsupported", async () => {
+  const { api, constants, window } = loadPlugin({ controls: [suggestionControl()], enableContentControlButtons: false });
+  const calls = [];
+  window.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return decisionResponse(236);
+  };
+  await auth(api, constants);
+  await api.leerContentControls();
+
+  const ok = await api.aceptarOcurrencia(api.getGroups()[0].occurrences[0]);
+
+  assert.equal(ok, false);
+  assert.equal(calls.length, 0);
 });
 
 test("cascade updates all controls with same field instance", async () => {
@@ -391,6 +459,7 @@ test("cascade updates all controls with same field instance", async () => {
     };
   };
   await auth(api, constants);
+  api.registrarBotonesContentControls();
   await api.leerContentControls();
 
   await api.aplicarCascada("fi_comprador_1", "Maria Perez");
@@ -432,6 +501,7 @@ test("inline resolver reads the selected Content Control and delegates decision"
     return decisionResponse(240);
   };
   await auth(api, constants);
+  api.registrarBotonesContentControls();
 
   await api.resolverAccionInline("cc-1", "accept");
 
@@ -443,6 +513,7 @@ test("source has no prohibited destructive APIs or arbitrary ranges", () => {
   const source = readFileSync(resolve("onlyoffice-plugin/biblioteca/plugin.js"), "utf8");
   assert.doesNotMatch(source, /SetColor/);
   assert.doesNotMatch(source, /ReplaceAllText/);
+  assert.doesNotMatch(source, /window\.prompt/);
   assert.doesNotMatch(source, /doc\.Search|\.Search\(/);
   assert.doesNotMatch(source, /ranges\[0\]/);
 });

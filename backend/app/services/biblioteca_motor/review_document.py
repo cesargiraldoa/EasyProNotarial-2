@@ -115,7 +115,7 @@ def build_review_groups(suggestions: list[dict[str, Any]], *, analysis_id: str) 
     occurrence_count = 0
     for suggestion in suggestions:
         field_code = str(suggestion.get("field_code") or "").strip()
-        field_instance_id = str(suggestion.get("field_instance_id") or field_code).strip()
+        field_instance_id = str(suggestion.get("field_instance_id") or "").strip()
         visible_code = str(suggestion.get("visible_code") or field_code).strip()
         base_field_code = str(suggestion.get("base_field_code") or field_code).strip()
         original_text = str(suggestion.get("original_text") or "").strip()
@@ -225,7 +225,10 @@ def apply_review_decision_in_docx(docx_bytes: bytes, decision: dict[str, Any]) -
         cells = _table_cells(root)
         paragraph, start, end, reason = _resolve_target(paragraphs, cells, location, original_text)
         if paragraph is None or start is None or end is None:
-            raise ValueError(reason or "location_not_verified")
+            if suggestion_tag or occurrence_id:
+                reason = f"content_control_current:{reason or 'location_not_verified'}"
+            else:
+                raise ValueError(reason or "location_not_verified")
 
     audit = {
         "action": action,
@@ -234,6 +237,7 @@ def apply_review_decision_in_docx(docx_bytes: bytes, decision: dict[str, Any]) -
         "original_text_sha256": hashlib.sha256(control_text.encode("utf-8")).hexdigest() if control_text else None,
         "validated_text": bool(not original_text or control_text == original_text),
         "validated_location": bool(location),
+        "location_validation": reason if location and original_text else "not_requested",
     }
     if action == "reject":
         _remove_highlight(sdt)
@@ -366,6 +370,14 @@ def _resolve_target(
         )
         if cell is None:
             return None, None, None, "table_cell_not_found"
+        paragraph_index = _int_or_none(location.get("paragraph_index"))
+        if paragraph_index is not None:
+            paragraphs_in_cell = cell.findall("w:p", NS)
+            if paragraph_index < 1 or paragraph_index > len(paragraphs_in_cell):
+                return None, None, None, "table_cell_paragraph_not_found"
+            paragraph = paragraphs_in_cell[paragraph_index - 1]
+            text = _paragraph_text(paragraph)
+            return _validate_block(paragraph, text, start, end, original_text, location)
         cell_text = _cell_text(cell)
         ok, reason = _validate_text(cell_text, start, end, original_text, location)
         if not ok:

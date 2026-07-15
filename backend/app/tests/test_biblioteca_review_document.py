@@ -297,7 +297,7 @@ class BibliotecaReviewDocumentTests(unittest.TestCase):
                 },
             )
 
-    def test_apply_review_decision_detects_document_changed_after_analysis(self):
+    def test_apply_review_decision_allows_sequential_same_paragraph_when_control_text_matches(self):
         docx = _docx_with_split_runs()
         text = "LOS COMPRADORES: Daniela Campo firma."
         start = text.index("Daniela Campo")
@@ -305,7 +305,82 @@ class BibliotecaReviewDocumentTests(unittest.TestCase):
         occurrence = result.groups[0]["occurrences"][0]
         stale_location = {**occurrence["location"], "block_hash": "stale"}
 
-        with self.assertRaisesRegex(ValueError, "block_hash_mismatch"):
+        applied = apply_review_decision_in_docx(
+            result.docx_bytes,
+            {
+                "action": "accept",
+                "suggestion_tag": occurrence["tag"],
+                "occurrence_id": occurrence["occurrence_id"],
+                "field_instance_id": "fi_comprador_1",
+                "field_code": "COMPRADOR_1",
+                "visible_code": "COMPRADOR_1",
+                "original_text": occurrence["original_text"],
+                "location": stale_location,
+            },
+        )
+
+        self.assertEqual(applied.audit["location_validation"], "content_control_current:block_hash_mismatch")
+
+    def test_accepts_two_suggestions_in_same_paragraph_across_consecutive_versions(self):
+        text = "LOS COMPRADORES: Daniela Campo y Carlos Ruiz firman."
+        docx = _docx_with_paragraph(text)
+        first_start = text.index("Daniela Campo")
+        second_start = text.index("Carlos Ruiz")
+        first = _suggestion("Daniela Campo", first_start, first_start + len("Daniela Campo"), text)
+        second = _suggestion(
+            "Carlos Ruiz",
+            second_start,
+            second_start + len("Carlos Ruiz"),
+            text,
+            suggestion_id="sug_2",
+            candidate_id="cand_2",
+        )
+        second["field_code"] = "COMPRADOR_2"
+        second["visible_code"] = "COMPRADOR_2"
+        second["field_instance_id"] = "fi_comprador_2"
+        prepared = prepare_review_document(docx, [first, second], analysis_id="analysis_1")
+        first_occurrence = next(item for group in prepared.groups for item in group["occurrences"] if item["original_text"] == "Daniela Campo")
+        second_occurrence = next(item for group in prepared.groups for item in group["occurrences"] if item["original_text"] == "Carlos Ruiz")
+
+        first_applied = apply_review_decision_in_docx(
+            prepared.docx_bytes,
+            {
+                "action": "accept",
+                "suggestion_tag": first_occurrence["tag"],
+                "occurrence_id": first_occurrence["occurrence_id"],
+                "field_instance_id": "fi_comprador_1",
+                "field_code": "COMPRADOR_1",
+                "visible_code": "COMPRADOR_1",
+                "original_text": first_occurrence["original_text"],
+                "location": first_occurrence["location"],
+            },
+        )
+        second_applied = apply_review_decision_in_docx(
+            first_applied.docx_bytes,
+            {
+                "action": "accept",
+                "suggestion_tag": second_occurrence["tag"],
+                "occurrence_id": second_occurrence["occurrence_id"],
+                "field_instance_id": "fi_comprador_2",
+                "field_code": "COMPRADOR_2",
+                "visible_code": "COMPRADOR_2",
+                "original_text": second_occurrence["original_text"],
+                "location": second_occurrence["location"],
+            },
+        )
+
+        self.assertIn("{{COMPRADOR_1}}", visible_text_from_docx(second_applied.docx_bytes))
+        self.assertIn("{{COMPRADOR_2}}", visible_text_from_docx(second_applied.docx_bytes))
+        self.assertTrue(second_applied.audit["location_validation"].startswith("content_control_current:"))
+
+    def test_apply_review_decision_detects_control_text_changed_after_analysis(self):
+        docx = _docx_with_split_runs()
+        text = "LOS COMPRADORES: Daniela Campo firma."
+        start = text.index("Daniela Campo")
+        result = prepare_review_document(docx, [_suggestion("Daniela Campo", start, start + 13, text)], analysis_id="analysis_1")
+        occurrence = result.groups[0]["occurrences"][0]
+
+        with self.assertRaisesRegex(ValueError, "suggestion_text_mismatch"):
             apply_review_decision_in_docx(
                 result.docx_bytes,
                 {
@@ -315,8 +390,8 @@ class BibliotecaReviewDocumentTests(unittest.TestCase):
                     "field_instance_id": "fi_comprador_1",
                     "field_code": "COMPRADOR_1",
                     "visible_code": "COMPRADOR_1",
-                    "original_text": occurrence["original_text"],
-                    "location": stale_location,
+                    "original_text": "Daniela Campos",
+                    "location": occurrence["location"],
                 },
             )
 

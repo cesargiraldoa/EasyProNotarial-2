@@ -36,6 +36,7 @@
   var authReject = null;
   var listenersPreparados = false;
   var botonesInlinePreparados = false;
+  var cambioOccurrence = null;
   var analisisEnCurso = false;
 
   function getPluginConfig() {
@@ -220,6 +221,12 @@
     estado.style.display = "block";
   }
 
+  function decisionesInlineDisponibles() {
+    if (botonesInlinePreparados) return true;
+    mostrarEstado("OnlyOffice no expone botones inline de Content Controls. Abra el documento en una version compatible para revisar sugerencias.", "error");
+    return false;
+  }
+
   function setAnalisisEnCurso(value) {
     analisisEnCurso = value;
     var btn = document.getElementById("btnAnalizar");
@@ -388,6 +395,25 @@
       item.appendChild(label);
       lista.appendChild(item);
     });
+    renderCambioSelect(campos);
+  }
+
+  function renderCambioSelect(campos) {
+    var select = document.getElementById("campoCambioSelect");
+    if (!select) return;
+    var filtro = document.getElementById("campoCambioBuscar");
+    var q = filtro ? filtro.value.trim().toLowerCase() : "";
+    select.innerHTML = "";
+    (campos || []).filter(function (campo) {
+      if (!q) return true;
+      return String(campo.code || "").toLowerCase().indexOf(q) !== -1
+        || String(campo.label || "").toLowerCase().indexOf(q) !== -1;
+    }).forEach(function (campo) {
+      var option = document.createElement("option");
+      option.value = campo.code;
+      option.textContent = campo.code + " - " + campo.label;
+      select.appendChild(option);
+    });
   }
 
   function filtrarCatalogo() {
@@ -397,10 +423,11 @@
       renderCatalogo(camposCatalogo);
       return;
     }
-    renderCatalogo(camposCatalogo.filter(function (campo) {
+    var filtrados = camposCatalogo.filter(function (campo) {
       return String(campo.code || "").toLowerCase().indexOf(q) !== -1
         || String(campo.label || "").toLowerCase().indexOf(q) !== -1;
-    }));
+    });
+    renderCatalogo(filtrados);
   }
 
   function normalizarCatalogo(payload) {
@@ -699,6 +726,7 @@
 
   async function aceptarOcurrencia(occurrence) {
     if (!occurrence || !occurrence.internal_id) return false;
+    if (!decisionesInlineDisponibles()) return false;
     if (esProvisional(occurrence)) {
       mostrarEstado("Asigne el dato a un campo existente o cree uno nuevo antes de aceptar.", "error");
       return false;
@@ -722,6 +750,7 @@
 
   async function rechazarOcurrencia(occurrence) {
     if (!occurrence || !occurrence.internal_id) return false;
+    if (!decisionesInlineDisponibles()) return false;
     try {
       var token = await solicitarToken();
       var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "reject");
@@ -739,20 +768,20 @@
     await rechazarOcurrencia(group.occurrences[0]);
   }
 
-  async function cambiarOcurrencia(occurrence, explicitFieldCode) {
+  async function cambiarOcurrencia(occurrence, explicitFieldCode, newFieldPayload) {
     if (!occurrence || !occurrence.internal_id) return false;
-    var fieldCode = explicitFieldCode;
-    if (!fieldCode && typeof window.prompt === "function") {
-      fieldCode = window.prompt("Codigo de campo", occurrence.visible_code && occurrence.visible_code.indexOf(PROVISIONAL_FIELD_PREFIX) !== 0 ? occurrence.visible_code : "");
+    if (!decisionesInlineDisponibles()) return false;
+    if (!explicitFieldCode && !newFieldPayload) {
+      abrirPanelCambio(occurrence);
+      return false;
     }
+    var fieldCode = explicitFieldCode;
     fieldCode = String(fieldCode || "").trim().toUpperCase();
-    if (!fieldCode) return false;
+    if (!fieldCode && !newFieldPayload) return false;
     try {
       var token = await solicitarToken();
-      var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "change", {
-        field_code: fieldCode,
-        visible_code: fieldCode
-      });
+      var overrides = newFieldPayload ? { new_field: newFieldPayload } : { field_code: fieldCode, visible_code: fieldCode };
+      var result = await decidirSugerenciaBackend(token, documentContextEnMemoria, occurrence, "change", overrides);
       solicitarRecarga(result.review_document, occurrence.analysis_id);
       mostrarEstado("Cambio guardado. Recargando version...", "ok");
       return true;
@@ -760,6 +789,51 @@
       mostrarEstado(error && error.kind === "field_assignment_required" ? "El campo seleccionado no esta disponible en el catalogo." : mensajeError(error), "error");
       return false;
     }
+  }
+
+  function abrirPanelCambio(occurrence) {
+    cambioOccurrence = occurrence;
+    var panel = document.getElementById("panelCambio");
+    if (panel) panel.className = "change-panel visible";
+    renderCambioSelect(camposCatalogo);
+    mostrarEstado("Seleccione un campo o cree uno nuevo para la sugerencia marcada.", "");
+  }
+
+  function cerrarPanelCambio() {
+    cambioOccurrence = null;
+    var panel = document.getElementById("panelCambio");
+    if (panel) panel.className = "change-panel";
+  }
+
+  async function asignarCampoSeleccionado() {
+    if (!cambioOccurrence) return false;
+    var select = document.getElementById("campoCambioSelect");
+    var code = select ? select.value : "";
+    if (!code) return false;
+    var ok = await cambiarOcurrencia(cambioOccurrence, code);
+    if (ok) cerrarPanelCambio();
+    return ok;
+  }
+
+  async function crearYAsignarCampo() {
+    if (!cambioOccurrence) return false;
+    var code = document.getElementById("nuevoCampoCode");
+    var label = document.getElementById("nuevoCampoLabel");
+    var category = document.getElementById("nuevoCampoCategory");
+    var fieldType = document.getElementById("nuevoCampoType");
+    var payload = {
+      code: code ? code.value.trim().toUpperCase() : "",
+      label: label ? label.value.trim() : "",
+      category: category && category.value.trim() ? category.value.trim() : "otro",
+      field_type: fieldType && fieldType.value.trim() ? fieldType.value.trim() : "text"
+    };
+    if (!payload.code || !payload.label) {
+      mostrarEstado("Codigo y nombre son obligatorios para crear el campo.", "error");
+      return false;
+    }
+    var ok = await cambiarOcurrencia(cambioOccurrence, null, payload);
+    if (ok) cerrarPanelCambio();
+    return ok;
   }
 
   async function navegarAControl(control) {
@@ -842,7 +916,11 @@
 
   function registrarBotonesContentControls() {
     if (botonesInlinePreparados) return false;
-    if (!window.Asc || typeof window.Asc.ButtonContentControl !== "function") return false;
+    if (!window.Asc || typeof window.Asc.ButtonContentControl !== "function") {
+      botonesInlinePreparados = false;
+      mostrarEstado("OnlyOffice incompatible: falta Asc.ButtonContentControl para decisiones inline.", "error");
+      return false;
+    }
     var acciones = [
       { action: "accept", icon: "resources/check.svg" },
       { action: "reject", icon: "resources/close.svg" },
@@ -896,6 +974,14 @@
   function prepararDom() {
     var buscar = document.getElementById("buscarCampo");
     if (buscar) buscar.addEventListener("input", filtrarCatalogo);
+    var cambioBuscar = document.getElementById("campoCambioBuscar");
+    if (cambioBuscar) cambioBuscar.addEventListener("input", function () { renderCambioSelect(camposCatalogo); });
+    var btnAsignarCampo = document.getElementById("btnAsignarCampo");
+    if (btnAsignarCampo) btnAsignarCampo.addEventListener("click", asignarCampoSeleccionado);
+    var btnCrearCampo = document.getElementById("btnCrearCampo");
+    if (btnCrearCampo) btnCrearCampo.addEventListener("click", crearYAsignarCampo);
+    var btnCancelarCambio = document.getElementById("btnCancelarCambio");
+    if (btnCancelarCambio) btnCancelarCambio.addEventListener("click", cerrarPanelCambio);
     var btnAnalizar = document.getElementById("btnAnalizar");
     if (btnAnalizar) btnAnalizar.addEventListener("click", analizarDocumento);
   }
@@ -954,6 +1040,10 @@
       aceptarGrupo: aceptarGrupo,
       rechazarGrupo: rechazarGrupo,
       cambiarOcurrencia: cambiarOcurrencia,
+      abrirPanelCambio: abrirPanelCambio,
+      cerrarPanelCambio: cerrarPanelCambio,
+      asignarCampoSeleccionado: asignarCampoSeleccionado,
+      crearYAsignarCampo: crearYAsignarCampo,
       navegarAControl: navegarAControl,
       aplicarCascada: aplicarCascada,
       insertarCampoEstructurado: insertarCampoEstructurado,
@@ -965,6 +1055,7 @@
       getGroups: function () { return gruposActuales; },
       getFields: function () { return fieldsActuales; },
       getActiveControlId: function () { return activeControlId; },
+      getCambioOccurrence: function () { return cambioOccurrence; },
       reset: function () {
         tokenEnMemoria = null;
         documentContextEnMemoria = null;
@@ -973,6 +1064,7 @@
         gruposActuales = [];
         fieldsActuales = [];
         activeControlId = null;
+        cambioOccurrence = null;
         authPromise = null;
         authResolve = null;
         authReject = null;

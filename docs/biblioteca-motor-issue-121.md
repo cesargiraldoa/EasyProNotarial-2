@@ -2,139 +2,82 @@
 
 Fecha: 2026-07-15
 Rama: `biblioteca-motor-issue-121`
+PR: https://github.com/cesargiraldoa/EasyProNotarial-2/pull/123
 Issue fuente: https://github.com/cesargiraldoa/EasyProNotarial-2/issues/121
 
 ## Diagnostico
 
-### Pipeline actual
+### Pipeline anterior
 
-1. Extraccion: `analysis.extract_docx_blocks` lee parrafos y celdas con `python-docx`.
-2. Candidatos: `analysis.extract_candidates` aplica patrones por tipo, calcula offsets, `location_key` y `block_hash`.
-3. Clasificacion: `_deterministic_field_code` asigna algunos `field_code`; `OpenAIBibliotecaClassifier` puede clasificar candidatos elegibles contra catalogo.
-4. Catalogo: `_field_catalog_for_user` lee `notarial_field_catalog`; si no hay match se genera `PENDING_FIELD_*`.
-5. Grupos: `review_document.build_review_groups` agrupa por `field_code + valor + categoria`.
-6. Content Controls: `prepare_review_document` envuelve rangos OOXML con `w:sdt`, `w:tag` y highlight.
-7. Plugin: `GetAllContentControls` reconstruye sugerencias desde tags, navega por `InternalId`, y hoy acepta/rechaza localmente en OnlyOffice.
+El flujo previo mezclaba dos responsabilidades incompatibles:
 
-### Medicion base
+1. Lectura DOCX y ubicaciones aproximadas en `analysis.py`.
+2. Deteccion semantica con patrones, reglas deterministicas y candidatos preseleccionados.
+3. Clasificacion opcional contra catalogo despues de la deteccion.
+4. Identidad basada en `field_code`, valor y cercania local.
+5. Content Controls temporales en OOXML.
+6. Plugin OnlyOffice con revision lateral y mutaciones locales parciales.
 
-Documento sintetico usado: compradores multiples, comprador repetido, vendedores, otorgante, banco, NIT, persona juridica, tabla, runs divididos.
+Problemas confirmados:
 
-Resultado antes de cambios:
+- `field_code` funcionaba como identidad juridica en agrupacion, tags, cascada y plugin.
+- Personas diferentes con el mismo rol podian colisionar.
+- Una misma entidad con varios roles no quedaba modelada explicitamente.
+- Razon social, documento y NIT no quedaban agrupados por entidad juridica de forma confiable.
+- Los `PENDING_FIELD_*` podian avanzar demasiado cerca de la aceptacion.
+- Rechazos y cambios no generaban senales persistentes para aprendizaje.
+- El panel lateral concentraba decisiones que deben ocurrir en el documento.
+- El detector semantico era incremental: regex/cercania primero, LLM despues.
 
-- candidatos detectados: 15
-- candidatos clasificados/catalogados: 10
-- candidatos provisionales: 5
-- grupos: 13
-- ocurrencias: 15
-- controles envueltos: 15
-- skipped por causa: `{}`
+### Camino removido del flujo productivo
 
-Distribucion por campo:
+Se elimino del Motor de Biblioteca productivo:
 
-- `NIT`: 2 ocurrencias, mezcla entidades distintas.
-- `BANCO`: 2 ocurrencias, mezcla entidad financiera repetida sin instancia juridica.
-- `COMPRADOR_1`: 2 ocurrencias, comprador repetido correctamente solo por coincidencia de campo.
-- `CEDULA_COMPRADOR_1`: 1 ocurrencia.
-- `PENDING_FIELD_DOCUMENT_NUMBER_*`: 3 ocurrencias, documentos de comprador 2 y vendedores no asignados.
-- `PENDING_FIELD_PERSON_NAME_*`: 2 ocurrencias, vendedores/persona juridica no asignados.
+- `PATTERNS` como detector principal.
+- `extract_candidates` basado en regex.
+- `_deterministic_field_code`.
+- `OpenAIBibliotecaClassifier` con candidatos preseleccionados.
+- `build_identity_model` por cercania.
+- `_nearest_name`, `_nearest_document` y `_role_from_candidate`.
+- El endpoint legacy `/biblioteca/analizar` quedo como `410 Gone`; no invoca detector ni transforma candidatos.
 
-Fallas confirmadas:
-
-- `field_code` funciona como identidad juridica en grupos, tags, plugin y cascada.
-- Dos personas con el mismo rol no quedan aisladas por entidad.
-- Una persona juridica con razon social + NIT no queda agrupada como entidad.
-- Candidatos provisionales pueden llegar hasta acciones de aceptacion si el plugin no los bloquea.
-- Rechazos no dejan auditoria persistida fuera de memoria/plugin.
-- El panel lateral contiene el flujo principal de decision; el documento solo aporta highlight y navegacion.
-
-### Dependencias actuales de `field_code` como identidad
-
-- `backend/app/services/biblioteca_motor/analysis.py`
-  - `_deterministic_field_code`
-  - `_build_operational_suggestions`
-  - `suggestion_id = hash(candidate_id + field_code)`
-  - `PENDING_FIELD_*` se expone en `field_code`
-- `backend/app/services/biblioteca_motor/review_document.py`
-  - `build_review_groups`: `field_instance_id = field_code`
-  - `group_id = hash(field_code + value + category)`
-  - tag v1 incluye `field_code`
-  - `cascade_field_controls_in_docx` actualiza por `FIELD_TAG_PREFIX + field_code`
-- `frontend/onlyoffice-plugin/biblioteca/plugin.js`
-  - `parseSuggestionTag`: `field_instance_id = parts[6]`
-  - `aceptarOcurrencia`: acepta `occurrence.field_instance_id || occurrence.field_code`
-  - `aplicarCascada`: agrupa por `field_instance_id` que hoy es `field_code`
-  - insercion manual usa `fieldTag(codigoCampo, occurrenceId)`
-
-### APIs OnlyOffice verificadas
-
-Fuente oficial: https://api.onlyoffice.com/docs/plugin-and-macros/interacting-with-editors/document-api/Methods/
-
-Capacidades soportadas relevantes:
-
-- `AddContentControl(type, commonPr)`: crea controles block/inline/row/cell.
-- `GetAllContentControls()`: lista controles con `InternalId`, `Tag`, `Alias`, texto.
-- `InsertAndReplaceContentControls(arrDocuments)`: reemplaza contenido/propiedades de controles por `InternalId`.
-- `RemoveContentControls([{InternalId}])`: retira controles por identificador.
-- `MoveCursorToContentControl(id, isBegin)` y `SelectContentControl(id)`: navegacion/centrado por `InternalId`.
-- `Asc.ButtonContentControl`: desde OnlyOffice 9.0 permite botones custom sobre Content Controls. Esta es la capacidad soportada para acciones inline `Si`, `No`, `Cambiar`.
-- `Input helper`: ventana contextual ligada al cursor, util como fallback documentado para escoger otro campo, no como flujo principal.
-
-Spike existente:
-
-- `frontend/onlyoffice-plugin/biblioteca-spike`
-- Tests automatizados: `frontend/tests/biblioteca-spike.test.mjs`
-- Cubre busqueda de rango, seleccion, highlight, Content Controls, actualizacion y persistencia post-reapertura.
-
-Linea base de pruebas:
-
-- Backend focal con `unittest`: 32/32 OK.
-- Plugin/spike con `node --test`: 26/26 OK.
-- `pytest` no esta instalado en la venv local; se usa `unittest` para la suite focal actual.
+El modulo `backend/app/services/biblioteca_motor/identity.py` fue eliminado. El motor no conserva fallback silencioso: si no hay extractor LLM configurado, el analisis falla sin modificar el DOCX.
 
 ## ADR
 
 ### Decision
 
-El Motor de Biblioteca usara un modelo canonico con identidad juridica separada de `field_code`.
+El Motor de Biblioteca queda como arquitectura LLM-first con backend y OOXML como fuente de verdad:
 
-El backend y OOXML son la fuente de verdad:
+```text
+DOCX versionado
+-> DocumentMap
+-> LLM Extractor
+-> Anchor Resolver
+-> Field Instance Resolver
+-> Content Controls OOXML v2
+-> OnlyOffice
+-> decision humana
+-> nueva version
+-> field_signals
+-> perfil de notaria
+```
 
-- El backend detecta candidatos, crea entidades juridicas, asigna roles y genera `FieldInstance`.
-- El DOCX de revision contiene Content Controls temporales con tags v2 que referencian `field_instance_id` y `occurrence_id`.
-- Al aceptar se convierte el control temporal en control definitivo `easypro:field:v2:*`.
-- Al rechazar se conserva el texto, se quita la estructura temporal y se registra la decision en snapshot/auditoria de version.
-- La cascada opera exclusivamente por `field_instance_id`.
+OnlyOffice sigue siendo el editor y la superficie principal de revision. El panel lateral es auxiliar para navegacion, progreso, seleccion de campo y creacion de campos.
 
-OnlyOffice sera el espacio principal de revision:
+### Responsabilidades
 
-- El texto detectado se resalta en su ubicacion real.
-- Los controles temporales exponen botones inline soportados por `Asc.ButtonContentControl`: `Si`, `No`, `Cambiar`.
-- El panel lateral queda para estado, navegacion, busqueda, insercion manual, creacion de campos y soporte de cambio.
+- `document_map.py`: construye un mapa ordenado de parrafos y parrafos dentro de celdas. No hace deteccion semantica.
+- `llm_extractor.py`: llama al proveedor LLM con salida JSON estricta y valida modelos tipados.
+- `anchor_resolver.py`: verifica `block_id`, texto exacto, ocurrencia, contexto, hashes, offsets y solapamientos.
+- `field_instance_service.py`: genera identidad juridica estable desde entidades, roles y ocurrencias LLM.
+- `field_signal_service.py`: registra senales anonimizadas por decision humana.
+- `notary_prompt_service.py`: compila perfiles versionados por notaria y recupera ejemplos relevantes.
+- `review_document.py`: modifica OOXML v2, valida texto actual, aplica decisiones y cascada por `field_instance_id`.
 
-### Contratos canonicos
+### Contratos
 
-- `DetectedCandidate`: dato detectado con tipo, texto, contexto y ubicacion verificable.
-- `LegalEntity`: persona natural, persona juridica o entidad financiera con nombre/documento/NIT normalizados.
-- `LegalRoleAssignment`: relacion entidad-rol con cardinalidad (`COMPRADOR_1`, `COMPRADOR_2`, etc.).
-- `FieldDefinition`: campo base de catalogo, no identidad de instancia.
-- `FieldInstance`: instancia juridica estable; separa `base_field_code`, `visible_code`, entidad, rol y estado.
-- `FieldOccurrence`: ocurrencia exacta en DOCX con hash, offset y tag.
-- `ReviewSuggestion`: sugerencia revisable; puede ser definitiva o provisional.
-- `ReviewDecision`: accion del protocolista con revalidacion y auditoria.
-
-### Consecuencias
-
-- Se elimina la arquitectura paralela donde el plugin decide con `field_code` y el backend solo prepara.
-- `PENDING_FIELD_*` se mantiene como estado provisional, pero no puede aceptarse directamente.
-- El catalogo puede sugerir codigos visibles, pero la cascada y persistencia no dependen de ellos.
-- No hay reemplazos globales por texto; toda mutacion ocurre sobre rangos/controles OOXML identificados.
-
-## Estado implementado
-
-### Modelo canonico
-
-Se agregaron contratos tipados en `backend/app/services/biblioteca_motor/contracts.py`:
+Contratos canonicos existentes en `contracts.py`:
 
 - `DetectedCandidate`
 - `LegalEntity`
@@ -145,29 +88,50 @@ Se agregaron contratos tipados en `backend/app/services/biblioteca_motor/contrac
 - `ReviewSuggestion`
 - `ReviewDecision`
 
-La identidad queda separada asi:
+Contratos LLM estrictos en `llm_extractor.py`:
 
-- `base_field_code`: dato juridico base, por ejemplo `NOMBRE`, `NUMERO_DOCUMENTO`, `NIT`.
-- `field_instance_id`: identidad estable para cascada y persistencia.
-- `visible_code`: codigo mostrado al usuario, por ejemplo `COMPRADOR_1`.
-- `field_code`: campo de catalogo autorizado.
-- `occurrence_id`: aparicion exacta del rango en OOXML.
-- `entity_id` y `role`: entidad juridica y asignacion de rol.
+- `LLMEntity`
+- `LLMRole`
+- `LLMFieldInstance`
+- `LLMOccurrence`
+- `LLMUnmappedField`
+- `LLMExtraction`
+- `LLMExtractionAudit`
+- `LLMExtractionResult`
+
+La salida LLM debe contener `document_type`, `entities`, `roles`, `field_instances`, `occurrences`, `unmapped_fields`, `confidence`, `reason` y `diagnostics`.
+
+Cada ocurrencia debe incluir `block_id`, `exact_text`, `occurrence_index`, `left_context` y `right_context`. El LLM no devuelve offsets confiables y nunca modifica documentos.
+
+### Identidad
+
+Se separan conceptos que antes estaban mezclados:
+
+- `base_field_code`: dato juridico base, por ejemplo `NOMBRE`, `NIT`, `NUMERO_DOCUMENTO`.
+- `field_code`: codigo de catalogo autorizado.
+- `visible_code`: codigo visible para revision, por ejemplo `COMPRADOR_1`.
+- `field_instance_id`: identidad juridica estable para cascada y persistencia.
+- `occurrence_id`: aparicion exacta en el DOCX.
+- `entity_id`: entidad juridica generada por backend.
+- `role_assignment_id`: asignacion entidad-rol con ordinal por rol.
 - `catalog_status` y `review_status`: estado de catalogo y revision.
 
-### Identidad juridica
+`field_instance_id` nunca se deriva solamente de `field_code`; incluye entidad, rol, tipo de candidato, base y referencia LLM. Cambiar un campo resuelve una instancia destino existente o crea una nueva, sin reutilizar automaticamente la instancia anterior.
 
-`identity.py` agrupa candidatos por entidad y rol:
+### Campos provisionales
 
-- nombres, cedulas, razon social, NIT y bancos se asocian por bloque/contexto y cercania;
-- compradores y vendedores multiples reciben cardinalidad `COMPRADOR_1`, `COMPRADOR_2`, `VENDEDOR_1`, `VENDEDOR_2`;
-- la misma entidad repetida conserva el mismo `field_instance_id`;
-- personas distintas con el mismo rol quedan aisladas por `entity_id`;
-- una entidad puede aparecer con varios roles sin perder su identidad de dato;
-- persona juridica y NIT comparten entidad cuando aparecen vinculados;
-- banco y NIT financiero se agrupan como entidad financiera.
+Los datos utiles fuera del catalogo se conservan como sugerencias con `catalog_status = unmapped` y `PENDING_FIELD_*`.
 
-### Tags OOXML v2
+Reglas:
+
+- No se pueden aceptar directamente.
+- Se pueden cambiar a campo existente.
+- Se puede crear un nuevo campo con `code`, `label`, `category` y `field_type`.
+- Solo despues de asignar o crear campo se convierte en `FieldInstance` definitiva.
+
+### OnlyOffice
+
+Se mantiene Content Controls OOXML v2.
 
 Sugerencia temporal:
 
@@ -181,84 +145,121 @@ Campo definitivo:
 easypro:field:v2:<field_instance_id>:<occurrence_id>:<visible_code>:<field_code>
 ```
 
-Los tags v1 ya no son el camino principal del flujo nuevo.
+El plugin valida `Asc.ButtonContentControl` como capability gate real. Si no esta disponible, bloquea decisiones y muestra incompatibilidad. No degrada silenciosamente al panel lateral.
 
-### Decisiones
+Se elimino `window.prompt`. `Cambiar` abre un selector auxiliar de campo existente o formulario de creacion de campo; el backend recibe `new_field` y aplica la decision en una transaccion.
 
-Nuevo endpoint:
+Para decisiones secuenciales en un mismo parrafo, el backend usa version actual, `suggestion_tag`, `occurrence_id` y texto actual del Content Control. Si los offsets/hash del bloque original ya no coinciden por una decision previa, se permite aplicar sobre el Content Control vigente solo si su texto coincide exactamente.
+
+### Datos y migracion
+
+Migracion Alembic:
 
 ```text
-POST /api/v1/biblioteca/decidir
+backend/alembic/versions/20260715_add_biblioteca_learning.py
 ```
 
-Acciones:
+Tablas:
 
-- `accept`: revalida texto, ubicacion y hash; convierte el Content Control temporal en campo definitivo.
-- `reject`: conserva texto original, quita estructura temporal y registra auditoria.
-- `change`: asigna otro campo existente o crea uno nuevo, y solo despues convierte la ocurrencia.
+- `biblioteca_analysis_runs`: notaria, caso/documento/versiones, hash documental, modelo, prompt/profile version, estado, tokens, latencia, costo, detectados, anclados, skipped, errores y diagnosticos.
+- `field_signals`: notaria, analysis run, documento/versiones, tipo documental, seccion, entidad, rol, tipo de candidato, contexto anonimizado, hash de texto exacto, sugerencia LLM segura, decision humana, campo final, instancia final, usuario, modelo y versiones.
+- `notary_prompt_profiles`: version por notaria, estado, reglas compiladas, alias, patrones positivos/negativos, preferencias de campos, conteo e ultimo id de senales fuente, fechas de generacion y activacion.
 
-Reglas:
+Las decisiones registradas son `accepted`, `rejected`, `changed` y `created_field`.
 
-- `PENDING_FIELD_*` no puede aceptarse directamente.
-- si el catalogo no contiene el campo asignado, la decision falla.
-- la creacion de campo dentro de `change` queda en la misma transaccion que la decision OOXML.
-- si el documento cambio despues del analisis, la decision falla por revalidacion.
+### Aprendizaje por notaria
 
-### Cascada
+Cada decision inserta `field_signal` en la misma transaccion que crea la nueva version documental. Si falla la persistencia, hay rollback completo.
 
-`POST /api/v1/biblioteca/actualizar-campo` aplica cambios por `field_instance_id` usando Content Controls definitivos `easypro:field:v2:*`. El plugin ya no realiza una mutacion local paralela antes del backend.
+El compilador:
 
-### UX OnlyOffice
+- agrega patrones repetidos;
+- prioriza frecuencia y recencia mediante senales recuperadas;
+- ignora senales aisladas con umbral minimo;
+- anonimiza contexto;
+- genera reglas, alias, patrones positivos, patrones negativos y preferencias;
+- versiona perfiles;
+- mantiene un solo perfil activo por notaria.
 
-- El backend envuelve el texto exacto detectado con highlight en su ubicacion real.
-- El plugin registra botones inline con `Asc.ButtonContentControl`: `Si`, `No`, `Cambiar`.
-- Las acciones inline reconstruyen el estado desde `GetAllContentControls`, ubican la ocurrencia por `InternalId` y delegan la decision al backend.
-- El panel lateral queda como auxiliar para estado, navegacion, busqueda, insercion manual, cascada y soporte de cambio.
+Antes de analizar se carga el perfil activo y se recuperan ejemplos historicos relevantes. El retrieval esta acotado y ordena por misma notaria, tipo documental, seccion, rol, tipo de campo, frecuencia/score y recencia. No se envia toda la tabla `field_signals`.
 
-### Medicion posterior
+### Privacidad y seguridad
 
-Documento sintetico ampliado: compradores multiples, comprador repetido, dos vendedores, otorgantes, banco repetido, NIT financiero, persona juridica con NIT, tabla, valor y cedula catastral.
+- No se registran documentos completos en logs.
+- `field_signals` no guarda nombres, cedulas o NIT en texto plano.
+- El texto exacto se persiste solo como SHA-256.
+- El contexto se anonimiza antes de persistir.
+- La salida LLM se valida con modelos Pydantic `extra="forbid"`.
+- Los codigos de catalogo se verifican.
+- `PENDING_FIELD_*` no se acepta directamente.
+- Las mutaciones OOXML son por Content Control/rango verificado, no por reemplazo global de texto.
+- La cascada opera solo por `field_instance_id`.
 
-Resultado despues de implementar identidad juridica:
+### Costos
 
-- candidatos detectados: 19
-- candidatos clasificados/catalogados: 19
-- candidatos provisionales: 0
-- grupos: 15
-- ocurrencias: 19
-- controles envueltos: 19
-- skipped por causa: `[]`
+`biblioteca_analysis_runs` guarda tokens de entrada/salida, latencia y costo si el proveedor lo expone. El ADR no fija costo unitario porque depende del modelo configurado y de tarifas externas. El prompt actual usa version `biblioteca-llm-v1`.
 
-Casos cubiertos por pruebas:
+### Metricas
 
-- multiples compradores;
-- mismo comprador repetido;
-- dos personas diferentes con el mismo rol;
-- persona juridica con razon social + NIT;
-- banco + NIT;
-- misma entidad con varios roles;
-- campo fuera del catalogo;
-- tablas;
-- runs divididos;
-- multiples controles en el mismo parrafo sin solapamiento;
-- aceptacion;
-- rechazo;
-- cambiar campo;
-- cascada por `field_instance_id`;
-- documento editado despues del analisis;
-- preservacion de texto/formato;
-- cero reemplazos globales.
+DOCX sintetico:
 
-### Cobertura antes/despues
+- candidatos detectados: 6
+- candidatos clasificados/catalogados: 5
+- candidatos provisionales: 1
+- grupos: 5
+- ocurrencias: 6
+- controles envueltos: 6
+- skipped por causa: `{}`
+- anchor success aplicado: 1.0
 
-- Antes de cambios: backend focal `unittest` 32/32 OK; plugin + spike `node --test` 26/26 OK.
-- Despues de cambios: backend focal 42/42 OK; backend completo 265 OK, 1 skipped; plugin 16/16 OK; spike 16/16 OK; puente auth OnlyOffice 8/8 OK.
+Corpus privado/anonimizado con fixtures LLM:
+
+- casos: 3
+- textos utiles esperados: 18
+- textos encontrados: 18
+- sugerencias inesperadas: 0
+- sugerencias provisionales: 1
+- skips: 0
+- controles envueltos: 18
+- recall: 1.0
+- precision: 1.0
+- anchor success aplicado: 1.0
+- `PENDING_FIELD` aceptados: 0
+
+El corpus cubre compraventa simple, compraventa con hipoteca, propiedad horizontal, personas naturales, personas juridicas, patrimonio autonomo, fiduciaria, bancos, apoderados, multiples compradores, multiples vendedores, misma entidad con varios roles, tablas, multiples campos en el mismo parrafo, campos fuera del catalogo y referencias legales que deben rechazarse.
+
+### Validacion ejecutada
+
+- Migraciones: `alembic upgrade head`, `alembic downgrade 20260714_add_notarial_field_catalog`, `alembic upgrade head`.
+- `py_compile`: OK en modulos modificados.
+- Backend focal: 23 tests OK.
+- Backend completo: 246 tests OK, 1 skipped.
+- Integracion LLM con fixtures/mocks: incluida en backend focal y completo.
+- Plugin + spike OnlyOffice: 35 tests OK.
+- Auth bridge OnlyOffice: 8 tests OK.
+- Frontend build: `npm.cmd run build` OK.
+- `git diff --check`: OK, con advertencias normales de CRLF.
+- DOCX sintetico: OK, OOXML envuelto sin perdida de texto visible.
+- Corpus anonimizado: recall 1.0, precision 1.0.
+- Versionado y reapertura: cubierto por snapshot/backend y pruebas de persistencia OOXML automatizadas.
 
 ### Validacion no ejecutada
 
-No se valido manualmente un documento real limpio dentro de una sesion viva de OnlyOffice en este entorno: `docker compose ps` no pudo conectar con Docker Desktop porque el daemon no esta activo. La cobertura disponible queda en:
+No se ejecuto una prueba manual en un OnlyOffice productivo vivo desde este entorno. `docker compose ps` no pudo conectar con Docker Desktop:
 
-- DOCX sintetico real generado con `python-docx`, analizado y envuelto con OOXML;
-- spike automatizado de capacidades OnlyOffice;
-- pruebas del plugin contra `GetAllContentControls`, `MoveCursorToContentControl`, `InsertAndReplaceContentControls`, `AddContentControl` y `Asc.ButtonContentControl`;
-- build frontend completo.
+```text
+failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
+```
+
+La prueba manual debe ejecutarse en el entorno productivo/staging de OnlyOffice con Docker disponible.
+
+### Rollback
+
+1. Revertir el commit del PR antes de merge si la validacion manual falla.
+2. Si la migracion fue aplicada en un entorno de prueba, ejecutar:
+
+```text
+alembic downgrade 20260714_add_notarial_field_catalog
+```
+
+3. No hay despliegue ni merge desde este PR. La ruta legacy `/biblioteca/analizar` permanece deshabilitada con `410 Gone`; el flujo soportado es `analizar-actual` y `analizar-y-preparar`.
