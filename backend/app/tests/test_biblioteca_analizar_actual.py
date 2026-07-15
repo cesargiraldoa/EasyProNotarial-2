@@ -11,6 +11,7 @@ from app.api.v1.endpoints import biblioteca
 from app.services.biblioteca_motor.analysis import (
     ANALYSIS_TOTAL_BUDGET_SECONDS,
     MAX_AI_CANDIDATES,
+    PROVISIONAL_FIELD_PREFIX,
     analyze_biblioteca_document,
     extract_candidates,
     extract_docx_blocks,
@@ -177,17 +178,20 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertEqual(result["suggestions"][0]["field_code"], "VENDEDOR_1")
         self.assertEqual(result["suggestions"][0]["source"], "ai")
 
-    def test_unknown_ai_field_code_is_not_renderable_suggestion(self):
+    def test_unknown_ai_field_code_remains_as_provisional_suggestion(self):
         docx = _docx_bytes(["LOS VENDEDORES: Carlos Perez comparece al otorgamiento."])
 
         def classify(candidates, fields):
             return [{"candidate_id": candidates[0].candidate_id, "field_code": "NO_EXISTE", "confidence": 0.8}]
 
         result = analyze_biblioteca_document(docx, _fields(), ai_classifier=_Classifier(classify))
+        suggestion = next(item for item in result["suggestions"] if item["original_text"] == "Carlos Perez")
 
-        self.assertEqual(result["suggestions"], [])
-        self.assertEqual(result["stats"]["suggestions"], 0)
-        self.assertGreaterEqual(result["stats"]["unclassified_candidates"], 1)
+        self.assertTrue(suggestion["field_code"].startswith(PROVISIONAL_FIELD_PREFIX))
+        self.assertEqual(suggestion["catalog_status"], "unmapped")
+        self.assertTrue(suggestion["requires_field_assignment"])
+        self.assertEqual(suggestion["field_label"], "Campo nuevo por definir")
+        self.assertGreaterEqual(result["stats"]["provisional_suggestions"], 1)
 
     def test_ai_is_not_called_for_high_certainty_deterministic_candidates(self):
         classifier = _FailingClassifier()
@@ -213,16 +217,27 @@ class BibliotecaAnalizarActualTests(unittest.TestCase):
         self.assertTrue(location["block_hash"])
         self.assertEqual(location["char_end"] - location["char_start"], len("Daniela Campo"))
 
-    def test_many_candidates_do_not_become_many_suggestions_without_fields(self):
+    def test_candidates_without_catalog_match_remain_bounded_provisional_suggestions(self):
         paragraphs = ["LOS COMPRADORES: Daniela Campo"]
         paragraphs.extend([f"Banco Demo aprobo credito {index}" for index in range(80)])
         docx = _docx_bytes(paragraphs)
         limited_fields = [{"code": "COMPRADOR_1", "label": "Comprador 1", "category": "persona"}]
         result = analyze_biblioteca_document(docx, limited_fields, ai_classifier=None)
 
-        self.assertGreater(result["stats"]["deterministic_candidates"], result["stats"]["suggestions"])
-        self.assertLess(result["stats"]["suggestions"], result["stats"]["deterministic_candidates"])
-        self.assertTrue(all(item["field_code"] for item in result["suggestions"]))
+        self.assertEqual(result["stats"]["deterministic_candidates"], result["stats"]["suggestions"])
+        self.assertEqual(result["stats"]["provisional_suggestions"], 80)
+        provisional = [item for item in result["suggestions"] if item["catalog_status"] == "unmapped"]
+        self.assertEqual(len(provisional), 80)
+        self.assertTrue(all(item["requires_field_assignment"] for item in provisional))
+
+    def test_same_unmapped_value_uses_same_provisional_identity(self):
+        docx = _docx_bytes(["LOS VENDEDORES: Carlos Perez comparece. Carlos Perez firma."])
+        result = analyze_biblioteca_document(docx, [], ai_classifier=None)
+        suggestions = [item for item in result["suggestions"] if item["original_text"] == "Carlos Perez"]
+
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual(len({item["field_code"] for item in suggestions}), 1)
+        self.assertTrue(suggestions[0]["field_code"].startswith(PROVISIONAL_FIELD_PREFIX))
 
     def test_legal_headings_are_not_person_names(self):
         docx = _docx_bytes(["LOS COMPRADORES VALOR DEL ACTO INSTRUMENTO PUBLICO"])
