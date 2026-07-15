@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any
 
 from app.services.biblioteca_motor.anchor_resolver import resolve_anchors
+from app.services.biblioteca_motor.comprehensive_extractor import ComprehensiveBibliotecaExtractor
 from app.services.biblioteca_motor.contracts import FieldDefinition
 from app.services.biblioteca_motor.document_map import DocumentMap, build_document_map
 from app.services.biblioteca_motor.field_instance_service import resolve_field_instances
@@ -21,8 +22,8 @@ from app.services.biblioteca_motor.llm_extractor import (
 )
 
 
-MAX_OPERATIONAL_SUGGESTIONS = 160
-ANALYSIS_TOTAL_BUDGET_SECONDS = 45.0
+MAX_OPERATIONAL_SUGGESTIONS = 1000
+ANALYSIS_TOTAL_BUDGET_SECONDS = 300.0
 
 
 def analyze_biblioteca_document(
@@ -38,12 +39,21 @@ def analyze_biblioteca_document(
 ) -> dict[str, Any]:
     started = time.perf_counter()
     field_defs = [_field_definition(item) for item in fields]
+    map_started = time.perf_counter()
     document_map = build_document_map(docx_bytes)
+    document_map_ms = _elapsed_ms(map_started)
     if extractor is None:
         raise LLMExtractorUnavailable("El Motor de Biblioteca requiere extractor LLM configurado.")
+    if isinstance(extractor, OpenAIBibliotecaExtractor):
+        extractor = ComprehensiveBibliotecaExtractor(extractor)
 
     llm_started = time.perf_counter()
-    llm_result = extractor.extract(document_map, field_defs, active_profile=active_profile, examples=examples)
+    llm_result = extractor.extract(
+        document_map,
+        field_defs,
+        active_profile=active_profile,
+        examples=examples,
+    )
     llm_ms = _elapsed_ms(llm_started)
 
     anchor_started = time.perf_counter()
@@ -66,9 +76,13 @@ def analyze_biblioteca_document(
     provisional_total = sum(1 for item in suggestions if item["catalog_status"] == "unmapped")
     catalogued_total = sum(1 for item in suggestions if item["catalog_status"] == "matched")
     total_ms = _elapsed_ms(started)
+    anchor_denominator = len(anchors.anchored) + len(anchors.skipped)
 
     return {
-        "analysis_id": "analysis_" + hashlib.sha256(f"{document_map.document_sha256}:{llm_result.audit.model}:{llm_result.audit.prompt_version}".encode("utf-8")).hexdigest()[:16],
+        "analysis_id": "analysis_"
+        + hashlib.sha256(
+            f"{document_map.document_sha256}:{llm_result.audit.model}:{llm_result.audit.prompt_version}".encode("utf-8"),
+        ).hexdigest()[:16],
         "mode": "llm_first",
         "status": "completed_llm",
         "document_type": llm_result.extraction.document_type,
@@ -80,6 +94,7 @@ def analyze_biblioteca_document(
         "suggestions": suggestions,
         "stats": {
             "document_map_blocks": len(document_map.blocks),
+            "document_map_chars": sum(len(block.text) for block in document_map.blocks),
             "llm_field_instances": len(llm_result.extraction.field_instances),
             "llm_occurrences": len(llm_result.extraction.occurrences),
             "detected_candidates": len(llm_result.extraction.occurrences),
@@ -90,7 +105,9 @@ def analyze_biblioteca_document(
             "skipped_suggestions": len(anchors.skipped),
             "suggestions": len(suggestions),
             "omitted_suggestions": omitted,
-            "anchor_success_rate_applied": 1.0 if suggestions else 0.0,
+            "anchor_success_rate_applied": (
+                len(anchors.anchored) / anchor_denominator if anchor_denominator else 0.0
+            ),
         },
         "diagnostics": {
             "llm": _llm_diagnostics(llm_result),
@@ -110,7 +127,7 @@ def analyze_biblioteca_document(
         },
         "timing": {
             "download_ms": 0,
-            "document_map_ms": 0,
+            "document_map_ms": document_map_ms,
             "llm_ms": llm_ms,
             "anchor_ms": anchor_ms,
             "field_instance_ms": instance_ms,
