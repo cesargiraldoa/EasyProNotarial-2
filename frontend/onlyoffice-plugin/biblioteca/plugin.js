@@ -34,6 +34,7 @@
   var authTimer = null;
   var authResolve = null;
   var authReject = null;
+  var authRequiredContextKind = null;
   var listenersPreparados = false;
   var botonesInlinePreparados = false;
   var cambioOccurrence = null;
@@ -100,13 +101,19 @@
 
   function resolverAuth(token, documentContext) {
     tokenEnMemoria = token;
-    documentContextEnMemoria = documentContext || null;
+    if (documentContext) {
+      documentContextEnMemoria = documentContext;
+    }
+    if (authRequiredContextKind && (!documentContextEnMemoria || documentContextEnMemoria.kind !== authRequiredContextKind)) {
+      return;
+    }
     if (authTimer) window.clearTimeout(authTimer);
     authTimer = null;
     var resolve = authResolve;
     authPromise = null;
     authResolve = null;
     authReject = null;
+    authRequiredContextKind = null;
     if (resolve) resolve(token);
   }
 
@@ -117,6 +124,7 @@
     authPromise = null;
     authResolve = null;
     authReject = null;
+    authRequiredContextKind = null;
     if (reject) reject(crearError(kind));
   }
 
@@ -198,19 +206,39 @@
     listenersPreparados = true;
   }
 
-  function solicitarToken() {
+  function solicitarAuth(requiredContextKind, force) {
     prepararListeners();
-    if (tokenEnMemoria) return Promise.resolve(tokenEnMemoria);
-    if (authPromise) return authPromise;
+    if (!force && tokenEnMemoria) return Promise.resolve(tokenEnMemoria);
+    if (authPromise) {
+      if (force) {
+        authRequiredContextKind = requiredContextKind || authRequiredContextKind || null;
+        if (authTimer) window.clearTimeout(authTimer);
+        authTimer = window.setTimeout(function () {
+          rechazarAuth("auth_timeout");
+        }, Number(getPluginConfig().authTimeoutMs || AUTH_TIMEOUT_MS));
+        enviarSolicitudAuth();
+      }
+      return authPromise;
+    }
+    if (authTimer) window.clearTimeout(authTimer);
     authPromise = new Promise(function (resolve, reject) {
       authResolve = resolve;
       authReject = reject;
+      authRequiredContextKind = requiredContextKind || null;
       authTimer = window.setTimeout(function () {
         rechazarAuth("auth_timeout");
       }, Number(getPluginConfig().authTimeoutMs || AUTH_TIMEOUT_MS));
       enviarSolicitudAuth();
     });
     return authPromise;
+  }
+
+  function solicitarToken() {
+    return solicitarAuth(null, false);
+  }
+
+  function refrescarAuthContexto() {
+    return solicitarAuth("minuta", true);
   }
 
   function mostrarEstado(msg, tipo) {
@@ -1019,6 +1047,7 @@
     test: {
       handleAuthMessage: handleAuthMessage,
       solicitarToken: solicitarToken,
+      refrescarAuthContexto: refrescarAuthContexto,
       cargarCatalogoConToken: cargarCatalogoConToken,
       analizarYPrepararConToken: analizarYPrepararConToken,
       actualizarCampoBackend: actualizarCampoBackend,
@@ -1070,6 +1099,7 @@
         authPromise = null;
         authResolve = null;
         authReject = null;
+        authRequiredContextKind = null;
         analisisEnCurso = false;
         if (authTimer) window.clearTimeout(authTimer);
         authTimer = null;

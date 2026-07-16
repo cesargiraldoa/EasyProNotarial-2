@@ -325,8 +325,18 @@
       var token = await api.test.solicitarToken();
       var context = currentContext();
       if (!context || context.kind !== "minuta" || !context.editor_token) {
-        state("Esta accion solo esta disponible al editar una plantilla de minuta.", "error");
-        return;
+        if (typeof api.test.refrescarAuthContexto === "function") {
+          try {
+            token = await api.test.refrescarAuthContexto();
+          } catch (_error) {
+            // The explicit availability error below is clearer for this flow.
+          }
+          context = currentContext();
+        }
+        if (!context || context.kind !== "minuta" || !context.editor_token) {
+          state("Esta accion solo esta disponible al editar una plantilla de minuta.", "error");
+          return;
+        }
       }
       state("Guardando plantilla en OnlyOffice...", "");
       await requestSave();
@@ -416,8 +426,6 @@
     document.getElementById("btnCrearEInsertar").addEventListener("click", createAndInsert);
     document.getElementById("btnGuardarPlantillaVolver").addEventListener("click", saveTemplateAndReturn);
 
-    var observer = new MutationObserver(hideLegacyTemplateControls);
-    observer.observe(document.body, { childList: true, subtree: true });
     detectTemplateMode();
   }
 
