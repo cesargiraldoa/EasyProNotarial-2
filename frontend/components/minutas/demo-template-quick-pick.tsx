@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { CheckCircle2, FileText, Loader2 } from "lucide-react";
 
-const DEMO_TEMPLATE_URL = "/demo/minuta-jaggua-hipoteca-banco-bogota-2-compradores.docx";
+import { getToken } from "@/lib/auth";
+import { buildApiUrl } from "@/lib/config";
+
 const DEMO_TEMPLATE_NAME = "MINUTA JAGGUA HIPOTECA BANCO DE BOGOTÁ - 2 COMPRADORES.docx";
 
 export function DemoTemplateQuickPick() {
@@ -15,8 +17,16 @@ export function DemoTemplateQuickPick() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(DEMO_TEMPLATE_URL, { cache: "no-store" });
-      if (!response.ok) throw new Error("No fue posible cargar la plantilla disponible.");
+      const token = getToken();
+      const response = await fetch(buildApiUrl("/api/v1/demo-templates/jaggua-2-compradores"), {
+        cache: "no-store",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { detail?: string } | null;
+        throw new Error(payload?.detail || "No fue posible cargar la plantilla disponible.");
+      }
       const blob = await response.blob();
       const file = new File([blob], DEMO_TEMPLATE_NAME, {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
