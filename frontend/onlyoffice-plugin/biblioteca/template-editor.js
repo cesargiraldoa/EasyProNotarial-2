@@ -123,10 +123,28 @@
       var payload = JSON.parse(Asc.scope.easyproTemplateMarkerPayload || "{}");
       var marker = String(payload.marker || "");
       if (!marker) return JSON.stringify({ ok: false });
-      var paragraph = Api.CreateParagraph();
-      paragraph.AddText(marker);
-      Api.GetDocument().InsertContent([paragraph], true);
-      return JSON.stringify({ ok: true });
+      var document = Api.GetDocument();
+      // Automated tests can assert that we avoid paragraph insertion; final cursor fidelity still requires manual verification in real OnlyOffice.
+      var range = document && typeof document.GetRangeBySelect === "function"
+        ? document.GetRangeBySelect()
+        : null;
+      if (range && typeof range.SetText === "function") {
+        range.SetText(marker);
+        return JSON.stringify({ ok: true, mode: "range.SetText" });
+      }
+      if (range && typeof range.AddText === "function") {
+        range.AddText(marker);
+        return JSON.stringify({ ok: true, mode: "range.AddText" });
+      }
+      if (typeof Api.CreateRun === "function" && document && typeof document.InsertContent === "function") {
+        var run = Api.CreateRun();
+        if (run && typeof run.AddText === "function") {
+          run.AddText(marker);
+          document.InsertContent([run], true);
+          return JSON.stringify({ ok: true, mode: "InsertContent.run" });
+        }
+      }
+      return JSON.stringify({ ok: false, reason: "inline_api_unavailable" });
     } catch (_error) {
       return JSON.stringify({ ok: false });
     }
@@ -179,7 +197,8 @@
       g: HIGHLIGHT.g,
       b: HIGHLIGHT.b
     };
-    var inserted = await command("easyproTemplateMarkerPayload", payload, insertMarkerTextCommand);
+    var pasted = await execute("PasteText", [marker]);
+    var inserted = pasted && pasted.ok ? { ok: true, mode: "PasteText" } : await command("easyproTemplateMarkerPayload", payload, insertMarkerTextCommand);
     if (!inserted || inserted.ok !== true) {
       state("No fue posible insertar la etiqueta en la posicion del cursor.", "error");
       return;
@@ -271,9 +290,10 @@
     return new Promise(function (resolve) { window.setTimeout(resolve, ms); });
   }
 
-  async function waitForSavedState(token, editorToken) {
+  async function waitForSavedState(token, editorToken, onTick) {
     var latest = null;
-    for (var attempt = 0; attempt < 12; attempt += 1) {
+    for (var attempt = 0; attempt < 60; attempt += 1) {
+      if (typeof onTick === "function") onTick(attempt);
       latest = await fetchEditorState(token, editorToken);
       if (latest && latest.saved) return latest;
       await delay(1000);
@@ -310,8 +330,10 @@
       }
       state("Guardando plantilla en OnlyOffice...", "");
       await requestSave();
-      state("Esperando confirmacion de guardado...", "");
-      var payload = await waitForSavedState(token, context.editor_token);
+      state("Esperando confirmacion de guardado... 0s", "");
+      var payload = await waitForSavedState(token, context.editor_token, function (attempt) {
+        state("Esperando confirmacion de guardado... " + String(attempt) + "s", "");
+      });
       if (!payload || !payload.saved) {
         state("OnlyOffice aun no confirmo el guardado. Guarda el documento y vuelve a intentar.", "error");
         return;

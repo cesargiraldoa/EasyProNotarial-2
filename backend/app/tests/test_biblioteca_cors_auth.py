@@ -6,11 +6,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.api.v1.endpoints.biblioteca import list_field_catalog
+from app.api.v1.endpoints.biblioteca import CreateFieldRequest, create_field_catalog, list_field_catalog
 from app.main import FlexibleCORSMiddleware, app as main_app
 from app.models.base import Base
 from app.models.notary import Notary  # noqa: F401 - needed for notarial_field_catalog FK metadata
 from app.models.notarial_field_catalog import NotarialFieldCatalog
+from app.services.minuta.inverse_conversion_catalog.models import FieldDefinition
 
 
 ONLYOFFICE_ORIGIN = "https://onlyoffice.easypronotarial.com"
@@ -130,6 +131,33 @@ class BibliotecaCorsAuthTests(unittest.TestCase):
             )
 
             self.assertEqual(filtered_result, [])
+        finally:
+            db.close()
+
+    def test_create_field_syncs_catalog_and_field_definitions(self):
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        SessionLocal = sessionmaker(bind=engine)
+        db = SessionLocal()
+        try:
+            current_user = SimpleNamespace(id=7, default_notary_id=10)
+            payload = CreateFieldRequest(
+                code="NUMERO_GARAJE",
+                label="Numero garaje",
+                category="inmueble",
+                field_type="text",
+                scope="notary",
+            )
+
+            field = create_field_catalog(payload=payload, db=db, current_user=current_user)
+            repeated = create_field_catalog(payload=payload, db=db, current_user=current_user)
+
+            self.assertEqual(field.code, "NUMERO_GARAJE")
+            self.assertEqual(repeated.id, field.id)
+            self.assertEqual(db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.code == "NUMERO_GARAJE").count(), 1)
+            self.assertEqual(db.query(FieldDefinition).filter(FieldDefinition.field_code == "NUMERO_GARAJE").count(), 1)
+            definition = db.query(FieldDefinition).filter(FieldDefinition.field_code == "NUMERO_GARAJE").one()
+            self.assertEqual(definition.status, "approved")
         finally:
             db.close()
 

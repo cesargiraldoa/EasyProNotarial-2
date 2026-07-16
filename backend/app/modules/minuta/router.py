@@ -474,6 +474,11 @@ async def minuta_onlyoffice_callback(
     """
     payload = _decode_file_token(token)
     storage_path = payload["storage_path"]
+    callback_context = {
+        "case_id": payload.get("case_id"),
+        "document_id": payload.get("document_id"),
+        "version_id": payload.get("version_id"),
+    }
 
     body = await request.json()
     oo_status = int(body.get("status", 0))
@@ -492,6 +497,8 @@ async def minuta_onlyoffice_callback(
         resp = _req.get(url, timeout=60)
         resp.raise_for_status()
     except Exception:
+        db.rollback()
+        logger.exception("minuta onlyoffice callback download failed", extra=callback_context)
         return {"error": 0}
 
     try:
@@ -506,7 +513,8 @@ async def minuta_onlyoffice_callback(
         else:
             Path(storage_path).write_bytes(resp.content)
     except Exception:
-        pass
+        db.rollback()
+        logger.exception("minuta onlyoffice callback persistence failed", extra=callback_context)
 
     return {"error": 0}
 
