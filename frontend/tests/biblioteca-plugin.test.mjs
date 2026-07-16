@@ -4,17 +4,17 @@ import { resolve } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
 
-test("plugin html and config use version 2.3.0 with official runtime first", () => {
+test("plugin html and config use version 2.3.2 with official runtime first", () => {
   const html = readFileSync(resolve("onlyoffice-plugin/biblioteca/index.html"), "utf8");
   const config = JSON.parse(readFileSync(resolve("onlyoffice-plugin/biblioteca/config.json"), "utf8"));
   const runtimeIndex = html.indexOf('<script type="text/javascript" src="../v1/plugins.js"></script>');
-  const pluginIndex = html.indexOf('<script src="plugin.js?v=2.3.0"></script>');
+  const pluginIndex = html.indexOf('<script src="plugin.js?v=2.3.2"></script>');
 
   assert.notEqual(runtimeIndex, -1);
   assert.notEqual(pluginIndex, -1);
   assert.ok(runtimeIndex < pluginIndex);
-  assert.equal(config.version, "2.3.0");
-  assert.equal(config.variations[0].url, "index.html?v=2.3.0");
+  assert.equal(config.version, "2.3.2");
+  assert.equal(config.variations[0].url, "index.html?v=2.3.2");
 });
 
 function sourceSpy() {
@@ -209,6 +209,83 @@ function decisionResponse(versionId = 236) {
 test("plugin receives token from authorized host origin", async () => {
   const { api, constants } = loadPlugin();
   assert.equal(await auth(api, constants), "jwt-real");
+});
+
+test("auth response without context does not clear an existing minuta context", async () => {
+  const { api, constants } = loadPlugin();
+  const initial = api.solicitarToken();
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-minuta",
+      document_context: { kind: "minuta", editor_token: "editor-123" },
+    },
+  });
+  assert.equal(await initial, "jwt-minuta");
+  assert.equal(JSON.stringify(api.getDocumentContext()), JSON.stringify({ kind: "minuta", editor_token: "editor-123" }));
+
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-later",
+    },
+  });
+
+  assert.equal(await api.solicitarToken(), "jwt-later");
+  assert.equal(JSON.stringify(api.getDocumentContext()), JSON.stringify({ kind: "minuta", editor_token: "editor-123" }));
+});
+
+test("cached token without context forces a new auth request for minuta context", async () => {
+  const { api, constants, postedTarget } = loadPlugin();
+  const initial = api.solicitarToken();
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-cached",
+    },
+  });
+  assert.equal(await initial, "jwt-cached");
+  assert.equal(api.getDocumentContext(), null);
+
+  const requestsBefore = postedTarget.calls.filter((call) => call.message.type === constants.AUTH_REQUEST_TYPE).length;
+  let settled = false;
+  const refreshed = api.refrescarAuthContexto().then((token) => {
+    settled = true;
+    return token;
+  });
+  const requestsAfter = postedTarget.calls.filter((call) => call.message.type === constants.AUTH_REQUEST_TYPE).length;
+  assert.ok(requestsAfter > requestsBefore);
+
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-no-context",
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(settled, false);
+
+  api.handleAuthMessage({
+    origin: "https://easypronotarial.com",
+    data: {
+      type: constants.AUTH_RESPONSE_TYPE,
+      source: constants.HOST_SOURCE,
+      token: "jwt-minuta",
+      document_context: { kind: "minuta", editor_token: "editor-456" },
+    },
+  });
+
+  assert.equal(await refreshed, "jwt-minuta");
+  assert.equal(settled, true);
+  assert.equal(JSON.stringify(api.getDocumentContext()), JSON.stringify({ kind: "minuta", editor_token: "editor-456" }));
 });
 
 test("plugin rejects unauthorized response origin", async () => {
