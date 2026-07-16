@@ -32,6 +32,13 @@ def _create_index_if_missing(table_name: str, index_name: str, columns: list[str
         op.create_index(index_name, table_name, columns, unique=unique)
 
 
+def _nullable_int_column(inspector: sa.Inspector, column_name: str, fk_table: str | None = None) -> sa.Column:
+    constraints = []
+    if fk_table and _table_exists(inspector, fk_table):
+        constraints.append(sa.ForeignKey(f"{fk_table}.id", ondelete="SET NULL"))
+    return sa.Column(column_name, sa.Integer(), *constraints, nullable=True)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -42,9 +49,9 @@ def upgrade() -> None:
             sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
             sa.Column("notary_id", sa.Integer(), sa.ForeignKey("notaries.id", ondelete="SET NULL"), nullable=True),
             sa.Column("case_id", sa.Integer(), sa.ForeignKey("cases.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("document_id", sa.Integer(), sa.ForeignKey("case_documents.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("source_version_id", sa.Integer(), sa.ForeignKey("case_document_versions.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("review_version_id", sa.Integer(), sa.ForeignKey("case_document_versions.id", ondelete="SET NULL"), nullable=True),
+            _nullable_int_column(inspector, "document_id", "case_documents"),
+            _nullable_int_column(inspector, "source_version_id", "case_document_versions"),
+            _nullable_int_column(inspector, "review_version_id", "case_document_versions"),
             sa.Column("document_sha256", sa.String(length=64), nullable=False),
             sa.Column("document_type", sa.String(length=120), nullable=True),
             sa.Column("model", sa.String(length=80), nullable=False),
@@ -72,10 +79,10 @@ def upgrade() -> None:
             sa.Column("notary_id", sa.Integer(), sa.ForeignKey("notaries.id", ondelete="SET NULL"), nullable=True),
             sa.Column("analysis_run_id", sa.Integer(), sa.ForeignKey("biblioteca_analysis_runs.id", ondelete="SET NULL"), nullable=True),
             sa.Column("case_id", sa.Integer(), sa.ForeignKey("cases.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("document_id", sa.Integer(), sa.ForeignKey("case_documents.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("source_version_id", sa.Integer(), sa.ForeignKey("case_document_versions.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("review_version_id", sa.Integer(), sa.ForeignKey("case_document_versions.id", ondelete="SET NULL"), nullable=True),
-            sa.Column("decision_version_id", sa.Integer(), sa.ForeignKey("case_document_versions.id", ondelete="SET NULL"), nullable=True),
+            _nullable_int_column(inspector, "document_id", "case_documents"),
+            _nullable_int_column(inspector, "source_version_id", "case_document_versions"),
+            _nullable_int_column(inspector, "review_version_id", "case_document_versions"),
+            _nullable_int_column(inspector, "decision_version_id", "case_document_versions"),
             sa.Column("document_type", sa.String(length=120), nullable=True),
             sa.Column("section_key", sa.String(length=160), nullable=True),
             sa.Column("entity_type", sa.String(length=80), nullable=True),
