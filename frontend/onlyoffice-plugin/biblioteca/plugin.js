@@ -1050,6 +1050,8 @@
       registrarBotonesContentControls: registrarBotonesContentControls,
       resolverAccionInline: resolverAccionInline,
       solicitarRecarga: solicitarRecarga,
+      obtenerApiBaseUrl: obtenerApiBaseUrl,
+      getDocumentContext: function () { return documentContextEnMemoria; },
       getSuggestionControls: function () { return suggestionControls; },
       getFieldControls: function () { return fieldControls; },
       getGroups: function () { return gruposActuales; },

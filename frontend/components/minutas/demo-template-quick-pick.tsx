@@ -32,7 +32,7 @@ export function DemoTemplateQuickPick() {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
       const input = document.querySelector<HTMLInputElement>('input[type="file"][accept=".docx"]');
-      if (!input) throw new Error("No se encontró el flujo de plantilla etiquetada.");
+      if (!input) throw new Error("No se encontro el flujo de plantilla etiquetada.");
       const transfer = new DataTransfer();
       transfer.items.add(file);
       input.files = transfer.files;
@@ -55,8 +55,8 @@ export function DemoTemplateQuickPick() {
             </span>
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wider text-soft">Plantilla disponible</p>
-              <p className="truncate text-sm font-bold text-ink">JAGGUA · Hipoteca Banco de Bogotá</p>
-              <p className="mt-1 text-xs text-muted">2 compradores · 8 actos · formulario validado</p>
+              <p className="truncate text-sm font-bold text-ink">MINUTA JAGGUA – Hipoteca Banco de Bogotá</p>
+              <p className="mt-1 text-xs text-muted">2 compradores · 8 actos</p>
             </div>
           </div>
           <button
@@ -69,7 +69,7 @@ export function DemoTemplateQuickPick() {
             {loading ? "Cargando..." : loaded ? "Plantilla seleccionada" : "Usar esta plantilla"}
           </button>
         </div>
-        <p className="mt-3 text-xs text-muted">También puedes usar la carga desde el PC que aparece en el flujo actual.</p>
+        <p className="mt-3 text-xs text-muted">Mantiene el flujo actual de Subir otra plantilla.</p>
         {error && <p className="mt-2 text-xs text-rose-700">{error}</p>}
       </div>
     </div>

@@ -41,6 +41,31 @@ class OnlyOfficeConfigJwtTests(unittest.TestCase):
             settings.onlyoffice_jwt_secret = previous_secret
             settings.api_public_url = previous_api_public_url
 
+    def test_minuta_file_token_can_include_marked_template_context(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        settings.onlyoffice_jwt_secret = "onlyoffice-secret"
+        try:
+            file_token = minuta_router._make_file_token(
+                "cases/demo/minuta.docx",
+                "minuta.docx",
+                "Minuta demo",
+                1,
+                case_id=10,
+                document_id=20,
+                version_id=30,
+                user_id=7,
+            )
+
+            decoded = jwt.decode(file_token, "onlyoffice-secret", algorithms=["HS256"])
+
+            self.assertEqual(decoded["case_id"], 10)
+            self.assertEqual(decoded["document_id"], 20)
+            self.assertEqual(decoded["version_id"], 30)
+            self.assertEqual(decoded["user_id"], 7)
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+
     def test_case_config_keeps_onlyoffice_config_token_and_file_token(self):
         previous_secret = document_flow_router.settings.onlyoffice_jwt_secret
         previous_api_public_url = document_flow_router.settings.api_public_url

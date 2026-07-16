@@ -2,13 +2,70 @@
   "use strict";
 
   var API_DEFAULT = "https://easypronotarial-2-production.up.railway.app";
+  var PLUGIN_SOURCE = "motor-biblioteca";
+  var RETURN_REQUEST_TYPE = "EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST";
+  var TEMPLATE_STATE_PATH = "/api/v1/minutas/marked-template/editor-state";
+  var DEFAULT_HOST_ORIGINS = [
+    "https://easypronotarial.com",
+    "http://localhost:5179",
+    "http://127.0.0.1:5179"
+  ];
+  var HIGHLIGHT = { r: 255, g: 242, b: 102 };
   var selectedCode = "";
   var selectedLabel = "";
-  var HIGHLIGHT = { r: 255, g: 242, b: 102 };
+  var templateMode = false;
+
+  function pluginApi() {
+    return window.__EasyProBibliotecaPlugin || null;
+  }
 
   function apiBase() {
+    var api = pluginApi();
+    if (api && api.test && typeof api.test.obtenerApiBaseUrl === "function") {
+      return api.test.obtenerApiBaseUrl();
+    }
     var config = window.EASYPRO_ONLYOFFICE_PLUGIN_CONFIG || {};
     return String(config.apiBaseUrl || API_DEFAULT).replace(/\/$/, "");
+  }
+
+  function normalizeOrigin(value) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    try {
+      return new URL(value.trim()).origin;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function hostOrigins() {
+    var config = window.EASYPRO_ONLYOFFICE_PLUGIN_CONFIG || {};
+    var origins = DEFAULT_HOST_ORIGINS.slice();
+    if (Array.isArray(config.hostOrigins)) {
+      config.hostOrigins.forEach(function (origin) { origins.push(origin); });
+    }
+    return origins.map(normalizeOrigin).filter(function (origin, index, all) {
+      return origin && all.indexOf(origin) === index;
+    });
+  }
+
+  function postTargets() {
+    var targets = [];
+    function add(target) {
+      if (target && targets.indexOf(target) === -1) targets.push(target);
+    }
+    add(window.parent);
+    add(window.top);
+    try {
+      var current = window;
+      for (var index = 0; index < 5; index += 1) {
+        if (!current.parent || current.parent === current) break;
+        current = current.parent;
+        add(current);
+      }
+    } catch (_error) {
+      // Best effort only.
+    }
+    return targets;
   }
 
   function state(message, kind) {
@@ -31,6 +88,21 @@
     });
   }
 
+  function executeCommand(name, value) {
+    return new Promise(function (resolve) {
+      try {
+        if (!window.Asc || !window.Asc.plugin || typeof window.Asc.plugin.executeCommand !== "function") {
+          resolve({ ok: false, error: "executeCommand_unavailable" });
+          return;
+        }
+        window.Asc.plugin.executeCommand(name, value || "");
+        resolve({ ok: true });
+      } catch (_error) {
+        resolve({ ok: false, error: "executeCommand_failed" });
+      }
+    });
+  }
+
   function command(scopeKey, payload, callback) {
     return new Promise(function (resolve) {
       window.Asc.scope = window.Asc.scope || {};
@@ -44,6 +116,20 @@
         resolve({ ok: false });
       }
     });
+  }
+
+  function insertMarkerTextCommand() {
+    try {
+      var payload = JSON.parse(Asc.scope.easyproTemplateMarkerPayload || "{}");
+      var marker = String(payload.marker || "");
+      if (!marker) return JSON.stringify({ ok: false });
+      var paragraph = Api.CreateParagraph();
+      paragraph.AddText(marker);
+      Api.GetDocument().InsertContent([paragraph], true);
+      return JSON.stringify({ ok: true });
+    } catch (_error) {
+      return JSON.stringify({ ok: false });
+    }
   }
 
   function highlightMarkersCommand() {
@@ -87,49 +173,52 @@
       return;
     }
     var marker = "{{" + selectedCode + "}}";
-    var occurrence = "manual_" + Date.now();
-    var tag = "easypro:template:v1:" + selectedCode + ":" + occurrence;
-    var added = await execute("AddContentControl", [1, {
-      Tag: tag,
-      Alias: "EasyPro etiqueta - " + selectedCode
-    }]);
-    if (!added.ok) {
-      state("No fue posible insertar la etiqueta en la posición del cursor.", "error");
-      return;
-    }
-    var value = added.value || {};
-    var internalId = value.InternalId || value.InternalID || value.Id || value.id;
-    if (internalId) {
-      await execute("InsertAndReplaceContentControls", [[{
-        InternalId: internalId,
-        Tag: tag,
-        Alias: "EasyPro etiqueta - " + selectedCode,
-        Text: marker
-      }]]);
-    }
-    await command("easyproTemplateMarkerPayload", {
+    var payload = {
       marker: marker,
       r: HIGHLIGHT.r,
       g: HIGHLIGHT.g,
       b: HIGHLIGHT.b
-    }, highlightMarkersCommand);
-    state("✓ " + marker + " insertado. Continúa editando y guarda el documento una sola vez.", "ok");
+    };
+    var inserted = await command("easyproTemplateMarkerPayload", payload, insertMarkerTextCommand);
+    if (!inserted || inserted.ok !== true) {
+      state("No fue posible insertar la etiqueta en la posicion del cursor.", "error");
+      return;
+    }
+    await command("easyproTemplateMarkerPayload", payload, highlightMarkersCommand);
+    state("Etiqueta " + marker + " insertada. Puedes insertar mas etiquetas antes de guardar.", "ok");
+  }
+
+  function catalogHasCode(code) {
+    var normalized = String(code || "").trim().toUpperCase();
+    var found = false;
+    document.querySelectorAll("#listaCampos .campo-code").forEach(function (node) {
+      if (String(node.textContent || "").trim().toUpperCase() === normalized) found = true;
+    });
+    return found;
   }
 
   async function createAndInsert() {
     var codeInput = document.getElementById("manualFieldCode");
     var labelInput = document.getElementById("manualFieldLabel");
     var categoryInput = document.getElementById("manualFieldCategory");
+    var scopeInput = document.getElementById("manualFieldScope");
     var code = String(codeInput && codeInput.value || "")
       .trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
     var label = String(labelInput && labelInput.value || "").trim();
     var category = String(categoryInput && categoryInput.value || "otro").trim() || "otro";
+    var scope = String(scopeInput && scopeInput.value || "notary").trim() || "notary";
     if (code.length < 2 || label.length < 2) {
-      state("Escribe el código y el nombre de la nueva etiqueta.", "error");
+      state("Escribe el codigo y el nombre de la nueva etiqueta.", "error");
+      return;
+    }
+    if (catalogHasCode(code)) {
+      choose(code, label, null);
+      await insertSelected();
+      state("La etiqueta ya existia en la biblioteca; se inserto sin duplicarla.", "ok");
       return;
     }
     try {
-      var api = window.__EasyProBibliotecaPlugin;
+      var api = pluginApi();
       var token = await api.test.solicitarToken();
       var response = await window.fetch(apiBase() + "/api/v1/biblioteca/campos", {
         method: "POST",
@@ -139,7 +228,7 @@
           "Content-Type": "application/json"
         },
         credentials: "omit",
-        body: JSON.stringify({ code: code, label: label, category: category, field_type: "text" })
+        body: JSON.stringify({ code: code, label: label, category: category, field_type: "text", scope: scope })
       });
       if (!response.ok) throw new Error("create_failed");
       choose(code, label, null);
@@ -152,12 +241,116 @@
     }
   }
 
-  function hideLegacyValueEditors() {
-    document.querySelectorAll(".sugerencia-card").forEach(function (card) {
-      if (card.textContent && card.textContent.indexOf("Aplicar en cascada") !== -1) {
-        card.style.display = "none";
+  function currentContext() {
+    var api = pluginApi();
+    if (!api || !api.test || typeof api.test.getDocumentContext !== "function") return null;
+    return api.test.getDocumentContext();
+  }
+
+  async function requestSave() {
+    await executeCommand("save", "");
+    var methodResult = await execute("Save", []);
+    return methodResult.ok;
+  }
+
+  async function fetchEditorState(token, editorToken) {
+    var response = await window.fetch(
+      apiBase() + TEMPLATE_STATE_PATH + "?token=" + encodeURIComponent(editorToken),
+      {
+        method: "GET",
+        headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+        credentials: "omit",
+        cache: "no-store"
       }
+    );
+    if (!response.ok) throw new Error("state_failed");
+    return response.json();
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) { window.setTimeout(resolve, ms); });
+  }
+
+  async function waitForSavedState(token, editorToken) {
+    var latest = null;
+    for (var attempt = 0; attempt < 12; attempt += 1) {
+      latest = await fetchEditorState(token, editorToken);
+      if (latest && latest.saved) return latest;
+      await delay(1000);
+    }
+    return latest;
+  }
+
+  function postReturnToForm(payload) {
+    var message = {
+      type: RETURN_REQUEST_TYPE,
+      source: PLUGIN_SOURCE,
+      payload: payload
+    };
+    postTargets().forEach(function (target) {
+      hostOrigins().forEach(function (origin) {
+        try {
+          target.postMessage(message, origin);
+        } catch (_error) {
+          // Ignore frames that cannot receive the message.
+        }
+      });
     });
+  }
+
+  async function saveTemplateAndReturn() {
+    try {
+      var api = pluginApi();
+      if (!api || !api.test) throw new Error("plugin_unavailable");
+      var token = await api.test.solicitarToken();
+      var context = currentContext();
+      if (!context || context.kind !== "minuta" || !context.editor_token) {
+        state("Esta accion solo esta disponible al editar una plantilla de minuta.", "error");
+        return;
+      }
+      state("Guardando plantilla en OnlyOffice...", "");
+      await requestSave();
+      state("Esperando confirmacion de guardado...", "");
+      var payload = await waitForSavedState(token, context.editor_token);
+      if (!payload || !payload.saved) {
+        state("OnlyOffice aun no confirmo el guardado. Guarda el documento y vuelve a intentar.", "error");
+        return;
+      }
+      state("Plantilla guardada. Volviendo al formulario...", "ok");
+      postReturnToForm(payload);
+    } catch (_error) {
+      state("No fue posible guardar la plantilla y volver al formulario.", "error");
+    }
+  }
+
+  function hideLegacyTemplateControls() {
+    if (!templateMode) return;
+    var analyzeSection = document.getElementById("btnAnalizar");
+    if (analyzeSection && analyzeSection.parentElement) {
+      analyzeSection.parentElement.style.display = "none";
+    }
+    var suggestions = document.getElementById("sugerencias");
+    if (suggestions) suggestions.style.display = "none";
+    var changePanel = document.getElementById("panelCambio");
+    if (changePanel) changePanel.style.display = "none";
+    document.querySelectorAll(".sugerencia-card").forEach(function (card) {
+      card.style.display = "none";
+    });
+    var subtitle = document.querySelector(".subtitle");
+    if (subtitle) subtitle.textContent = "Edicion de etiquetas de plantilla";
+  }
+
+  async function detectTemplateMode() {
+    try {
+      var api = pluginApi();
+      if (!api || !api.test) return;
+      await api.test.solicitarToken();
+      var context = currentContext();
+      templateMode = Boolean(context && context.kind === "minuta");
+      hideLegacyTemplateControls();
+    } catch (_error) {
+      templateMode = false;
+    }
   }
 
   function install() {
@@ -181,13 +374,15 @@
     controls.innerHTML = [
       '<div id="campoSeleccionado" class="selected-field">Selecciona una etiqueta del listado</div>',
       '<button id="btnInsertarMarcador" class="btn btn-primary" type="button" disabled>Insertar en el cursor</button>',
-      '<button id="btnMostrarCrearEtiqueta" class="btn btn-secondary" type="button">+ Crear nueva etiqueta</button>',
+      '<button id="btnMostrarCrearEtiqueta" class="btn btn-secondary" type="button">Crear nueva etiqueta</button>',
       '<div id="crearEtiquetaPanel" class="new-field-panel" style="display:none">',
-      '<input id="manualFieldLabel" class="search" placeholder="Nombre visible, ej. Número de parqueadero"/>',
-      '<input id="manualFieldCode" class="search" placeholder="CÓDIGO, ej. NUMERO_PARQUEADERO"/>',
-      '<input id="manualFieldCategory" class="search" placeholder="Categoría, ej. inmueble"/>',
+      '<input id="manualFieldLabel" class="search" placeholder="Nombre visible, ej. Numero de parqueadero"/>',
+      '<input id="manualFieldCode" class="search" placeholder="CODIGO_CANONICO, ej. NUMERO_PARQUEADERO"/>',
+      '<input id="manualFieldCategory" class="search" placeholder="Categoria, ej. inmueble"/>',
+      '<select id="manualFieldScope" class="search"><option value="notary">Alcance: notaria</option><option value="global">Alcance: global</option></select>',
       '<button id="btnCrearEInsertar" class="btn btn-primary" type="button">Crear e insertar</button>',
-      '</div>'
+      '</div>',
+      '<button id="btnGuardarPlantillaVolver" class="btn btn-primary" type="button">Guardar plantilla y volver al formulario</button>'
     ].join("");
     section.insertBefore(controls, list);
 
@@ -197,10 +392,11 @@
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     });
     document.getElementById("btnCrearEInsertar").addEventListener("click", createAndInsert);
+    document.getElementById("btnGuardarPlantillaVolver").addEventListener("click", saveTemplateAndReturn);
 
-    var observer = new MutationObserver(hideLegacyValueEditors);
+    var observer = new MutationObserver(hideLegacyTemplateControls);
     observer.observe(document.body, { childList: true, subtree: true });
-    hideLegacyValueEditors();
+    detectTemplateMode();
   }
 
   if (document.readyState === "loading") {

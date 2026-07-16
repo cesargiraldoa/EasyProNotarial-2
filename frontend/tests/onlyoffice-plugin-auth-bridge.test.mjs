@@ -7,6 +7,7 @@ import {
   EASYPRO_ONLYOFFICE_HOST_SOURCE,
   EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
   EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE,
+  EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE,
   createOnlyOfficePluginAuthBridgeHandler,
   installOnlyOfficePluginAuthBridge,
   resolveAllowedOnlyOfficeOrigins,
@@ -199,6 +200,75 @@ test("bridge ignores reload request when host session is missing", () => {
   });
 
   assert.equal(reloads.length, 0);
+});
+
+test("bridge accepts minuta template return request only with active host session", () => {
+  const returns = [];
+  const payload = {
+    caseId: 10,
+    documentId: 20,
+    versionId: 30,
+    documentName: "MINUTA JAGGUA",
+    sourceDocumentTitle: "MINUTA JAGGUA.docx",
+    fields: [{ key: "numero_parqueadero", label: "Numero parqueadero" }],
+    values: { numero_parqueadero: "" },
+    saved: true,
+  };
+  const handler = createOnlyOfficePluginAuthBridgeHandler({
+    allowedOrigins: resolveAllowedOnlyOfficeOrigins(),
+    getSessionToken: () => "jwt-real",
+    returnMinutaTemplateToForm: (value) => returns.push(value),
+  });
+
+  handler({
+    origin: "https://attacker.example",
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      payload,
+    },
+  });
+  handler({
+    origin: onlyOfficeOrigin,
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      payload,
+    },
+  });
+
+  assert.deepEqual(returns, [payload]);
+});
+
+test("bridge ignores minuta template return request when host session is missing", () => {
+  const returns = [];
+  const handler = createOnlyOfficePluginAuthBridgeHandler({
+    allowedOrigins: resolveAllowedOnlyOfficeOrigins(),
+    getSessionToken: () => null,
+    returnMinutaTemplateToForm: (value) => returns.push(value),
+  });
+
+  handler({
+    origin: onlyOfficeOrigin,
+    source: sourceSpy(),
+    data: {
+      type: EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE,
+      source: EASYPRO_ONLYOFFICE_PLUGIN_SOURCE,
+      payload: {
+        caseId: 10,
+        documentId: 20,
+        versionId: 30,
+        documentName: "MINUTA JAGGUA",
+        sourceDocumentTitle: "MINUTA JAGGUA.docx",
+        fields: [],
+        values: {},
+      },
+    },
+  });
+
+  assert.equal(returns.length, 0);
 });
 
 test("bridge cleanup removes the exact listener", () => {
