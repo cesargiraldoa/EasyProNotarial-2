@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, get_manageable_notary_ids
 from app.models.case import Case
+from app.models.case_document import CaseDocument
+from app.models.case_document_version import CaseDocumentVersion
 from app.models.notary import Notary
 from app.models.user import User
 from app.schemas.minuta import MarkedTemplateDetectionResponse
@@ -25,9 +27,16 @@ from app.services.case_numbering import (
 from app.services.document_persistence import persist_case_document_version
 from app.services.minuta.engine.context_builder import ContextBuilder
 from app.services.minuta.marked_template_detector import detect_marked_template
+from app.services.minuta.marked_template_state import (
+    build_marked_template_edit_payload,
+    detect_marked_template_from_bytes,
+    merge_marked_template_state,
+    safe_marked_template_snapshot,
+)
 from app.services.minuta.marked_template_generator import NotarialRenderBlockedError, apply_marked_template_replacements
 from app.services.minuta.rules.common_rules import normalize_key, normalize_value
-from app.modules.minuta.router import _make_file_token, _resolve_public_api_base
+from app.modules.minuta.router import _decode_file_token, _make_file_token, _resolve_public_api_base
+from app.services.storage import download_storage_bytes
 
 router = APIRouter(prefix="/minutas", tags=["minutas"])
 
@@ -334,7 +343,16 @@ async def generate_marked_template_endpoint(
 
     storage_path = version.storage_path
     notary_id = case.notary_id
-    file_token = _make_file_token(storage_path, version.original_filename, display_name, notary_id)
+    file_token = _make_file_token(
+        storage_path,
+        version.original_filename,
+        display_name,
+        notary_id,
+        case_id=case.id,
+        document_id=version.case_document_id,
+        version_id=version.id,
+        user_id=current_user.id,
+    )
     onlyoffice_path = f"/dashboard/minutas/editor/{file_token}"
     base_url = _resolve_public_api_base(request)
     download_url = f"{base_url}/api/v1/minuta/onlyoffice/file?token={file_token}"
@@ -384,3 +402,67 @@ async def generate_marked_template_endpoint(
             ],
         },
     }
+
+
+@router.get("/marked-template/editor-state")
+def marked_template_editor_state(
+    token: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    payload = _decode_file_token(token)
+    case_id = payload.get("case_id")
+    document_id = payload.get("document_id")
+    version_id = payload.get("version_id")
+    if not all(isinstance(value, int) for value in (case_id, document_id, version_id)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La minuta abierta no tiene metadatos de formulario recuperables.",
+        )
+
+    row = (
+        db.query(Case, CaseDocument, CaseDocumentVersion)
+        .join(CaseDocument, CaseDocument.case_id == Case.id)
+        .join(CaseDocumentVersion, CaseDocumentVersion.case_document_id == CaseDocument.id)
+        .filter(
+            Case.id == case_id,
+            CaseDocument.id == document_id,
+            CaseDocumentVersion.id == version_id,
+        )
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La minuta indicada no existe.")
+    case_obj, document_obj, source_version = row
+    if case_obj.notary_id not in get_manageable_notary_ids(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para usar esta minuta.")
+
+    latest_version = (
+        db.query(CaseDocumentVersion)
+        .filter(CaseDocumentVersion.case_document_id == document_obj.id)
+        .order_by(CaseDocumentVersion.version_number.desc(), CaseDocumentVersion.id.desc())
+        .first()
+    ) or source_version
+    previous_snapshot = safe_marked_template_snapshot(source_version.placeholder_snapshot_json)
+    latest_snapshot = safe_marked_template_snapshot(latest_version.placeholder_snapshot_json)
+    snapshot = latest_snapshot or previous_snapshot
+
+    if latest_version.id == source_version.id or not latest_snapshot:
+        try:
+            latest_content = download_storage_bytes(latest_version.storage_path)
+            detected = detect_marked_template_from_bytes(latest_content)
+        except Exception:
+            detected = {"fields": []}
+        snapshot = merge_marked_template_state(
+            previous_snapshot,
+            detected,
+            document_name=document_obj.title or payload.get("display_name") or "Minuta marcada",
+        )
+
+    return build_marked_template_edit_payload(
+        case_obj,
+        document_obj,
+        latest_version,
+        snapshot,
+        saved_from_onlyoffice=latest_version.id != source_version.id,
+    )

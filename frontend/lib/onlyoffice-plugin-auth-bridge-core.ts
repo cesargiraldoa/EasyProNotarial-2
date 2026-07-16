@@ -1,6 +1,7 @@
 export const EASYPRO_ONLYOFFICE_AUTH_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_AUTH_REQUEST";
 export const EASYPRO_ONLYOFFICE_AUTH_RESPONSE_TYPE = "EASYPRO_ONLYOFFICE_AUTH_RESPONSE";
 export const EASYPRO_ONLYOFFICE_RELOAD_REQUEST_TYPE = "EASYPRO_ONLYOFFICE_RELOAD_REQUEST";
+export const EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE = "EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST";
 export const EASYPRO_ONLYOFFICE_PLUGIN_SOURCE = "motor-biblioteca";
 export const EASYPRO_ONLYOFFICE_HOST_SOURCE = "easypro-host";
 export const PRODUCTION_ONLYOFFICE_ORIGIN = "https://onlyoffice.easypronotarial.com";
@@ -40,6 +41,23 @@ export type OnlyOfficeReloadRequestPayload = {
   source: typeof EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
   analysis_id?: string;
   review_document: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>;
+};
+
+export type MinutaTemplateReturnPayload = {
+  caseId: number;
+  documentId: number;
+  versionId: number;
+  documentName: string;
+  sourceDocumentTitle: string;
+  fields: unknown[];
+  values: Record<string, string>;
+  saved?: boolean;
+};
+
+export type MinutaTemplateReturnRequestPayload = {
+  type: typeof EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE;
+  source: typeof EASYPRO_ONLYOFFICE_PLUGIN_SOURCE;
+  payload: MinutaTemplateReturnPayload;
 };
 
 type PostMessageTarget = {
@@ -115,6 +133,27 @@ export function isOnlyOfficeReloadRequest(
     && Number.isFinite(Number(review.version_id));
 }
 
+export function isMinutaTemplateReturnRequest(
+  event: BridgeMessageEvent,
+  allowedOrigins: Set<string>,
+): event is BridgeMessageEvent & { data: MinutaTemplateReturnRequestPayload } {
+  if (!allowedOrigins.has(event.origin)) return false;
+  if (!event.data || typeof event.data !== "object") return false;
+  const data = event.data as Partial<MinutaTemplateReturnRequestPayload>;
+  const payload = data.payload as Partial<MinutaTemplateReturnPayload> | undefined;
+  return data.type === EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST_TYPE
+    && data.source === EASYPRO_ONLYOFFICE_PLUGIN_SOURCE
+    && Number.isFinite(Number(payload?.caseId))
+    && Number.isFinite(Number(payload?.documentId))
+    && Number.isFinite(Number(payload?.versionId))
+    && typeof payload?.documentName === "string"
+    && typeof payload?.sourceDocumentTitle === "string"
+    && Array.isArray(payload?.fields)
+    && Boolean(payload?.values)
+    && typeof payload?.values === "object"
+    && !Array.isArray(payload?.values);
+}
+
 export function buildOnlyOfficeAuthResponse(
   token: string | null | undefined,
   documentContext?: OnlyOfficeDocumentContext | null,
@@ -140,6 +179,7 @@ export function createOnlyOfficePluginAuthBridgeHandler(options: {
   getSessionToken: () => string | null;
   getDocumentContext?: () => OnlyOfficeDocumentContext | null;
   reloadCaseDocument?: (context: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>, analysisId?: string) => void;
+  returnMinutaTemplateToForm?: (payload: MinutaTemplateReturnPayload) => void;
 }) {
   return function handleOnlyOfficePluginAuth(event: BridgeMessageEvent) {
     if (isOnlyOfficeAuthRequest(event, options.allowedOrigins)) {
@@ -160,6 +200,22 @@ export function createOnlyOfficePluginAuthBridgeHandler(options: {
         },
         event.data.analysis_id,
       );
+      return;
+    }
+    if (options.returnMinutaTemplateToForm && isMinutaTemplateReturnRequest(event, options.allowedOrigins)) {
+      if (!options.getSessionToken()) return;
+      options.returnMinutaTemplateToForm({
+        caseId: Number(event.data.payload.caseId),
+        documentId: Number(event.data.payload.documentId),
+        versionId: Number(event.data.payload.versionId),
+        documentName: event.data.payload.documentName,
+        sourceDocumentTitle: event.data.payload.sourceDocumentTitle,
+        fields: event.data.payload.fields,
+        values: Object.fromEntries(
+          Object.entries(event.data.payload.values).map(([key, value]) => [key, value == null ? "" : String(value)]),
+        ),
+        saved: Boolean(event.data.payload.saved),
+      });
     }
   };
 }
@@ -170,12 +226,14 @@ export function installOnlyOfficePluginAuthBridge(options: {
   getSessionToken: () => string | null;
   getDocumentContext?: () => OnlyOfficeDocumentContext | null;
   reloadCaseDocument?: (context: Extract<OnlyOfficeDocumentContext, { kind: "case_document" }>, analysisId?: string) => void;
+  returnMinutaTemplateToForm?: (payload: MinutaTemplateReturnPayload) => void;
 }) {
   const handler = createOnlyOfficePluginAuthBridgeHandler({
     allowedOrigins: options.allowedOrigins,
     getSessionToken: options.getSessionToken,
     getDocumentContext: options.getDocumentContext,
     reloadCaseDocument: options.reloadCaseDocument,
+    returnMinutaTemplateToForm: options.returnMinutaTemplateToForm,
   });
   options.target.addEventListener("message", handler);
   return () => options.target.removeEventListener("message", handler);

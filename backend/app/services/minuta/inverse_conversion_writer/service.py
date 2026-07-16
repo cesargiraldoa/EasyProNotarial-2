@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.services.minuta.inverse_conversion_writer.docx_marked_writer import DocxMarkedWriter, marked_docx_filename
+from app.services.minuta.inverse_conversion_writer.docx_marked_writer import marked_docx_filename
+from app.services.minuta.inverse_conversion_writer.docx_marked_writer_safe import TolerantDocxMarkedWriter
 from app.services.minuta.inverse_conversion_writer.models import MarkedCandidate, MarkedDocxWriteResult
 
 
 class InverseConversionMarkedDocxService:
-    def __init__(self, writer: DocxMarkedWriter | None = None) -> None:
-        self.writer = writer or DocxMarkedWriter()
+    def __init__(self, writer: TolerantDocxMarkedWriter | None = None) -> None:
+        self.writer = writer or TolerantDocxMarkedWriter()
 
     def generate(
         self,

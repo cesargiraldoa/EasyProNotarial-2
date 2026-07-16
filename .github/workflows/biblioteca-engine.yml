@@ -3,22 +3,36 @@ name: Biblioteca Engine
 on:
   pull_request:
     paths:
+      - "backend/alembic/versions/20260716_seed_biblioteca_demo_fields.py"
       - "backend/app/api/v1/endpoints/biblioteca*.py"
+      - "backend/app/api/v1/endpoints/demo_template.py"
       - "backend/app/main.py"
       - "backend/app/services/biblioteca_motor/**"
+      - "backend/app/services/minuta/inverse_conversion_writer/**"
       - "backend/app/tests/test_biblioteca_*.py"
+      - "backend/app/tests/test_inverse_conversion_tolerant_writer.py"
       - "backend/requirements.txt"
+      - "frontend/app/(app)/dashboard/minutas/nueva/page.tsx"
+      - "frontend/components/minutas/demo-template-quick-pick.tsx"
       - "frontend/onlyoffice-plugin/biblioteca/**"
+      - "frontend/tests/biblioteca-template-editor.test.mjs"
       - ".github/workflows/biblioteca-engine.yml"
   push:
     branches: [main]
     paths:
+      - "backend/alembic/versions/20260716_seed_biblioteca_demo_fields.py"
       - "backend/app/api/v1/endpoints/biblioteca*.py"
+      - "backend/app/api/v1/endpoints/demo_template.py"
       - "backend/app/main.py"
       - "backend/app/services/biblioteca_motor/**"
+      - "backend/app/services/minuta/inverse_conversion_writer/**"
       - "backend/app/tests/test_biblioteca_*.py"
+      - "backend/app/tests/test_inverse_conversion_tolerant_writer.py"
       - "backend/requirements.txt"
+      - "frontend/app/(app)/dashboard/minutas/nueva/page.tsx"
+      - "frontend/components/minutas/demo-template-quick-pick.tsx"
       - "frontend/onlyoffice-plugin/biblioteca/**"
+      - "frontend/tests/biblioteca-template-editor.test.mjs"
 
 jobs:
   test:
@@ -39,6 +53,7 @@ jobs:
           python -m pip install \
             "fastapi==0.115.12" \
             "sqlalchemy==2.0.40" \
+            "alembic>=1.13.0" \
             "pydantic-settings==2.8.1" \
             "python-docx>=0.8.11" \
             "lxml>=5.0.0" \
@@ -49,21 +64,29 @@ jobs:
             "python-dotenv" \
             "requests>=2.31.0" \
             "python-multipart>=0.0.7"
-      - name: Compile biblioteca modules
+      - name: Compile focused modules
         run: |
           python -m py_compile \
             app/main.py \
             app/api/v1/endpoints/biblioteca_async.py \
+            app/api/v1/endpoints/demo_template.py \
             app/services/biblioteca_motor/analysis.py \
             app/services/biblioteca_motor/anchor_resolver.py \
             app/services/biblioteca_motor/comprehensive_extractor.py \
             app/services/biblioteca_motor/llm_extractor.py \
             app/services/biblioteca_motor/review_document_safe.py \
+            app/services/minuta/inverse_conversion_writer/docx_marked_writer_safe.py \
+            app/services/minuta/inverse_conversion_writer/service.py \
             app/tests/test_biblioteca_async.py \
             app/tests/test_biblioteca_comprehensive_extractor.py \
-            app/tests/test_biblioteca_review_visible_guard.py
-      - name: Validate async plugin JavaScript
-        run: node --check ../frontend/onlyoffice-plugin/biblioteca/async-analysis.js
+            app/tests/test_biblioteca_review_visible_guard.py \
+            app/tests/test_inverse_conversion_tolerant_writer.py \
+            alembic/versions/20260716_seed_biblioteca_demo_fields.py
+      - name: Validate plugin JavaScript
+        run: |
+          node --check ../frontend/onlyoffice-plugin/biblioteca/async-analysis.js
+          node --check ../frontend/onlyoffice-plugin/biblioteca/template-editor.js
+          node --test ../frontend/tests/biblioteca-template-editor.test.mjs
       - name: Run asynchronous transport tests
         id: async_transport
         continue-on-error: true
@@ -84,6 +107,10 @@ jobs:
         id: review_guard
         continue-on-error: true
         run: python -m unittest -v app.tests.test_biblioteca_review_visible_guard > review-guard-tests.log 2>&1
+      - name: Run tolerant reverse writer test
+        id: inverse_writer
+        continue-on-error: true
+        run: python -m unittest -v app.tests.test_inverse_conversion_tolerant_writer > inverse-writer-tests.log 2>&1
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -99,10 +126,12 @@ jobs:
           cat analysis-tests.log
           cat review-tests.log
           cat review-guard-tests.log
+          cat inverse-writer-tests.log
           if [ "${{ steps.async_transport.outcome }}" != "success" ] || \
              [ "${{ steps.comprehensive.outcome }}" != "success" ] || \
              [ "${{ steps.analysis.outcome }}" != "success" ] || \
              [ "${{ steps.review.outcome }}" != "success" ] || \
-             [ "${{ steps.review_guard.outcome }}" != "success" ]; then
+             [ "${{ steps.review_guard.outcome }}" != "success" ] || \
+             [ "${{ steps.inverse_writer.outcome }}" != "success" ]; then
             exit 1
           fi

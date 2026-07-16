@@ -16,6 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.deps import get_current_user, get_db
+from app.models.case import Case
+from app.models.case_document import CaseDocument
+from app.models.case_document_version import CaseDocumentVersion
 from app.models.user import User
 from app.services.minuta.detector import analizar_documento, extraer_texto_estructurado
 from app.services.minuta.validador import validar_documento
@@ -31,6 +34,12 @@ from app.services.storage import (
     _upload_to_supabase,
     download_storage_bytes,
     parse_supabase_storage_path,
+)
+from app.services.document_persistence import persist_case_document_version
+from app.services.minuta.marked_template_state import (
+    detect_marked_template_from_bytes,
+    merge_marked_template_state,
+    safe_marked_template_snapshot,
 )
 
 router = APIRouter(prefix="/minuta", tags=["minuta"])
@@ -61,15 +70,35 @@ def _signing_secret() -> str:
     return ((s.onlyoffice_jwt_secret or "").strip()) or s.secret_key
 
 
-def _make_file_token(storage_path: str, filename: str, display_name: str, notary_id: int) -> str:
+def _make_file_token(
+    storage_path: str,
+    filename: str,
+    display_name: str,
+    notary_id: int,
+    *,
+    case_id: int | None = None,
+    document_id: int | None = None,
+    version_id: int | None = None,
+    user_id: int | None = None,
+) -> str:
+    payload = {
+        "storage_path": storage_path,
+        "filename": filename,
+        "display_name": display_name,
+        "notary_id": notary_id,
+        "exp": datetime.utcnow() + timedelta(hours=24),
+    }
+    if case_id is not None and document_id is not None and version_id is not None:
+        payload.update(
+            {
+                "case_id": int(case_id),
+                "document_id": int(document_id),
+                "version_id": int(version_id),
+                "user_id": int(user_id) if user_id is not None else None,
+            }
+        )
     return jwt.encode(
-        {
-            "storage_path": storage_path,
-            "filename": filename,
-            "display_name": display_name,
-            "notary_id": notary_id,
-            "exp": datetime.utcnow() + timedelta(hours=24),
-        },
+        payload,
         _signing_secret(),
         algorithm="HS256",
     )
@@ -437,6 +466,7 @@ def minuta_onlyoffice_file(token: str = Query(...)):
 async def minuta_onlyoffice_callback(
     request: Request,
     token: str = Query(...),
+    db: Session = Depends(get_db),
 ):
     """
     Recibe el callback de OnlyOffice cuando el usuario guarda el documento.
@@ -444,6 +474,11 @@ async def minuta_onlyoffice_callback(
     """
     payload = _decode_file_token(token)
     storage_path = payload["storage_path"]
+    callback_context = {
+        "case_id": payload.get("case_id"),
+        "document_id": payload.get("document_id"),
+        "version_id": payload.get("version_id"),
+    }
 
     body = await request.json()
     oo_status = int(body.get("status", 0))
@@ -462,9 +497,15 @@ async def minuta_onlyoffice_callback(
         resp = _req.get(url, timeout=60)
         resp.raise_for_status()
     except Exception:
+        db.rollback()
+        logger.exception("minuta onlyoffice callback download failed", extra=callback_context)
         return {"error": 0}
 
     try:
+        persisted_as_version = _persist_marked_template_callback_version(db, payload, resp.content)
+        if persisted_as_version:
+            return {"error": 0}
+
         docx_media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         if storage_path.startswith("supabase://"):
             bucket, key = parse_supabase_storage_path(storage_path)
@@ -472,8 +513,69 @@ async def minuta_onlyoffice_callback(
         else:
             Path(storage_path).write_bytes(resp.content)
     except Exception:
-        pass
+        db.rollback()
+        logger.exception("minuta onlyoffice callback persistence failed", extra=callback_context)
 
     return {"error": 0}
+
+
+def _persist_marked_template_callback_version(db: Session, payload: dict, content: bytes) -> bool:
+    case_id = payload.get("case_id")
+    document_id = payload.get("document_id")
+    version_id = payload.get("version_id")
+    if not all(isinstance(value, int) for value in (case_id, document_id, version_id)):
+        return False
+
+    row = (
+        db.query(Case, CaseDocument, CaseDocumentVersion)
+        .join(CaseDocument, CaseDocument.case_id == Case.id)
+        .join(CaseDocumentVersion, CaseDocumentVersion.case_document_id == CaseDocument.id)
+        .filter(
+            Case.id == case_id,
+            CaseDocument.id == document_id,
+            CaseDocumentVersion.id == version_id,
+        )
+        .first()
+    )
+    if row is None:
+        logger.warning("marked template callback ignored: source version not found")
+        return True
+
+    case_obj, document_obj, version_obj = row
+    if case_obj.notary_id != payload.get("notary_id"):
+        logger.warning("marked template callback ignored: notary mismatch")
+        return True
+
+    previous_snapshot = safe_marked_template_snapshot(version_obj.placeholder_snapshot_json)
+    try:
+        detected = detect_marked_template_from_bytes(content)
+    except Exception:
+        logger.exception("marked template callback marker scan failed")
+        detected = {"fields": []}
+
+    snapshot = merge_marked_template_state(
+        previous_snapshot,
+        detected,
+        document_name=document_obj.title or payload.get("display_name") or "Minuta marcada",
+    )
+    snapshot["onlyoffice_template_edit"] = {
+        "source_version_id": version_obj.id,
+        "saved_from_onlyoffice": True,
+    }
+
+    persist_case_document_version(
+        db,
+        case_obj,
+        document_obj.category,
+        document_obj.title,
+        version_obj.file_format or "docx",
+        content,
+        version_obj.original_filename or payload.get("filename") or "minuta.docx",
+        payload.get("user_id"),
+        version_obj.generated_from_template_id,
+        placeholder_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+    )
+    db.commit()
+    return True
 
 # deploy 2026-05-23

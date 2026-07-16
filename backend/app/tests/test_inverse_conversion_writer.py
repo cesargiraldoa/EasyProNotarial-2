@@ -496,7 +496,7 @@ class InverseConversionWriterTests(unittest.TestCase):
         finally:
             engine.dispose()
 
-    def test_endpoint_returns_422_for_ambiguous_alias(self):
+    def test_endpoint_skips_ambiguous_alias_when_other_candidate_is_valid(self):
         client, engine = self._build_endpoint_client(
             extra_aliases=[
                 ("numero_unidad", "NUMERO_APARTAMENTO"),
@@ -507,8 +507,15 @@ class InverseConversionWriterTests(unittest.TestCase):
             candidates = [
                 {
                     "id": "cand_001",
-                    "text": "804",
+                    "text": "999",
                     "suggested_key": "numero_unidad",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                },
+                {
+                    "id": "cand_002",
+                    "text": "804",
+                    "canonical_field_code": "NUMERO_APARTAMENTO",
                     "status": "accepted",
                     "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
                 }
@@ -526,8 +533,11 @@ class InverseConversionWriterTests(unittest.TestCase):
                 data={"candidates": json.dumps(candidates)},
             )
 
-            self.assertEqual(response.status_code, 422)
-            self.assertIn("Alias ambiguo", response.json()["detail"])
+            self.assertEqual(response.status_code, 200)
+            with tempfile.TemporaryDirectory() as tmp:
+                generated = Path(tmp) / "generated.docx"
+                generated.write_bytes(response.content)
+                self.assertEqual(Document(str(generated)).paragraphs[0].text, "APARTAMENTO: {{NUMERO_APARTAMENTO}}")
         finally:
             engine.dispose()
 
@@ -561,15 +571,22 @@ class InverseConversionWriterTests(unittest.TestCase):
         finally:
             engine.dispose()
 
-    def test_endpoint_returns_controlled_error_for_invalid_canonical_code(self):
+    def test_endpoint_skips_invalid_canonical_code_when_other_candidate_is_valid(self):
         client, engine = self._build_endpoint_client()
         try:
             candidates = [
                 {
                     "id": "cand_001",
-                    "text": "804",
+                    "text": "999",
                     "suggested_key": "numero_apartamento",
                     "canonical_field_code": "CAMPO_INVENTADO",
+                    "status": "accepted",
+                    "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
+                },
+                {
+                    "id": "cand_002",
+                    "text": "804",
+                    "canonical_field_code": "NUMERO_APARTAMENTO",
                     "status": "accepted",
                     "contexts": [{"location": "paragraph 1", "before": "APARTAMENTO:", "after": ""}],
                 }
@@ -587,8 +604,11 @@ class InverseConversionWriterTests(unittest.TestCase):
                 data={"candidates": json.dumps(candidates)},
             )
 
-            self.assertEqual(response.status_code, 422)
-            self.assertIn("field_definitions", response.json()["detail"])
+            self.assertEqual(response.status_code, 200)
+            with tempfile.TemporaryDirectory() as tmp:
+                generated = Path(tmp) / "generated.docx"
+                generated.write_bytes(response.content)
+                self.assertEqual(Document(str(generated)).paragraphs[0].text, "APARTAMENTO: {{NUMERO_APARTAMENTO}}")
         finally:
             engine.dispose()
 

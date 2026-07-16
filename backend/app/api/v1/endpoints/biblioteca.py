@@ -22,6 +22,7 @@ from app.models.biblioteca_learning import BibliotecaAnalysisRun
 from app.models.notarial_field_catalog import NotarialFieldCatalog
 from app.models.user import User
 from app.modules.minuta.router import _decode_file_token
+from app.services.minuta.inverse_conversion_catalog.models import FieldDefinition
 from app.services.biblioteca_motor.analysis import OpenAIBibliotecaExtractor, analyze_biblioteca_document, build_analysis_failure_payload
 from app.services.biblioteca_motor.field_instance_service import resolve_decision_target_instance
 from app.services.biblioteca_motor.field_signal_service import SignalContext, record_field_signal
@@ -90,6 +91,7 @@ class CreateFieldRequest(BaseModel):
     label: str = Field(min_length=2, max_length=200)
     field_type: str = Field(default="text", max_length=40)
     category: str = Field(default="otro", max_length=80)
+    scope: Literal["global", "notary"] = "notary"
     description: str | None = None
     options_json: str | None = None
 
@@ -181,37 +183,79 @@ def _create_field_catalog_record(
     code = _normalize_catalog_code(payload.code)
     if code.startswith("PENDING_FIELD_"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No se puede crear un campo con codigo provisional.")
-    notary_id = current_user.default_notary_id
-    existing = (
-        db.query(NotarialFieldCatalog)
-        .filter(
-            NotarialFieldCatalog.code == code,
-            NotarialFieldCatalog.notary_id.is_(None) if notary_id is None else NotarialFieldCatalog.notary_id == notary_id,
+    if not code:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Codigo de campo invalido.")
+
+    requested_scope = payload.scope
+    user_notary_id = current_user.default_notary_id
+    if requested_scope == "notary" and user_notary_id is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No hay notaria activa para crear un campo de alcance notarial.")
+
+    field = _find_reusable_catalog_field(db, current_user, code)
+    if field is None:
+        target_notary_id = None if requested_scope == "global" else user_notary_id
+        field = NotarialFieldCatalog(
+            code=code,
+            label=payload.label.strip(),
+            field_type=(payload.field_type or "text").strip() or "text",
+            category=(payload.category or "otro").strip() or "otro",
+            description=payload.description.strip() if payload.description else None,
+            options_json=payload.options_json.strip() if payload.options_json else None,
+            scope=requested_scope,
+            notary_id=target_notary_id,
+            is_active=True,
+            created_by_user_id=getattr(current_user, "id", None),
+            metadata_json=json.dumps({"source": "biblioteca_motor", "scope": requested_scope}, ensure_ascii=False),
         )
-        .first()
-    )
-    if existing is not None:
-        return existing
-    field = NotarialFieldCatalog(
-        code=code,
-        label=payload.label.strip(),
-        field_type=(payload.field_type or "text").strip() or "text",
-        category=(payload.category or "otro").strip() or "otro",
-        description=payload.description.strip() if payload.description else None,
-        options_json=payload.options_json.strip() if payload.options_json else None,
-        scope="notary" if notary_id is not None else "global",
-        notary_id=notary_id,
-        is_active=True,
-        created_by_user_id=getattr(current_user, "id", None),
-        metadata_json=json.dumps({"source": "biblioteca_motor"}, ensure_ascii=False),
-    )
-    db.add(field)
-    if commit:
-        db.commit()
-        db.refresh(field)
+        db.add(field)
     else:
-        db.flush()
+        field.is_active = True
+
+    _ensure_field_definition(db, payload, code, requested_scope)
+    try:
+        if commit:
+            db.commit()
+            db.refresh(field)
+        else:
+            db.flush()
+    except Exception:
+        db.rollback()
+        raise
     return field
+
+
+def _find_reusable_catalog_field(db: Session, current_user: User, code: str) -> NotarialFieldCatalog | None:
+    notary_id = current_user.default_notary_id
+    query = db.query(NotarialFieldCatalog).filter(NotarialFieldCatalog.code == code)
+    if notary_id is None:
+        query = query.filter(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None))
+    else:
+        query = query.filter(
+            or_(
+                sa.and_(NotarialFieldCatalog.scope == "global", NotarialFieldCatalog.notary_id.is_(None)),
+                sa.and_(NotarialFieldCatalog.scope == "notary", NotarialFieldCatalog.notary_id == notary_id),
+            ),
+        )
+    return query.order_by(case((NotarialFieldCatalog.scope == "global", 0), else_=1), NotarialFieldCatalog.id.asc()).first()
+
+
+def _ensure_field_definition(db: Session, payload: CreateFieldRequest, code: str, scope: str) -> FieldDefinition:
+    definition = db.query(FieldDefinition).filter(FieldDefinition.field_code == code).first()
+    if definition is not None:
+        return definition
+    definition = FieldDefinition(
+        field_code=code,
+        display_name=payload.label.strip(),
+        data_type=(payload.field_type or "text").strip() or "text",
+        field_group=(payload.category or "otro").strip() or "otro",
+        description=payload.description.strip() if payload.description else None,
+        status="approved",
+        confidence=1.0,
+        source="biblioteca_motor",
+        metadata_json=json.dumps({"source": "biblioteca_motor", "scope": scope}, ensure_ascii=False),
+    )
+    db.add(definition)
+    return definition
 
 
 @router.post("/analizar")

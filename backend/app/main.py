@@ -11,6 +11,7 @@ from app.api.router import api_router
 from app.api.v1.endpoints import biblioteca as biblioteca_endpoint
 from app.api.v1.endpoints import biblioteca_async as biblioteca_async_endpoint
 from app.api.v1.endpoints.biblioteca_poll import router as biblioteca_poll_router
+from app.api.v1.endpoints.demo_template import router as demo_template_router
 from app.core.config import get_settings
 from app.db.init_db import init_db
 from app.db.session import SessionLocal
@@ -97,6 +98,7 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_endpoint.router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_async_endpoint.router, prefix=settings.api_v1_prefix)
 app.include_router(biblioteca_poll_router, prefix=settings.api_v1_prefix)
+app.include_router(demo_template_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health")
