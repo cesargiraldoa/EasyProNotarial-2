@@ -48,6 +48,7 @@ function loadTemplateEditorRuntime() {
   elements.set("estado", makeElement("estado"));
   let documentContext = null;
   let refreshCount = 0;
+  const executeCommandCalls = [];
   const fetchCalls = [];
   const returnMessages = [];
   const target = {
@@ -84,6 +85,14 @@ function loadTemplateEditorRuntime() {
     clearTimeout,
     fetch: async (url, init) => {
       fetchCalls.push({ url, init });
+      if (String(url).includes("/api/v1/minuta/onlyoffice/forcesave")) {
+        return {
+          ok: true,
+          async json() {
+            return { ok: true, status: "requested", onlyoffice_error: 0 };
+          },
+        };
+      }
       return {
         ok: true,
         async json() {
@@ -93,7 +102,9 @@ function loadTemplateEditorRuntime() {
     },
     Asc: {
       plugin: {
-        executeCommand() {},
+        executeCommand(name, value) {
+          executeCommandCalls.push({ name, value });
+        },
         executeMethod(_name, _args, callback) {
           callback(true);
         },
@@ -135,6 +146,7 @@ function loadTemplateEditorRuntime() {
     button: elements.get("btnGuardarPlantillaVolver"),
     estado: elements.get("estado"),
     fetchCalls,
+    executeCommandCalls,
     returnMessages,
     getRefreshCount: () => refreshCount,
   };
@@ -172,9 +184,11 @@ test("plugin exposes explicit select and insert controls", () => {
   assert.match(source, /attempt < 60/);
   assert.match(source, /Esperando confirmacion de guardado\.\.\. " \+ String\(attempt\) \+ "s"/);
   assert.match(html, /Biblioteca de etiquetas/);
-  assert.match(html, /template-editor\.js\?v=2\.3\.2/);
-  assert.equal(config.version, "2.3.2");
+  assert.match(html, /template-editor\.js\?v=2\.3\.3/);
+  assert.equal(config.version, "2.3.3");
   assert.doesNotMatch(source, /MutationObserver/);
+  assert.doesNotMatch(source, /executeCommand\("save"/);
+  assert.doesNotMatch(source, /executeMethod\("Save"/);
 });
 
 test("template save refreshes minuta context and continues", async () => {
@@ -183,9 +197,13 @@ test("template save refreshes minuta context and continues", async () => {
   await runtime.button.listeners.click();
 
   assert.equal(runtime.getRefreshCount(), 1);
-  assert.equal(runtime.fetchCalls.length, 1);
-  assert.match(runtime.fetchCalls[0].url, /marked-template\/editor-state\?token=editor-token-123$/);
+  assert.equal(runtime.fetchCalls.length, 2);
+  assert.match(runtime.fetchCalls[0].url, /\/api\/v1\/minuta\/onlyoffice\/forcesave\?token=editor-token-123$/);
+  assert.equal(runtime.fetchCalls[0].init.method, "POST");
   assert.equal(runtime.fetchCalls[0].init.headers.Authorization, "Bearer fresh-token");
+  assert.match(runtime.fetchCalls[1].url, /marked-template\/editor-state\?token=editor-token-123$/);
+  assert.equal(runtime.fetchCalls[1].init.headers.Authorization, "Bearer fresh-token");
+  assert.equal(runtime.executeCommandCalls.length, 0);
   assert.equal(runtime.returnMessages.length > 0, true);
   assert.equal(runtime.returnMessages[0].message.type, "EASYPRO_MINUTA_TEMPLATE_RETURN_REQUEST");
   assert.equal(runtime.estado.className, "ok");

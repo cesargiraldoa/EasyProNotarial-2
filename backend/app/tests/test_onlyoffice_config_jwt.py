@@ -3,10 +3,34 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from jose import jwt
 
 from app.modules.document_flow import router as document_flow_router
 from app.modules.minuta import router as minuta_router
+
+
+class _OnlyOfficeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+
+def _user(notary_id=1, role_notary_id=None, role_code="protocolist"):
+    return SimpleNamespace(
+        id=7,
+        full_name="User Demo",
+        email="user@example.com",
+        default_notary_id=notary_id,
+        role_assignments=[
+            SimpleNamespace(
+                notary_id=role_notary_id if role_notary_id is not None else notary_id,
+                role=SimpleNamespace(code=role_code),
+            )
+        ],
+    )
 
 
 class OnlyOfficeConfigJwtTests(unittest.TestCase):
@@ -63,6 +87,117 @@ class OnlyOfficeConfigJwtTests(unittest.TestCase):
             self.assertEqual(decoded["document_id"], 20)
             self.assertEqual(decoded["version_id"], 30)
             self.assertEqual(decoded["user_id"], 7)
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+
+    def test_minuta_forcesave_uses_same_document_key_as_config_and_posts_command(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        previous_url = settings.onlyoffice_documentserver_url
+        settings.onlyoffice_jwt_secret = ""
+        settings.onlyoffice_documentserver_url = "https://onlyoffice.example"
+        try:
+            file_token = minuta_router._make_file_token(
+                "cases/demo/minuta.docx",
+                "marked-template.docx",
+                "Minuta demo",
+                1,
+            )
+            config = minuta_router.minuta_onlyoffice_config(
+                request=SimpleNamespace(base_url="http://testserver/"),
+                token=file_token,
+                current_user=_user(),
+            )
+            with patch.object(minuta_router._req, "post", return_value=_OnlyOfficeResponse({"error": 0})) as post:
+                result = minuta_router.minuta_onlyoffice_forcesave(
+                    token=file_token,
+                    current_user=_user(),
+                    db=object(),
+                )
+
+            self.assertEqual(result["status"], "requested")
+            call = post.call_args
+            self.assertIn("/command?shardkey=minuta-marked-template", call.args[0])
+            self.assertEqual(call.kwargs["timeout"], 20)
+            self.assertEqual(call.kwargs["json"]["c"], "forcesave")
+            self.assertEqual(call.kwargs["json"]["key"], config["document"]["key"])
+            self.assertEqual(call.kwargs["json"]["userdata"], "easypro-marked-template-save")
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+            settings.onlyoffice_documentserver_url = previous_url
+
+    def test_minuta_forcesave_includes_command_jwt_when_secret_is_configured(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        previous_url = settings.onlyoffice_documentserver_url
+        settings.onlyoffice_jwt_secret = "onlyoffice-secret"
+        settings.onlyoffice_documentserver_url = "https://onlyoffice.example/"
+        try:
+            file_token = minuta_router._make_file_token(
+                "cases/demo/minuta.docx",
+                "marked-template.docx",
+                "Minuta demo",
+                1,
+            )
+            with patch.object(minuta_router._req, "post", return_value=_OnlyOfficeResponse({"error": 0})) as post:
+                minuta_router.minuta_onlyoffice_forcesave(token=file_token, current_user=_user(), db=object())
+
+            command_payload = post.call_args.kwargs["json"]
+            self.assertIn("token", command_payload)
+            decoded = jwt.decode(command_payload["token"], "onlyoffice-secret", algorithms=["HS256"])
+            self.assertEqual(decoded["c"], "forcesave")
+            self.assertEqual(decoded["key"], "minuta-marked-template")
+            self.assertEqual(decoded["userdata"], "easypro-marked-template-save")
+            self.assertNotIn("token", decoded)
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+            settings.onlyoffice_documentserver_url = previous_url
+
+    def test_minuta_forcesave_error_4_is_controlled_no_changes(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        settings.onlyoffice_jwt_secret = "onlyoffice-secret"
+        try:
+            file_token = minuta_router._make_file_token("storage.docx", "storage.docx", "Minuta", 1)
+            with patch.object(minuta_router._req, "post", return_value=_OnlyOfficeResponse({"error": 4})):
+                result = minuta_router.minuta_onlyoffice_forcesave(token=file_token, current_user=_user(), db=object())
+
+            self.assertEqual(result["status"], "no_changes")
+            self.assertEqual(result["onlyoffice_error"], 4)
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+
+    def test_minuta_forcesave_other_onlyoffice_error_returns_502(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        settings.onlyoffice_jwt_secret = "onlyoffice-secret"
+        try:
+            file_token = minuta_router._make_file_token("storage.docx", "storage.docx", "Minuta", 1)
+            with patch.object(minuta_router._req, "post", return_value=_OnlyOfficeResponse({"error": 9})):
+                with self.assertRaises(HTTPException) as raised:
+                    minuta_router.minuta_onlyoffice_forcesave(token=file_token, current_user=_user(), db=object())
+
+            self.assertEqual(raised.exception.status_code, 502)
+            self.assertEqual(raised.exception.detail["onlyoffice_error"], 9)
+        finally:
+            settings.onlyoffice_jwt_secret = previous_secret
+
+    def test_minuta_forcesave_blocks_user_without_notary_access(self):
+        settings = minuta_router.get_settings()
+        previous_secret = settings.onlyoffice_jwt_secret
+        settings.onlyoffice_jwt_secret = "onlyoffice-secret"
+        try:
+            file_token = minuta_router._make_file_token("storage.docx", "storage.docx", "Minuta", 1)
+            with patch.object(minuta_router._req, "post") as post:
+                with self.assertRaises(HTTPException) as raised:
+                    minuta_router.minuta_onlyoffice_forcesave(
+                        token=file_token,
+                        current_user=_user(notary_id=2, role_notary_id=2),
+                        db=object(),
+                    )
+
+            self.assertEqual(raised.exception.status_code, 403)
+            post.assert_not_called()
         finally:
             settings.onlyoffice_jwt_secret = previous_secret
 
