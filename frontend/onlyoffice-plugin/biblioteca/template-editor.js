@@ -88,21 +88,6 @@
     });
   }
 
-  function executeCommand(name, value) {
-    return new Promise(function (resolve) {
-      try {
-        if (!window.Asc || !window.Asc.plugin || typeof window.Asc.plugin.executeCommand !== "function") {
-          resolve({ ok: false, error: "executeCommand_unavailable" });
-          return;
-        }
-        window.Asc.plugin.executeCommand(name, value || "");
-        resolve({ ok: true });
-      } catch (_error) {
-        resolve({ ok: false, error: "executeCommand_failed" });
-      }
-    });
-  }
-
   function command(scopeKey, payload, callback) {
     return new Promise(function (resolve) {
       window.Asc.scope = window.Asc.scope || {};
@@ -266,12 +251,6 @@
     return api.test.getDocumentContext();
   }
 
-  async function requestSave() {
-    await executeCommand("save", "");
-    var methodResult = await execute("Save", []);
-    return methodResult.ok;
-  }
-
   async function fetchEditorState(token, editorToken) {
     var response = await window.fetch(
       apiBase() + TEMPLATE_STATE_PATH + "?token=" + encodeURIComponent(editorToken),
@@ -284,6 +263,22 @@
     );
     if (!response.ok) throw new Error("state_failed");
     return response.json();
+  }
+
+  async function requestForceSave(token, editorToken) {
+    var response = await window.fetch(
+      apiBase() + "/api/v1/minuta/onlyoffice/forcesave?token=" + encodeURIComponent(editorToken),
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+        credentials: "omit",
+        cache: "no-store"
+      }
+    );
+    if (!response.ok) throw new Error("forcesave_failed");
+    var payload = await response.json();
+    if (!payload || payload.ok !== true) throw new Error("forcesave_failed");
+    return payload;
   }
 
   function delay(ms) {
@@ -338,12 +333,15 @@
           return;
         }
       }
-      state("Guardando plantilla en OnlyOffice...", "");
-      await requestSave();
+      state("Solicitando guardado al servidor...", "");
+      var forceSave = await requestForceSave(token, context.editor_token);
       state("Esperando confirmacion de guardado... 0s", "");
       var payload = await waitForSavedState(token, context.editor_token, function (attempt) {
         state("Esperando confirmacion de guardado... " + String(attempt) + "s", "");
       });
+      if ((!payload || !payload.saved) && forceSave && forceSave.status === "no_changes") {
+        payload = await fetchEditorState(token, context.editor_token);
+      }
       if (!payload || !payload.saved) {
         state("OnlyOffice aun no confirmo el guardado. Guarda el documento y vuelve a intentar.", "error");
         return;

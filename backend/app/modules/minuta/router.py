@@ -6,12 +6,14 @@ import traceback
 import uuid as _uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import Response
 from jose import jwt
+import requests as _req
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -112,6 +114,40 @@ def _decode_file_token(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token de minuta inválido o expirado.",
         ) from exc
+
+
+def _build_minuta_document_key(payload: dict) -> str:
+    return f"minuta-{payload['filename'].replace('.docx', '')}"
+
+
+def _user_can_access_notary(current_user: User, notary_id: int | None) -> bool:
+    if notary_id is None:
+        return True
+    if getattr(current_user, "default_notary_id", None) == notary_id:
+        return True
+    for assignment in getattr(current_user, "role_assignments", []) or []:
+        assignment_notary_id = getattr(assignment, "notary_id", None)
+        role = getattr(assignment, "role", None)
+        role_code = getattr(role, "code", None)
+        if role_code in {"super_admin", "admin_notary"} and assignment_notary_id is None:
+            return True
+        if assignment_notary_id == notary_id:
+            return True
+    return False
+
+
+def _validate_minuta_token_access(payload: dict, current_user: User, db: Session) -> None:
+    notary_id = payload.get("notary_id")
+    case_id = payload.get("case_id")
+    if case_id is not None:
+        case_obj = db.query(Case).filter(Case.id == case_id).first()
+        if case_obj is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para esta minuta.")
+        if notary_id is not None and case_obj.notary_id != notary_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para esta minuta.")
+        notary_id = case_obj.notary_id
+    if not _user_can_access_notary(current_user, notary_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para esta minuta.")
 
 
 # ─── POST /analizar ───────────────────────────────────────────────────────────
@@ -388,7 +424,7 @@ def minuta_onlyoffice_config(
     filename = payload.get("display_name") or payload.get("filename", "minuta.docx")
 
     base_url = _resolve_public_api_base(request)
-    doc_key = f"minuta-{payload['filename'].replace('.docx', '')}"
+    doc_key = _build_minuta_document_key(payload)
 
     file_url = f"{base_url}/api/v1/minuta/onlyoffice/file?token={token}"
     callback_url = f"{base_url}/api/v1/minuta/onlyoffice/callback?token={token}"
@@ -430,6 +466,87 @@ def minuta_onlyoffice_config(
         config["token"] = jwt.encode(config, secret, algorithm="HS256")
 
     return config
+
+
+# ─── POST /onlyoffice/forcesave ───────────────────────────────────────────────
+
+@router.post("/onlyoffice/forcesave")
+def minuta_onlyoffice_forcesave(
+    token: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    payload = _decode_file_token(token)
+    _validate_minuta_token_access(payload, current_user, db)
+
+    document_key = _build_minuta_document_key(payload)
+    command_payload: dict = {
+        "c": "forcesave",
+        "key": document_key,
+        "userdata": "easypro-marked-template-save",
+    }
+    secret = (get_settings().onlyoffice_jwt_secret or "").strip()
+    if secret:
+        command_payload["token"] = jwt.encode(command_payload.copy(), secret, algorithm="HS256")
+
+    command_url = (
+        get_settings().onlyoffice_documentserver_url.rstrip("/")
+        + "/command?shardkey="
+        + quote(document_key, safe="")
+    )
+    log_context = {
+        "key": document_key,
+        "case_id": payload.get("case_id"),
+        "document_id": payload.get("document_id"),
+        "version_id": payload.get("version_id"),
+    }
+    logger.info("minuta onlyoffice forcesave requested", extra=log_context)
+
+    try:
+        response = _req.post(command_url, json=command_payload, timeout=20)
+        result = response.json()
+    except Exception as exc:
+        logger.exception("minuta onlyoffice forcesave command failed", extra=log_context)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OnlyOffice no respondió con JSON válido al solicitar guardado.",
+        ) from exc
+
+    if not isinstance(result, dict):
+        logger.warning("minuta onlyoffice forcesave returned non-object json", extra=log_context)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OnlyOffice devolvió una respuesta inválida al solicitar guardado.",
+        )
+
+    error_code = result.get("error")
+    try:
+        error_code = int(error_code)
+    except (TypeError, ValueError):
+        logger.warning("minuta onlyoffice forcesave returned invalid error code", extra=log_context)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OnlyOffice devolvió un código inválido al solicitar guardado.",
+        )
+
+    if error_code == 0:
+        return {"ok": True, "status": "requested", "onlyoffice_error": 0}
+    if error_code == 4:
+        return {
+            "ok": True,
+            "status": "no_changes",
+            "onlyoffice_error": 4,
+            "detail": "OnlyOffice no tenía cambios pendientes para guardar.",
+        }
+
+    logger.warning("minuta onlyoffice forcesave rejected", extra={**log_context, "onlyoffice_error": error_code})
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail={
+            "message": "OnlyOffice no pudo iniciar el guardado forzado.",
+            "onlyoffice_error": error_code,
+        },
+    )
 
 
 # ─── GET /onlyoffice/file ─────────────────────────────────────────────────────
