@@ -14,15 +14,13 @@ from app.services.storage import download_storage_bytes
 
 router = APIRouter(prefix="/demo-templates", tags=["demo-templates"])
 
-DEMO_FILENAME = "MINUTA JAGGUA HIPOTECA BANCO DE BOGOTÁ - 2 COMPRADORES.docx"
-
 
 @router.get("/jaggua-2-compradores")
 def download_jaggua_demo_template(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    manageable_notaries = get_manageable_notary_ids(db, current_user)
+    manageable_notaries = get_manageable_notary_ids(current_user)
     query = (
         db.query(CaseDocumentVersion)
         .join(CaseDocument, CaseDocument.id == CaseDocumentVersion.case_document_id)
@@ -35,8 +33,6 @@ def download_jaggua_demo_template(
     )
     if manageable_notaries:
         query = query.filter(Case.notary_id.in_(manageable_notaries))
-    elif current_user.default_notary_id is not None:
-        query = query.filter(Case.notary_id == current_user.default_notary_id)
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No hay una notaría activa para seleccionar la plantilla.")
 
