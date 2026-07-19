@@ -469,18 +469,35 @@
 
     h+='<p class="cl"><span class="clh">AUTORIZACIÓN.</span> '+R('El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número '+esc(s.numEscritura)+'—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.','Dcto 960/1970')+'<span class="fill"> ——</span></p>';
 
-    function sig(name,role){ return '<div style="margin-top:30px;text-align:center"><div style="border-top:1px solid var(--ink);width:84%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">'+name+'</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">'+role+'</div></div>'; }
-    function rl(p,base){ if(p.tipo==='juridica') return base+' · '+esc(p.repr)+' (rep. legal) · NIT '+esc(p.id); return base+' · C.C. '+esc(p.id)+(s.huella?' · huella dactilar':''); }
+    var blank='<span style="color:var(--line-strong)">____________________</span>';
+    function fld(label,val){ return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-soft);margin-top:1px"><span style="color:var(--ink-faint)">'+label+':</span> '+(val?'<span style="color:var(--ink)">'+val+'</span>':blank)+'</div>'; }
+    function chk(label){ return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">'+label+' &nbsp;Sí <span style="color:var(--line-strong)">▢</span>&nbsp; No <span style="color:var(--line-strong)">▢</span></div>'; }
+    /* ficha de firma al estilo Notaría 16: cada otorgante con sus campos */
+    function firmante(nombre,ident,o){ o=o||{};
+      return '<div style="margin-top:22px;break-inside:avoid"><div style="border-top:1px solid var(--ink);margin-bottom:4px"></div>'
+        +'<div style="font-family:var(--serif);font-weight:600;font-size:12px;line-height:1.3">'+nombre+'</div>'
+        +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink)">'+ident+'</div>'
+        +fld('Dirección','')+fld('Municipio',o.muni||'')+fld('Teléfono','')+fld('Correo electrónico','')
+        +fld('Profesión u ocupación','')+(o.estado?fld('Estado civil',o.estado):'')
+        +chk('Autoriza notificaciones electrónicas:')
+        +chk('Persona Expuesta Políticamente (Decreto 1674 de 2016):')
+        +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">Biometría: <span style="color:var(--line-strong)">___________</span></div>'
+        +(o.apoderaDe?'<div style="font-family:var(--sans);font-size:10px;color:var(--ink);margin-top:2px"><b>Apoderado(a) especial de:</b> '+o.apoderaDe+'</div>':'')
+        +'</div>'; }
+    function ficha(p,base){ var estado=p.tipo==='juridica'?'':labelEstado(p.estado); return firmante(esc(p.nombre),(p.tipo==='juridica'?'NIT '+esc(p.id)+' — Rep. legal '+esc(p.repr):'C.C. '+esc(p.id)),{muni:esc(p.ciudad),estado:estado}); }
     var sigs='';
-    if(s.apod) sigs+=sig(esc(s.apodN),'Apoderado de '+vend);
-    else V.forEach(function(p){ sigs+=sig(esc(p.nombre), rl(p,'Vendedor')); });
-    C.forEach(function(p){ sigs+=sig(esc(p.nombre), rl(p,'Comprador'+(s.credito?' e hipotecante':''))); });
-    if(s.interprete) sigs+=sig('_______________','Intérprete oficial · art. 38 Dcto 960/1970');
-    if(s.firmaRuego) sigs+=sig('_______________','Firma a ruego del otorgante que no firma · art. 39');
-    if(s.firmaRuego||s.testigos){ sigs+=sig('_______________','Testigo instrumental'); sigs+=sig('_______________','Testigo instrumental'); }
+    if(s.apod){ var pd=V.map(function(p){return esc(p.nombre)+' — C.C. '+esc(p.id);}).join('; '); sigs+=firmante(esc(s.apodN),'C.C. ____________',{apoderaDe:pd}); }
+    else V.forEach(function(p){ sigs+=ficha(p,'Vendedor'); });
+    C.forEach(function(p){ sigs+=ficha(p,'Comprador'); });
+    if(s.credito) sigs+=firmante('____________________________','Apoderado(a) especial',{apoderaDe:esc(s.banco)+' — NIT '+esc(s.bancoNit)});
+    if(s.interprete) sigs+=firmante('____________________________','Intérprete oficial · art. 38 Dcto 960/1970');
+    if(s.firmaRuego) sigs+=firmante('____________________________','Firma a ruego del otorgante que no puede firmar · art. 39');
+    if(s.firmaRuego||s.testigos){ sigs+=firmante('____________________________','Testigo instrumental'); sigs+=firmante('____________________________','Testigo instrumental'); }
 
-    h+='<div data-sec="firmas" style="margin-top:22px"><div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 34px">'+sigs+'</div>';
-    h+='<div style="margin-top:36px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">EL NOTARIO DIECISÉIS DEL CÍRCULO DE MEDELLÍN</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Autoriza · Escritura Nro. '+esc(s.numEscritura)+'</div></div></div>';
+    h+='<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+blank+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.numEscritura)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
+      +'<div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">'+sigs+'</div>';
+    h+='<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">JUAN CAMILO OROZCO GAVIRIA</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Notario Dieciséis Encargado de Medellín · Autoriza — Escritura Nro. '+esc(s.numEscritura)+'</div></div></div>';
     return h;
   }
 
