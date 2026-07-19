@@ -165,7 +165,9 @@
 
     <fieldset>
       <legend><span class="bn">3</span> Título y estado jurídico</legend>
-      <div class="field"><label>Título de adquisición del vendedor</label><input type="text" id="titulo" value="compraventa mediante E.P. 2.410 del 18 de junio de 2019 de la Notaría 12 de Medellín"></div>
+      <div class="row2"><div class="field"><label>Título — Nro. escritura</label><input type="text" id="tituloNum" value="2.410"></div><div class="field"><label>Título — fecha</label><input type="date" id="tituloFecha" value="2019-06-18"></div></div>
+      <div class="field"><label>Título — notaría de origen</label><input type="text" id="tituloNotaria" value="Notaría 12 de Medellín"></div>
+      <p class="hint" id="titulohint"></p>
       <div class="field"><label>Gravámenes / limitaciones</label><select id="gravamen"><option value="libre" selected>Libre de gravámenes</option><option value="hipoteca_previa">Hipoteca previa (se cancela)</option><option value="patrimonio">Patrimonio de familia constituido</option><option value="usufructo">Usufructo vigente</option><option value="servidumbre">Servidumbre</option><option value="leasing">Leasing habitacional</option><option value="embargo">Embargo / demanda</option></select></div>
     </fieldset>
 
@@ -262,6 +264,7 @@
   var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   function diaTexto(d){ var w=enLetras(d).toLowerCase(); if(w==='uno') w='un'; else if(w.slice(-9)==='veintiuno') w=w.slice(0,-9)+'veintiún'; else if(w.slice(-4)===' uno') w=w.slice(0,-4)+' un'; return w; }
   function fechaText(v){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); if(!m) return v||'____'; var y=+m[1],mo=+m[2],d=+m[3]; if(mo<1||mo>12||d<1||d>31) return v; return diaTexto(d)+' ('+d+') '+(d===1?'día':'días')+' del mes de '+MESES[mo-1]+' del año '+enLetras(y).toLowerCase()+' ('+y+')'; }
+  function fechaCorta(v){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); if(!m) return v||'____'; return (+m[3])+' de '+MESES[+m[2]-1]+' de '+m[1]; }
   function esc(s){ return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function attr(s){ return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
   function fmt(n){ return '$'+pts(n); }
@@ -277,7 +280,7 @@
     return { derecho:g('derecho').value, credito:g('credito').checked, banco:g('banco').value, bancoNit:g('bancoNit').value,
       apod:g('apoderado').checked, apodN:g('apodNombre').value, apodP:g('apodPoder').value, afect:g('afectada').value,
       inmdesc:g('inmdesc').value, linderos:g('linderos').value, matricula:g('matricula').value, catastral:g('catastral').value,
-      ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, titulo:g('titulo').value, gravamen:g('gravamen').value,
+      ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, tituloNum:g('tituloNum').value, tituloFecha:g('tituloFecha').value, tituloNotaria:g('tituloNotaria').value, gravamen:g('gravamen').value,
       tipoNegocio:g('tipoNegocio').value, tituloTipo:g('tituloTipo').value, subsidio:g('subsidio').checked, subsidioEnt:g('subsidioEnt').value, posesion2:g('posesion2').checked, firmaRuego:g('firmaRuego').checked, interprete:g('interprete').checked, pep:g('pep').checked, cuentaTercero:g('cuentaTercero').checked,
       numEscritura:g('numEscritura').value, fechaOtorg:g('fechaOtorg').value, huella:g('huella').checked, testigos:g('testigos').checked,
       hojaInicial:g('hojaInicial').value, pepAny:(g('pep').checked||data.vendedores.concat(data.compradores).some(function(p){return p.pep;})),
@@ -410,7 +413,7 @@
       h+='<p class="para"><span class="clh">Parágrafo tercero.</span> '+R('La transferencia comprende además el derecho de copropiedad en el coeficiente señalado para el inmueble en el respectivo reglamento.','arts. 25–26 · Ley 675/2001')+'</p>';
     }
 
-    h+='<p class="cl" data-sec="titulo"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Que '+vend+' adquiri'+(vpl?'eron':'ó')+' el inmueble por '+tmodo+IF('titulo',s.titulo)+', registrada bajo el folio de matrícula inmobiliaria número '+IF('matricula',mat)+'.<span class="fill"> ——</span></p>';
+    h+='<p class="cl" data-sec="titulo"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Que '+vend+' adquiri'+(vpl?'eron':'ó')+' el inmueble por '+tmodo+'la Escritura Pública número '+IF('tituloNum',s.tituloNum)+' del '+IF('tituloFecha',fechaCorta(s.tituloFecha))+' de la '+IF('tituloNotaria',s.tituloNotaria)+', registrada bajo el folio de matrícula inmobiliaria número '+IF('matricula',mat)+'.<span class="fill"> ——</span></p>';
     if(s.tipoNegocio==='retroventa') h+='<p class="para"><span class="clh">Parágrafo — Pacto de retroventa.</span> '+R('El vendedor se reserva la facultad de recobrar el inmueble reembolsando el precio, dentro del término máximo de cuatro (4) años; se inscribe para su oponibilidad.','art. 1939 C.C.')+'</p>';
     if(s.tipoNegocio==='reserva') h+='<p class="para"><span class="clh">Parágrafo — Reserva de dominio.</span> '+R('El vendedor se reserva el dominio hasta el pago total del precio (nota: en inmuebles su eficacia se asimila a condición resolutoria por incumplimiento).','art. 1935 C.C.')+'</p>';
     if(s.tipoNegocio==='dacion') h+='<p class="para"><span class="clh">Parágrafo — Dación en pago.</span> La transferencia se hace para extinguir la obligación preexistente que se identifica en este instrumento.</p>';
@@ -618,7 +621,7 @@
   window.addEventListener('scroll',hideTip,true);
 
   /* ---------- resaltado y navegación ---------- */
-  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',titulo:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
   var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
   var lastId=null;
   function secForId(id){ if(!id) return null; if(FIELD_SEC[id]) return FIELD_SEC[id];
@@ -641,6 +644,7 @@
     g('wrap-banco').hidden=!s.credito; g('wrap-apod').hidden=!s.apod; g('wrap-ph').hidden=!s.ph; g('wrap-subsidio').hidden=!s.subsidio; g('wrap-afect').hidden=!casadoOUnion(s.V);
     g('cuadre').innerHTML=(s.inicial+s.saldo===s.total)?'<span style="color:var(--ok)">✓ Los pagos cuadran con el total.</span>':'<span style="color:var(--crit)">× Inicial + saldo = '+pts(s.inicial+s.saldo)+' ≠ total '+pts(s.total)+'.</span>';
     g('fechahint').innerHTML=s.fechaOtorg?'En la escritura: «a los '+esc(fechaText(s.fechaOtorg))+'».':'<span style="color:var(--crit)">Seleccione la fecha de otorgamiento.</span>';
+    g('titulohint').innerHTML='En la escritura: «…la Escritura Pública número '+esc(s.tituloNum)+' del '+esc(fechaCorta(s.tituloFecha))+' de la '+esc(s.tituloNotaria)+'».';
     g('escritura').innerHTML=renderEscritura(s); applyHL();
     var items=evaluar(s), c=renderCumplimiento(items);
     var words=g('escritura').textContent.trim().split(/\s+/).length;

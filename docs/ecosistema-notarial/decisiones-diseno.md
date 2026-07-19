@@ -75,3 +75,12 @@ Cuando el banco manda su minuta (a veces compraventa + hipoteca):
 - **Escritura pública electrónica: inexequible** (C-159/2021, efectos desde 20-jun-2023) — nunca insertar cláusula basada en artículo tumbado.
 - **Decreto 2148/1983** derogado como norma autónoma pero **compilado** en Decreto 1069/2015.
 - **Uso y habitación intransferibles**; territorios étnicos inalienables; reserva de dominio sobre inmuebles de eficacia discutida.
+
+## 9. Captura única → cascada (el protocolista escribe lo mínimo)
+
+Principio: **cada dato se captura una sola vez, de forma estructurada, y el motor lo inserta —en cascada— en todos los lugares donde corresponde, con el formato notarial correcto.** El protocolista elige/selecciona; el motor redacta.
+
+- **Estructurado, no texto libre.** Donde el dato tiene formato (fecha, número, dinero), se captura con el control adecuado (selector de fecha, número) y el motor genera el texto: la fecha de otorgamiento se elige en un calendario y sale *"a los catorce (14) días del mes de agosto del año dos mil veintiséis (2026)"* (con apócope correcta: un/veintiún/treinta y un día(s)); el precio en número sale en letras.
+- **Un dato, muchos destinos.** La matrícula, los nombres, el banco/NIT o la referencia del título se escriben una vez y aparecen en todas sus ubicaciones (carátula de calificación, objeto, título, hipoteca, firmas). Cambiar el origen actualiza todas las copias.
+- **Referencias de escritura estructuradas.** El título de adquisición (y, por venir, el reglamento de P.H. y el poder) se capturan como *número + fecha (selector) + notaría* y el motor compone *"la Escritura Pública número 2.410 del 18 de junio de 2019 de la Notaría 12 de Medellín"*.
+- **Beneficio:** menos tecleo, menos errores de copia, consistencia garantizada, y el mismo patrón se porta al backend (campos del caso → plantilla de cláusula).
