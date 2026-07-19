@@ -213,7 +213,8 @@
 
     <fieldset>
       <legend><span class="bn">6</span> Otorgamiento y firmas</legend>
-      <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="numEscritura" value="2.847"></div><div class="field"><label>Fecha de otorgamiento</label><input type="text" id="fechaOtorg" value="catorce (14) días del mes de agosto del año dos mil veintiséis (2026)"></div></div>
+      <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="numEscritura" value="2.847"></div><div class="field"><label>Hoja de papel notarial (Nro. inicial)</label><input type="text" id="hojaInicial" value="Aa-112942941"></div></div>
+      <div class="field"><label>Fecha de otorgamiento</label><input type="text" id="fechaOtorg" value="catorce (14) días del mes de agosto del año dos mil veintiséis (2026)"></div>
       <label class="chk"><input type="checkbox" id="huella" checked> Se toma impresión dactilar de los otorgantes</label>
       <label class="chk"><input type="checkbox" id="testigos"> Concurren testigos instrumentales</label>
       <p class="hint">Cierre del instrumento: lectura, protocolización, constancias fiscales, firmas y autorización notarial — las cuatro fases del art. 13 del Decreto 960/1970.</p>
@@ -238,11 +239,11 @@
   /* ---------- datos dinámicos ---------- */
   var data={
     vendedores:[
-      {tipo:'natural',nombre:'RODRIGO ELÍAS CASTAÑO MEJÍA',id:'71.555.201',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50},
-      {tipo:'natural',nombre:'MARTA LUCÍA ARANGO POSADA',id:'43.220.118',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50}
+      {tipo:'natural',nombre:'RODRIGO ELÍAS CASTAÑO MEJÍA',id:'71.555.201',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50,direccion:'Calle 10 Sur # 22-14',telefono:'315 6620114',correo:'rcastano@correo.com',ocupacion:'Comerciante',notiElec:true,pep:false},
+      {tipo:'natural',nombre:'MARTA LUCÍA ARANGO POSADA',id:'43.220.118',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50,direccion:'Calle 10 Sur # 22-14',telefono:'315 6620115',correo:'marango@correo.com',ocupacion:'Docente',notiElec:true,pep:false}
     ],
     compradores:[
-      {tipo:'natural',nombre:'LAURA XIMENA ORTIZ VÉLEZ',id:'1.017.884.330',ciudad:'Envigado',estado:'soltero',repr:'',cuota:100}
+      {tipo:'natural',nombre:'LAURA XIMENA ORTIZ VÉLEZ',id:'1.017.884.330',ciudad:'Envigado',estado:'soltero',repr:'',cuota:100,direccion:'Cra 43A # 30 Sur-90',telefono:'304 5512090',correo:'lortiz@correo.com',ocupacion:'Ingeniera',notiElec:true,pep:false}
     ]
   };
 
@@ -276,6 +277,7 @@
       ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, titulo:g('titulo').value, gravamen:g('gravamen').value,
       tipoNegocio:g('tipoNegocio').value, tituloTipo:g('tituloTipo').value, subsidio:g('subsidio').checked, subsidioEnt:g('subsidioEnt').value, posesion2:g('posesion2').checked, firmaRuego:g('firmaRuego').checked, interprete:g('interprete').checked, pep:g('pep').checked, cuentaTercero:g('cuentaTercero').checked,
       numEscritura:g('numEscritura').value, fechaOtorg:g('fechaOtorg').value, huella:g('huella').checked, testigos:g('testigos').checked,
+      hojaInicial:g('hojaInicial').value, pepAny:(g('pep').checked||data.vendedores.concat(data.compradores).some(function(p){return p.pep;})),
       total:num('total'), inicial:num('inicial'), saldo:num('saldo'),
       ax:{tradicion:g('ax_tradicion').checked, predial:g('ax_predial').checked, admin:g('ax_admin').checked, cedulas:g('ax_cedulas').checked},
       V:data.vendedores, C:data.compradores };
@@ -301,13 +303,20 @@
     } else {
       h+='<div class="row2"><div class="field"><label>Domicilio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div><div class="field"><label>Estado civil</label><select '+da+' data-key="estado">'+estadoOpts(p.estado)+'</select></div></div>';
     }
+    h+='<div class="sub-group" style="margin-top:8px"><div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:2px">Datos para la firma</div>';
+    h+='<div class="field"><label>Dirección</label><input type="text" '+da+' data-key="direccion" value="'+attr(p.direccion)+'"></div>';
+    h+='<div class="row2"><div class="field"><label>Teléfono</label><input type="text" '+da+' data-key="telefono" value="'+attr(p.telefono)+'"></div><div class="field"><label>'+(p.tipo==='juridica'?'Actividad económica':'Profesión u ocupación')+'</label><input type="text" '+da+' data-key="ocupacion" value="'+attr(p.ocupacion)+'"></div></div>';
+    h+='<div class="field"><label>Correo electrónico</label><input type="text" '+da+' data-key="correo" value="'+attr(p.correo)+'"></div>';
+    h+='<label class="chk"><input type="checkbox" '+da+' data-key="notiElec"'+(p.notiElec?' checked':'')+'> Autoriza notificaciones electrónicas</label>';
+    h+='<label class="chk"><input type="checkbox" '+da+' data-key="pep"'+(p.pep?' checked':'')+'> Persona Expuesta Políticamente (PEP)</label>';
+    h+='</div>';
     return h+'</div>';
   }
   function renderParties(){
     g('vend-list').innerHTML=data.vendedores.map(function(p,i){return partyCard('v',i,p,'Vendedor');}).join('');
     g('comp-list').innerHTML=data.compradores.map(function(p,i){return partyCard('c',i,p,'Comprador');}).join('');
   }
-  function nueva(){ return {tipo:'natural',nombre:'',id:'',ciudad:'Medellín',estado:'soltero',repr:'',cuota:0}; }
+  function nueva(){ return {tipo:'natural',nombre:'',id:'',ciudad:'Medellín',estado:'soltero',repr:'',cuota:0,direccion:'',telefono:'',correo:'',ocupacion:'',notiElec:true,pep:false}; }
   function equalizar(side){ var arr=side==='v'?data.vendedores:data.compradores; var n=arr.length; if(!n) return; var base=Math.floor(100/n); arr.forEach(function(p){p.cuota=base;}); arr[n-1].cuota=100-base*(n-1); }
 
   /* ---------- normas (popups) ---------- */
@@ -440,7 +449,7 @@
 
     if(s.interprete) h+='<p class="cl">'+R('Comparece un intérprete que tradujo íntegramente el instrumento a el (los) otorgante(s) que no domina(n) el idioma; se deja constancia de su comprensión y aprobación.','art. 38 · Dcto 960/70')+'<span class="fill"> —</span></p>';
     if(s.firmaRuego) h+='<p class="cl">'+R('Manifestando uno de los otorgantes no saber o no poder firmar, firma por él a su ruego un tercero, en presencia de dos testigos hábiles que también suscriben; se toma su impresión dactilar.','art. 39 · Dcto 960/70')+'<span class="fill"> —</span></p>';
-    if(s.pep||s.cuentaTercero) h+='<p class="para"><span class="clh">Parágrafo — Debida diligencia.</span> '+R((s.cuentaTercero?'Se identifica al beneficiario final por cuya cuenta se actúa. ':'')+(s.pep?'Se deja constancia de la condición de Persona Expuesta Políticamente y de la debida diligencia reforzada aplicada.':''),'Dcto 830/2021')+'</p>';
+    if(s.pepAny||s.cuentaTercero) h+='<p class="para"><span class="clh">Parágrafo — Debida diligencia.</span> '+R((s.cuentaTercero?'Se identifica al beneficiario final por cuya cuenta se actúa. ':'')+(s.pepAny?'Se deja constancia de la condición de Persona Expuesta Políticamente y de la debida diligencia reforzada aplicada.':''),'Dcto 830/2021')+'</p>';
     h+=otorgamiento(s);
     return h;
   }
@@ -471,20 +480,23 @@
 
     var blank='<span style="color:var(--line-strong)">____________________</span>';
     function fld(label,val){ return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-soft);margin-top:1px"><span style="color:var(--ink-faint)">'+label+':</span> '+(val?'<span style="color:var(--ink)">'+val+'</span>':blank)+'</div>'; }
-    function chk(label){ return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">'+label+' &nbsp;Sí <span style="color:var(--line-strong)">▢</span>&nbsp; No <span style="color:var(--line-strong)">▢</span></div>'; }
+    function chk(label,val){ var box=function(on){return '<span style="color:'+(on?'var(--ins)':'var(--line-strong)')+';font-weight:700">'+(on?'☒':'▢')+'</span>';};
+      return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">'+label+' &nbsp;Sí '+box(val===true)+'&nbsp; No '+box(val===false)+'</div>'; }
     /* ficha de firma al estilo Notaría 16: cada otorgante con sus campos */
     function firmante(nombre,ident,o){ o=o||{};
       return '<div style="margin-top:22px;break-inside:avoid"><div style="border-top:1px solid var(--ink);margin-bottom:4px"></div>'
         +'<div style="font-family:var(--serif);font-weight:600;font-size:12px;line-height:1.3">'+nombre+'</div>'
         +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink)">'+ident+'</div>'
-        +fld('Dirección','')+fld('Municipio',o.muni||'')+fld('Teléfono','')+fld('Correo electrónico','')
-        +fld('Profesión u ocupación','')+(o.estado?fld('Estado civil',o.estado):'')
-        +chk('Autoriza notificaciones electrónicas:')
-        +chk('Persona Expuesta Políticamente (Decreto 1674 de 2016):')
+        +fld('Dirección',o.direccion||'')+fld('Municipio',o.muni||'')+fld('Teléfono',o.telefono||'')+fld('Correo electrónico',o.correo||'')
+        +fld('Profesión u ocupación',o.ocupacion||'')+(o.estado?fld('Estado civil',o.estado):'')
+        +chk('Autoriza notificaciones electrónicas:',o.noti)
+        +chk('Persona Expuesta Políticamente (Decreto 1674 de 2016):',o.pep)
         +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">Biometría: <span style="color:var(--line-strong)">___________</span></div>'
         +(o.apoderaDe?'<div style="font-family:var(--sans);font-size:10px;color:var(--ink);margin-top:2px"><b>Apoderado(a) especial de:</b> '+o.apoderaDe+'</div>':'')
         +'</div>'; }
-    function ficha(p,base){ var estado=p.tipo==='juridica'?'':labelEstado(p.estado); return firmante(esc(p.nombre),(p.tipo==='juridica'?'NIT '+esc(p.id)+' — Rep. legal '+esc(p.repr):'C.C. '+esc(p.id)),{muni:esc(p.ciudad),estado:estado}); }
+    function ficha(p,base){ var estado=p.tipo==='juridica'?'':labelEstado(p.estado);
+      return firmante(esc(p.nombre),(p.tipo==='juridica'?'NIT '+esc(p.id)+(p.repr?' — Rep. legal '+esc(p.repr):''):'C.C. '+esc(p.id)),
+        {muni:esc(p.ciudad),estado:estado,direccion:esc(p.direccion),telefono:esc(p.telefono),correo:esc(p.correo),ocupacion:esc(p.ocupacion),noti:!!p.notiElec,pep:!!p.pep}); }
     var sigs='';
     if(s.apod){ var pd=V.map(function(p){return esc(p.nombre)+' — C.C. '+esc(p.id);}).join('; '); sigs+=firmante(esc(s.apodN),'C.C. ____________',{apoderaDe:pd}); }
     else V.forEach(function(p){ sigs+=ficha(p,'Vendedor'); });
@@ -494,7 +506,8 @@
     if(s.firmaRuego) sigs+=firmante('____________________________','Firma a ruego del otorgante que no puede firmar · art. 39');
     if(s.firmaRuego||s.testigos){ sigs+=firmante('____________________________','Testigo instrumental'); sigs+=firmante('____________________________','Testigo instrumental'); }
 
-    h+='<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+blank+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.numEscritura)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
+    h+='<p class="cl"><span class="clh">HOJAS DE PAPEL NOTARIAL.</span> Se extendió en las hojas de papel notarial números '+IF('hojaInicial',s.hojaInicial)+' y siguientes.<span class="fill"> —</span></p>';
+    h+='<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+IF('hojaInicial',s.hojaInicial)+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.numEscritura)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
       +'<div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">'+sigs+'</div>';
     h+='<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">JUAN CAMILO OROZCO GAVIRIA</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Notario Dieciséis Encargado de Medellín · Autoriza — Escritura Nro. '+esc(s.numEscritura)+'</div></div></div>';
@@ -542,7 +555,7 @@
     if(s.subsidio) it.push({t:'obl',h:'Subsidio de vivienda',p:'Protocolizar el acto de asignación; verificar patrimonio de familia y restricciones del subsidio.',n:'Ley 3ª/1991'});
     if(s.firmaRuego) it.push({t:'obl',h:'Firma a ruego con testigos',p:'Firma un tercero a ruego + dos testigos hábiles; huella del compareciente.',n:'art. 39 · Dcto 960/70'});
     if(s.interprete) it.push({t:'obl',h:'Intérprete / traductor',p:'Comparece intérprete; documentos en otro idioma traducidos oficialmente.',n:'art. 38 · Dcto 960/70'});
-    if(s.pep) it.push({t:'warn',h:'PEP — debida diligencia reforzada',p:'Persona Expuesta Políticamente: declaración y verificación de fuente de riqueza.',n:'Dcto 830/2021'});
+    if(s.pepAny) it.push({t:'warn',h:'PEP — debida diligencia reforzada',p:'Persona Expuesta Políticamente: declaración y verificación de fuente de riqueza.',n:'Dcto 830/2021'});
     if(s.cuentaTercero) it.push({t:'warn',h:'Beneficiario final',p:'Actúa por cuenta de tercero: identificar y registrar el beneficiario final.',n:'Dcto 830/2021'});
     it.push(s.posesion2?{t:'ok',h:'Ganancia ocasional (15%)',p:'Posesión ≥ 2 años: la utilidad grava como ganancia ocasional al 15% (se liquida en renta, no en notaría).',n:'art. 313 E.T.'}:{t:'warn',h:'Utilidad como renta ordinaria',p:'Posesión < 2 años: la utilidad tributa como renta ordinaria (tarifa marginal), no como ganancia ocasional.',n:'E.T. 300'});
     it.push({t:'ok',h:'Otorgamiento en unidad de acto',p:'Lectura, aprobación y firma de los comparecientes ante el notario — las cuatro fases del art. 13.',n:'Dcto 960/1970'});
@@ -602,10 +615,12 @@
   window.addEventListener('scroll',hideTip,true);
 
   /* ---------- resaltado y navegación ---------- */
-  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',titulo:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas'};
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',titulo:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
   var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
   var lastId=null;
-  function secForId(id){ if(!id) return null; if(FIELD_SEC[id]) return FIELD_SEC[id]; if(/^v\d/.test(id)) return 'comparecencia'; if(/^c\d/.test(id)) return 'aceptacion'; return null; }
+  function secForId(id){ if(!id) return null; if(FIELD_SEC[id]) return FIELD_SEC[id];
+    if(/^[vc]\d+(direccion|telefono|correo|ocupacion|pep|notiElec)$/.test(id)) return 'firmas';
+    if(/^v\d/.test(id)) return 'comparecencia'; if(/^c\d/.test(id)) return 'aceptacion'; return null; }
   function applyHL(){ if(!lastId) return;
     var spans=g('escritura').querySelectorAll('[data-f="'+lastId+'"]'); if(spans.length){ for(var i=0;i<spans.length;i++) spans[i].classList.add('hl'); return; }
     var key=secForId(lastId); if(key&&key!=='compliance'){ var sec=g('escritura').querySelector('[data-sec="'+key+'"]')||(FALLBACK[key]?g('escritura').querySelector('[data-sec="'+FALLBACK[key]+'"]'):null); if(sec) sec.classList.add('hl-sec'); } }
@@ -633,7 +648,8 @@
   }
 
   /* ---------- eventos ---------- */
-  function updateParty(t){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; var p=arr[+t.dataset.idx]; if(!p) return; p[t.dataset.key]= t.dataset.key==='cuota'?(parseFloat(t.value)||0):t.value; }
+  function updateParty(t){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; var p=arr[+t.dataset.idx]; if(!p) return; var k=t.dataset.key;
+    if(t.type==='checkbox') p[k]=t.checked; else if(k==='cuota') p[k]=parseFloat(t.value)||0; else p[k]=t.value; }
   g('form').addEventListener('input',function(e){ var t=e.target;
     if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; renderOutput(); }
     else if(t.id){ lastId=t.id; renderOutput(); } });
