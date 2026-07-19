@@ -1,0 +1,175 @@
+<title>Importar minuta de banco — slots semánticos vs. marcación de campos</title>
+<style>
+  :root{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--ins:#B23A2E;--ins-tint:#FBEEEC;--ok:#2E7D53;--ok-tint:#E7F2EC;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;--slot:#2A6E77;--slot-tint:#E2F0F1;--shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);--serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;}
+  @media (prefers-color-scheme:dark){:root{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ins:#E8776A;--ins-tint:#2C1E1C;--ok:#6CC08C;--ok-tint:#16241C;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;--slot:#5FB6BF;--slot-tint:#12262A;--shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);}}
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--ins:#B23A2E;--ins-tint:#FBEEEC;--ok:#2E7D53;--ok-tint:#E7F2EC;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;--slot:#2A6E77;--slot-tint:#E2F0F1;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ins:#E8776A;--ins-tint:#2C1E1C;--ok:#6CC08C;--ok-tint:#16241C;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;--slot:#5FB6BF;--slot-tint:#12262A;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .top{background:var(--chrome);color:#EDEFF4;padding:28px 20px 24px;}
+  .top-inner{max-width:1080px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#CBD6E8;background:rgba(143,166,214,.16);border:1px solid rgba(143,166,214,.35);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(23px,3.6vw,32px);margin:14px 0 8px;letter-spacing:-.01em;text-wrap:balance;}
+  .top p{margin:0;color:#B9C1D4;max-width:70ch;font-size:14.5px;}
+  .wrap{max-width:1080px;margin:22px auto;padding:0 20px 80px;}
+  section{margin-top:30px;}
+  .eyebrow{display:flex;align-items:center;gap:11px;font-size:12px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 6px;}
+  .eyebrow .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--paper);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;}
+  h2{font-family:var(--serif);font-weight:600;font-size:21px;margin:0 0 12px;letter-spacing:-.01em;}
+  .lead{color:var(--ink-soft);font-size:14.5px;max-width:74ch;margin:-4px 0 16px;}
+
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:720px){.vs{grid-template-columns:1fr;}}
+  .card{border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);}
+  .card.bad{background:var(--crit-tint);border-color:color-mix(in srgb,var(--crit) 30%,transparent);}
+  .card.good{background:var(--ok-tint);border-color:color-mix(in srgb,var(--ok) 30%,transparent);}
+  .card h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px;}
+  .card.bad h3{color:var(--crit);} .card.good h3{color:var(--ok);}
+  .card ul{margin:0;padding-left:2px;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-soft);}
+  .card li{display:flex;gap:8px;align-items:flex-start;} .card li::before{content:"×";color:var(--crit);font-weight:700;flex:none;}
+  .card.good li::before{content:"✓";color:var(--ok);}
+
+  .panel{background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px;}
+  .grid2{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start;}
+  @media (max-width:820px){.grid2{grid-template-columns:1fr;}}
+  .field{margin-top:10px;} .field:first-child{margin-top:0;}
+  .field label{display:block;font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;font-weight:600;}
+  input{width:100%;font-family:var(--sans);font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;padding:7px 9px;}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  .slots-def{font-size:12px;color:var(--ink-soft);}
+  .slotchip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--slot);background:var(--slot-tint);border:1px solid color-mix(in srgb,var(--slot) 35%,transparent);padding:2px 7px;border-radius:6px;margin:3px 4px 0 0;}
+
+  .sheet{background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow);padding:clamp(18px,3vw,34px);font-family:var(--serif);font-size:14px;line-height:1.75;position:relative;overflow:hidden;}
+  .sheet::before{content:"MINUTA DEL BANCO — DEMO";position:absolute;top:16px;right:-52px;transform:rotate(45deg);background:var(--accent);color:#fff;font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:.1em;padding:4px 56px;opacity:.85;}
+  .sheet .clh{font-weight:700;}
+  .fill{color:var(--line-strong);user-select:none;}
+  /* slot placeholder (sin llenar) */
+  .slot{font-family:var(--mono);font-size:.82em;color:var(--slot);background:var(--slot-tint);border:1px dashed var(--slot);padding:0 5px;border-radius:5px;}
+  /* valor del caso (lleno) */
+  .val{color:var(--ins);font-weight:600;background:color-mix(in srgb,var(--ins) 10%,transparent);border-radius:3px;padding:0 2px;}
+  /* enfoque viejo: campo detectado ambiguo */
+  .det{border-bottom:2px dotted var(--warn);background:var(--warn-tint);border-radius:2px;padding:0 1px;}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;}
+  .btn{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:9px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer;}
+  .btn.on{background:var(--accent);color:var(--paper);border-color:var(--accent);}
+  .count{font-size:12.5px;color:var(--ink-soft);font-family:var(--mono);margin-left:auto;}
+  .count b.new{color:var(--ok);} .count b.old{color:var(--warn);}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:12.5px;line-height:1.7;} footer b{color:var(--ink-soft);}
+</style>
+
+<div class="top"><div class="top-inner">
+  <span class="flag">🏦 Ejemplo aislado · no toca el wizard</span>
+  <h1>Importar la minuta del banco: slots, no marcación</h1>
+  <p>Cómo se ingiere la minuta de un banco sin “detectar campos variables” (lo que falló) — con unos pocos <b style="color:#9FE0C4">slots con nombre</b> que se llenan con los datos del caso. El wizard de compraventa queda intacto.</p>
+</div></div>
+
+<div class="wrap">
+
+  <!-- concepto -->
+  <section>
+    <p class="eyebrow"><span class="n">1</span> El cambio de enfoque</p>
+    <h2>Por qué esto sí funciona</h2>
+    <div class="vs">
+      <div class="card bad"><h3>✗ Marcación / detección de campos (lo que falló)</h3><ul>
+        <li>La IA adivina <b>cuál</b> de las 3.000 palabras es variable</li>
+        <li>Un número suelto no dice si es precio, saldo o cuantía</li>
+        <li>Se rompe con cada cambio de redacción del banco</li>
+        <li>Detecta de más: fechas, artículos, mayúsculas → ambiguo</li>
+        <li>Esfuerzo por cada plantilla, cada vez</li>
+      </ul></div>
+      <div class="card good"><h3>✓ Slots con nombre (este enfoque)</h3><ul>
+        <li>El clausulado del banco es <b>texto fijo</b> (va verbatim)</li>
+        <li>Solo <b>6 huecos con nombre</b>: banco, NIT, deudor, cédula, matrícula, monto</li>
+        <li>Se llenan con los <b>datos del caso</b> (ya validados), no parseando</li>
+        <li>Se definen <b>una vez</b> por banco → sirven para todos los casos</li>
+        <li>Determinista: lo que no es slot, es fijo</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- onboarding + datos -->
+  <section>
+    <p class="eyebrow"><span class="n">2</span> El caso alimenta los slots</p>
+    <h2>Los datos vienen del caso, no del documento</h2>
+    <p class="lead">Cambia cualquier dato del caso y mira cómo se llena el clausulado fijo del banco. La minuta del banco nunca se “lee” para sacar datos — solo aporta las palabras.</p>
+    <div class="grid2">
+      <div class="panel">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:8px">Datos del caso (validados)</div>
+        <div class="field"><label>Banco (slot: banco)</label><input id="banco" value="BANCO DAVIVIENDA S.A."></div>
+        <div class="field"><label>NIT (slot: nit)</label><input id="nit" value="860.034.313-7"></div>
+        <div class="field"><label>Deudor / hipotecante (slot: hipotecante)</label><input id="hipotecante" value="LAURA XIMENA ORTIZ VÉLEZ"></div>
+        <div class="field"><label>Cédula (slot: cedula)</label><input id="cedula" value="1.017.884.330"></div>
+        <div class="field"><label>Matrícula (slot: matricula)</label><input id="matricula" value="001-1502334"></div>
+        <div class="field"><label>Monto del crédito (slot: monto)</label><input id="monto" value="TRESCIENTOS MILLONES DE PESOS ($300.000.000)"></div>
+        <div class="slots-def" style="margin-top:12px">Onboarding del banco (una sola vez):<br>
+          <span class="slotchip">{{banco}}</span><span class="slotchip">{{nit}}</span><span class="slotchip">{{hipotecante}}</span><span class="slotchip">{{cedula}}</span><span class="slotchip">{{matricula}}</span><span class="slotchip">{{monto}}</span>
+        </div>
+      </div>
+      <div>
+        <div class="toolbar">
+          <button class="btn on" id="btn-new">Enfoque nuevo (slots)</button>
+          <button class="btn" id="btn-old">Enfoque viejo (detección)</button>
+          <span class="count" id="count"></span>
+        </div>
+        <article class="sheet" id="sheet"></article>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>Ejemplo ilustrativo, aislado.</b> El clausulado bancario es una reproducción genérica con fines de demostración; no es la minuta real de ningún banco. Este archivo <b>no modifica</b> el wizard de compraventa ni ninguna otra pieza.</p>
+    <p><b>La idea de fondo:</b> se deja de preguntar “¿qué es variable?” (ambiguo, por eso falló) y se pasa a “estos 6 huecos con nombre se llenan con los datos del caso” (acotado, por eso funciona). El clausulado del banco, versionado por banco, se convierte en un bloque más de la biblioteca.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  function g(id){return document.getElementById(id);}
+  function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  // Clausulado FIJO del banco, con slots {{nombre}}. Lo demás es texto verbatim (incluye ruido: fechas y artículos que NO son variables).
+  var PLANTILLA =
+  '<p><span class="clh">HIPOTECA ABIERTA DE PRIMER GRADO SIN LÍMITE DE CUANTÍA.</span> Compareció {{hipotecante}}, mayor de edad, identificado con la cédula de ciudadanía número {{cedula}}, quien en adelante se denominará EL HIPOTECANTE, y manifestó:<span class="fill"> ————</span></p>'+
+  '<p><span class="clh">PRIMERO.</span> Que EL HIPOTECANTE constituye hipoteca abierta de primer grado y sin límite de cuantía a favor del {{banco}}, persona jurídica con NIT {{nit}}, sobre el inmueble identificado con el FOLIO DE MATRÍCULA INMOBILIARIA NRO. {{matricula}}, para garantizar el crédito de vivienda por la suma de {{monto}} y las demás obligaciones presentes o futuras.<span class="fill"> —</span></p>'+
+  '<p><span class="clh">SEGUNDO: OBJETO DE LA GARANTÍA.</span> La hipoteca comprende el inmueble con todas sus mejoras, anexidades presentes o futuras, y los frutos, de conformidad con los artículos 2445 y 2446 del Código Civil. La garantía estará vigente mientras exista alguna obligación pendiente, en moneda legal o en UVR.<span class="fill"> —</span></p>'+
+  '<p><span class="clh">TERCERO: ACELERACIÓN DE PLAZOS.</span> EL BANCO podrá dar por vencidos los plazos por mora, o si EL HIPOTECANTE enajena o grava el inmueble sin su consentimiento, conforme al reglamento de crédito vigente. EL HIPOTECANTE acepta en todas sus partes las cláusulas anteriores.<span class="fill"> ——</span></p>';
+
+  function datos(){return {
+    banco:g('banco').value, nit:g('nit').value, hipotecante:g('hipotecante').value,
+    cedula:g('cedula').value, matricula:g('matricula').value, monto:g('monto').value };}
+
+  var modo='new';
+
+  function renderNew(){
+    var d=datos(), n=0;
+    var out=PLANTILLA.replace(/\{\{(\w+)\}\}/g,function(_,k){ n++; return '<span class="val">'+esc(d[k]||'')+'</span>'; });
+    g('count').innerHTML='Slots llenados desde el caso: <b class="new">'+n+'</b>';
+    return out;
+  }
+
+  function renderOld(){
+    // Primero llenamos (como quedaría el texto), luego "detectamos" campos: números y palabras en MAYÚSCULA.
+    var d=datos();
+    var texto=PLANTILLA.replace(/\{\{(\w+)\}\}/g,function(_,k){ return esc(d[k]||''); });
+    // marcar "campos detectados": secuencias numéricas y palabras largas en mayúscula (ambiguo → sobre-detecta)
+    var count=0;
+    texto=texto.replace(/(\d[\d.\-]{2,}\d|\d{2,})/g,function(m){ count++; return '<span class="det" title="¿campo?">'+m+'</span>'; });
+    texto=texto.replace(/\b([A-ZÁÉÍÓÚÑ]{4,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){0,3})\b/g,function(m){
+      // no re-marcar dentro de tags
+      count++; return '<span class="det" title="¿campo?">'+m+'</span>'; });
+    g('count').innerHTML='Enfoque viejo: <b class="old">'+count+'</b> “campos” detectados (muchos son fijos: artículos, UVR, mayúsculas)';
+    return texto;
+  }
+
+  function render(){ g('sheet').innerHTML = modo==='new'?renderNew():renderOld(); }
+
+  g('form') && null;
+  ['banco','nit','hipotecante','cedula','matricula','monto'].forEach(function(id){ g(id).addEventListener('input',render); });
+  g('btn-new').addEventListener('click',function(){ modo='new'; g('btn-new').classList.add('on'); g('btn-old').classList.remove('on'); render(); });
+  g('btn-old').addEventListener('click',function(){ modo='old'; g('btn-old').classList.add('on'); g('btn-new').classList.remove('on'); render(); });
+  render();
+})();
+</script>

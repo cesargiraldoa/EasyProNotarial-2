@@ -1,0 +1,494 @@
+<title>Normograma verificado — Compraventa de inmueble (Ecosistema Notarial)</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --ink:#1B1E23; --ink-soft:#4A5058; --ink-faint:#7A828C;
+    --chrome:#26314B; --line:#E4E1D8; --line-strong:#CFCBBE;
+    --accent:#31456E; --accent-tint:#EEF1F7;
+    --ins:#B23A2E; --ins-tint:#FBEEEC;
+    --ok:#2E7D53; --ok-tint:#E7F2EC;
+    --teal:#2A6E77; --teal-tint:#E2F0F1;
+    --warn:#B0781A; --warn-tint:#F7EEDB;
+    --crit:#B23B3B; --crit-tint:#F7E7E7;
+    --grey:#6C7079; --grey-tint:#ECEAE4;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",'Iowan Old Style',serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#181A1E; --ink:#E8E6E0; --ink-soft:#B4B7BD; --ink-faint:#868B93;
+      --chrome:#0F1116; --line:#2B2E35; --line-strong:#3A3E47;
+      --accent:#8FA6D6; --accent-tint:#1D2432;
+      --ins:#E8776A; --ins-tint:#2C1E1C; --ok:#6CC08C; --ok-tint:#16241C;
+      --teal:#5FB6BF; --teal-tint:#12262A; --warn:#D6A648; --warn-tint:#2A2313;
+      --crit:#E07C7C; --crit-tint:#2A1818; --grey:#9BA0A9; --grey-tint:#24262B;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#FBFAF7; --ink:#1B1E23; --ink-soft:#4A5058; --ink-faint:#7A828C; --chrome:#26314B; --line:#E4E1D8; --line-strong:#CFCBBE; --accent:#31456E; --accent-tint:#EEF1F7; --ins:#B23A2E; --ins-tint:#FBEEEC; --ok:#2E7D53; --ok-tint:#E7F2EC; --teal:#2A6E77; --teal-tint:#E2F0F1; --warn:#B0781A; --warn-tint:#F7EEDB; --crit:#B23B3B; --crit-tint:#F7E7E7; --grey:#6C7079; --grey-tint:#ECEAE4;
+  }
+  :root[data-theme="dark"]{
+    --paper:#181A1E; --ink:#E8E6E0; --ink-soft:#B4B7BD; --ink-faint:#868B93; --chrome:#0F1116; --line:#2B2E35; --line-strong:#3A3E47; --accent:#8FA6D6; --accent-tint:#1D2432; --ins:#E8776A; --ins-tint:#2C1E1C; --ok:#6CC08C; --ok-tint:#16241C; --teal:#5FB6BF; --teal-tint:#12262A; --warn:#D6A648; --warn-tint:#2A2313; --crit:#E07C7C; --crit-tint:#2A1818; --grey:#9BA0A9; --grey-tint:#24262B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px 90px;}
+
+  .top{background:var(--chrome);color:#EDEFF4;margin:0 -20px 0;padding:34px 20px 28px;}
+  .top-inner{max-width:960px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#CBD6E8;background:rgba(143,166,214,.16);border:1px solid rgba(143,166,214,.35);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(25px,4vw,36px);line-height:1.12;margin:16px 0 8px;text-wrap:balance;letter-spacing:-.01em;}
+  .top p{margin:0;color:#B9C1D4;max-width:68ch;font-size:15px;}
+  .ref{margin-top:16px;display:flex;flex-wrap:wrap;gap:9px 22px;font-size:12.5px;color:#9AA4BC;border-top:1px solid rgba(255,255,255,.1);padding-top:14px;}
+  .ref b{color:#DCE1EC;font-weight:600;}
+
+  nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin:0 -20px 6px;padding:10px 20px;display:flex;gap:6px;flex-wrap:wrap;font-size:12px;}
+  nav a{color:var(--ink-soft);text-decoration:none;padding:5px 10px;border-radius:8px;border:1px solid transparent;font-weight:500;}
+  nav a:hover{color:var(--accent);border-color:var(--line);} nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .method{background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);border-radius:12px;padding:15px 18px;margin-top:22px;font-size:13px;color:var(--ink-soft);}
+  .method b{color:var(--warn);}
+
+  section{margin-top:34px;scroll-margin-top:60px;}
+  .eyebrow{display:flex;align-items:center;gap:11px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 12px;}
+  .eyebrow .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--paper);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;}
+  h2{font-family:var(--serif);font-weight:600;font-size:21px;margin:0 0 6px;letter-spacing:-.01em;}
+
+  /* estado chips */
+  .est{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap;}
+  .est.vig{color:var(--ok);background:var(--ok-tint);}
+  .est.mod{color:var(--teal);background:var(--teal-tint);}
+  .est.comp{color:var(--accent);background:var(--accent-tint);}
+  .est.der{color:var(--grey);background:var(--grey-tint);}
+  .est.inx{color:var(--crit);background:var(--crit-tint);}
+  .est.pv{color:var(--warn);background:var(--warn-tint);}
+
+  /* summary table */
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);}
+  table.sum{width:100%;border-collapse:collapse;font-size:13px;min-width:520px;}
+  table.sum th,table.sum td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);}
+  table.sum th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);}
+  table.sum tr:last-child td{border-bottom:0;}
+  table.sum td.norm{font-weight:600;}
+
+  /* norm cards */
+  .card{border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 2.5%);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden;}
+  .card-h{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:15px 18px 13px;border-bottom:1px solid var(--line);}
+  .card-h .t{flex:1;min-width:200px;}
+  .card-h h3{margin:0;font-size:15.5px;font-family:var(--sans);font-weight:700;line-height:1.3;}
+  .card-h .sub{margin:2px 0 0;font-size:12px;color:var(--ink-faint);}
+  .card-b{padding:14px 18px 16px;font-size:13.5px;}
+  .card-b h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:700;}
+  .card-b .grp{margin-bottom:13px;}
+  .card-b ul{margin:0;padding-left:2px;list-style:none;display:flex;flex-direction:column;gap:6px;}
+  .card-b li{display:flex;gap:8px;align-items:flex-start;color:var(--ink-soft);}
+  .card-b li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:8px;flex:none;}
+  .card-b li.req::before{background:var(--ins);}
+  .card-b li.stop::before{background:var(--crit);width:6px;height:6px;}
+  .art{font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--accent-tint);padding:1px 6px;border-radius:5px;font-weight:600;}
+  .src{margin-top:4px;font-size:11.5px;color:var(--ink-faint);word-break:break-word;}
+  .src b{color:var(--ink-soft);font-weight:600;}
+  .pvnote{margin-top:8px;font-size:12px;color:var(--warn);background:var(--warn-tint);border-radius:8px;padding:7px 11px;}
+  .pvnote b{text-transform:uppercase;font-size:10px;letter-spacing:.05em;}
+
+  .rule-list li.stop{color:var(--ink);font-weight:500;}
+
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:12.5px;line-height:1.7;}
+  footer b{color:var(--ink-soft);}
+  @media (prefers-reduced-motion:no-preference){section{animation:f .5s ease both}@keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+</style>
+
+<div class="top">
+  <div class="top-inner">
+    <span class="flag">📚 Normograma verificado · Ecosistema Notarial</span>
+    <h1>Compraventa de inmueble — corpus normativo vigente</h1>
+    <p>La base legal de la que cuelga el árbol de preguntas. Cada norma con su estado de vigencia verificado contra fuente oficial, sus artículos clave y qué exige en la escritura.</p>
+    <div class="ref">
+      <span>Acto: <b>Compraventa de inmueble</b></span>
+      <span>Normas mapeadas: <b>18</b></span>
+      <span>Verificación: <b>fuentes oficiales (jul. 2026)</b></span>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <a href="#estados">Estados</a>
+  <a href="#resumen">Resumen</a>
+  <a href="#b1">① Notarial y registral</a>
+  <a href="#b2">② Civil</a>
+  <a href="#b3">③ Cargas</a>
+  <a href="#b4">④ Tributario y LA/FT</a>
+  <a href="#b5">⑤ VIS</a>
+  <a href="#reglas">Reglas derivadas</a>
+  <a href="#pendientes">Pendientes</a>
+</nav>
+
+<div class="wrap">
+
+  <div class="method">
+    <b>Cómo se verificó.</b> Las tres investigaciones cotejaron cada norma contra fuentes oficiales (Gestor Normativo de Función Pública, SUIN-Juriscol, Secretaría del Senado, DIAN, Minvivienda, UIAF/SNR). El entorno bloqueó (403) el acceso directo a los portales <span style="font-family:var(--mono)">.gov.co</span>, así que el contenido proviene de sus extractos oficiales indexados. Todo dato no confirmado al pie de la letra se marca <span class="est pv">Por verificar</span>. <b>Este normograma es insumo de trabajo: la validación jurídica final la debe dar el notario o el equipo legal antes de producción.</b>
+  </div>
+
+  <!-- ESTADOS -->
+  <section id="estados">
+    <p class="eyebrow"><span class="n">§</span> Estados de vigencia</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px 16px;font-size:13px;color:var(--ink-soft)">
+      <span><span class="est vig">Vigente</span> aplica hoy sin reforma</span>
+      <span><span class="est mod">Vigente mod.</span> vigente pero reformada</span>
+      <span><span class="est comp">Compilada</span> subsiste dentro de otra norma</span>
+      <span><span class="est der">Derogada</span> conservar como histórica</span>
+      <span><span class="est inx">Inexequible</span> tumbada por la Corte</span>
+      <span><span class="est pv">Por verificar</span> confirmar literal</span>
+    </div>
+  </section>
+
+  <!-- RESUMEN -->
+  <section id="resumen">
+    <p class="eyebrow"><span class="n">◇</span> Resumen del corpus</p>
+    <div class="tblwrap">
+      <table class="sum">
+        <thead><tr><th>Norma</th><th>Materia</th><th>Estado</th></tr></thead>
+        <tbody>
+          <tr><td class="norm">Decreto-Ley 960/1970</td><td>Estatuto del Notariado</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Decreto 2148/1983</td><td>Reglamento notarial</td><td><span class="est der">Derogada</span> <span class="est comp">Compilada</span></td></tr>
+          <tr><td class="norm">Decreto 1069/2015</td><td>DUR Sector Justicia (compila lo notarial)</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Ley 1579/2012</td><td>Estatuto de Registro de Instrumentos Públicos</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Código Civil</td><td>Compraventa, saneamiento, condición resolutoria</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Ley 258/1996 (mod. 854/2003)</td><td>Afectación a vivienda familiar</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Ley 675/2001 (mod. 2079/2021)</td><td>Propiedad horizontal</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Ley 70/1931 · 495/1999</td><td>Patrimonio de familia (+ VIS: 91/1936, 861/2003)</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Ley 54/1990 (mod. 979/2005)</td><td>Unión marital / sociedad patrimonial</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Ley 1996/2019</td><td>Capacidad legal y apoyos (eliminó interdicción)</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Art. 90 E.T. (mod. art. 61 Ley 2010/2019)</td><td>Valor real bajo juramento</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Ley 223/1995 (arts. 226–235)</td><td>Impuesto de registro</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Arts. 398–399 E.T.</td><td>Retención en la fuente (notario retenedor)</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Ley 2195/2022 + SIPLAFT SNR</td><td>Prevención de lavado (LA/FT)</td><td><span class="est vig">Vigente</span></td></tr>
+          <tr><td class="norm">Ley 2079/2021 (art. 13) + Dcto 1077/2015</td><td>VIS — restricción de enajenación</td><td><span class="est mod">Vigente mod.</span></td></tr>
+          <tr><td class="norm">Arts. 59–63 Decreto 2106/2019</td><td>Escritura pública electrónica</td><td><span class="est inx">Inexequible</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BLOQUE 1 -->
+  <section id="b1">
+    <p class="eyebrow"><span class="n">1</span> Núcleo notarial y registral</p>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Decreto-Ley 960 de 1970 — Estatuto del Notariado</h3><p class="sub">Presidencia (facultades extraordinarias) · administra la SNR</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 13</span> La escritura pública se perfecciona en cuatro fases: <b>recepción, extensión, otorgamiento y autorización</b>.</li>
+          <li><span class="art">art. 14</span> Define cada fase; la autorización es la fe que imprime el notario verificados los requisitos.</li>
+          <li>Todo acto de disposición o gravamen de inmueble debe constar en escritura pública.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Constancia de las cuatro fases e identificación plena de los comparecientes.</li>
+          <li class="req">Incorporación al protocolo y autorización notarial (requisito de existencia del instrumento).</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Normativo i=149249 · SUIN 1692245 · Senado decreto_0960_1970</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado ·</b> la Ley 2466 de 2025 es una reforma laboral (Código Sustantivo del Trabajo); no afecta al Decreto 960/1970 ni al notariado. Falsa alarma descartada.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Decreto 2148 de 1983 — Reglamento notarial</h3><p class="sub">Derogado como norma autónoma; compilado en el Decreto 1069/2015</p></div><span class="est der">Derogada</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Estado</h4><ul>
+          <li>Derogado por el Decreto 1069/2015, pero su articulado <b>subsiste compilado</b> en él. <b>Para citar norma vigente, invóquese el Decreto 1069/2015</b>, no el 2148 directamente.</li>
+        </ul></div>
+        <div class="grp"><h4>Materias (hoy en el 1069/2015)</h4><ul>
+          <li>Documentos que se transcriben/protocolizan; firma, numeración y fecha.</li>
+          <li>Poderes; identificación del inmueble en el poder especial para enajenar; segregaciones; cancelaciones.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Normativo i=5227 · SUIN 1408127</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Decreto 1069 de 2015 — DUR Sector Justicia</h3><p class="sub">Ministerio de Justicia · compila la reglamentación notarial</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Qué compila</h4><ul>
+          <li>Reglamentación notarial (Libro 2, Parte 2), incluido el Decreto 2148/1983, y la del servicio de registro.</li>
+          <li>Norma reglamentaria vigente para otorgamiento/autorización, protocolización, poderes y segregaciones.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Normativo i=74174</p>
+        <div class="pvnote"><b>Por verificar ·</b> numeración interna exacta que reemplaza al 2148/1983 (abrir el texto consolidado).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 1579 de 2012 — Estatuto de Registro de Instrumentos Públicos</h3><p class="sub">Congreso · derogó el Decreto 1250/1970</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 16</span> Calificación: no procede registro si el inmueble no está plenamente identificado (matrícula, nomenclatura, linderos, <b>área en sistema métrico</b>) y las partes por su documento.</li>
+          <li><span class="art">art. 18</span> Suspensión del trámite ante incumplimiento legal.</li>
+          <li><span class="art">art. 22</span> Devolución/inadmisión mediante nota que exprese hechos, fundamentos y recursos.</li>
+          <li><span class="art">art. 104</span> Derogó expresamente el Decreto 1250/1970.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige (para registrabilidad)</h4><ul class="rule-list">
+          <li class="stop">Identificación plena del inmueble y de las partes, <b>so pena de nota de devolución</b> (causal de rechazo registral).</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Normativo i=49731 · SUIN 1684387 · Senado ley_1579_2012</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado ·</b> <span class="art" style="background:transparent;padding:0">art. 4</span> lista los títulos sujetos a registro (todo acto que constituya, modifique, grave o extinga dominio); <span class="art" style="background:transparent;padding:0">art. 8</span> define la matrícula inmobiliaria (código, oficina, municipio, cédula catastral, urbano/rural, linderos, cabida).</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 2 -->
+  <section id="b2">
+    <p class="eyebrow"><span class="n">2</span> Sustantivo civil de la compraventa</p>
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Código Civil — Compraventa de inmueble</h3><p class="sub">Núcleo del contrato: precio, solemnidad, saneamiento</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 1849</span> El precio de la compraventa debe pactarse <b>en dinero</b>.</li>
+          <li><span class="art">art. 1857</span> La venta de <b>bienes raíces</b> no se perfecciona mientras no se otorgue <b>escritura pública</b> (solemnidad, no mera prueba).</li>
+          <li><span class="art">arts. 1893 ss.</span> Saneamiento por evicción (art. 1913: la acción prescribe en 4 años).</li>
+          <li><span class="art">arts. 1914–1915</span> Vicios redhibitorios (ocultos): acción para rescindir o rebajar el precio.</li>
+          <li><span class="art">art. 1546</span> Condición resolutoria tácita en los contratos bilaterales (opera aun sin pacto).</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Cláusula de precio determinado en dinero.</li>
+          <li class="req">Cláusulas de saneamiento (evicción y vicios); usual la cláusula resolutoria expresa y su renuncia según forma de pago/entrega.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Senado codigo_civil (arts. compraventa, PR057–PR059)</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 3 -->
+  <section id="b3">
+    <p class="eyebrow"><span class="n">3</span> Cargas, protecciones y capacidad</p>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 258 de 1996 (mod. Ley 854 de 2003) — Afectación a vivienda familiar</h3><p class="sub">La protección con mayor peso en la comparecencia</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 2</span> La afectación opera <b>por ministerio de la ley</b> para viviendas adquiridas tras su vigencia.</li>
+          <li><span class="art">art. 3</span> Enajenar o gravar un bien afectado requiere el <b>consentimiento (firma) de ambos cónyuges/compañeros</b>.</li>
+          <li><span class="art">art. 6</span> El notario <b>debe indagar</b> estado civil y afectación; el propietario declara bajo juramento.</li>
+          <li>Ley 854/2003: modificó el art. 1 (“uno o ambos” cónyuges) y el art. 4 (extinción por muerte).</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige / condiciona</h4><ul class="rule-list">
+          <li class="stop">Si el bien está afectado: <b>firma de ambos</b> so pena de nulidad — sin ella el notario <b>no puede otorgar</b>. Para vender libremente debe levantarse la afectación.</li>
+          <li class="req">Cláusula obligatoria de indagación + declaración juramentada sobre estado civil y afectación.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=10794 (258) · i=10793 (854) · Senado · Sent. C-192/1998</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado ·</b> la Ley 854/2003 modificó solo el <span class="art" style="background:transparent;padding:0">art. 1</span> y el parágrafo 2 del <span class="art" style="background:transparent;padding:0">art. 4</span> de la Ley 258. La referencia a la <b>unión marital de hecho</b> está en el propio <span class="art" style="background:transparent;padding:0">art. 6 de la Ley 258</span> (el notario indaga matrimonio o unión marital), no la agregó la Ley 854.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 675 de 2001 (mod. Ley 2079 de 2021) — Propiedad horizontal</h3><p class="sub">Coeficientes, bienes comunes y paz y salvo</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 25</span> (mod. art. 43 Ley 2079/2021) coeficientes de copropiedad; <span class="art">art. 26</span> se calculan por área privada.</li>
+          <li><span class="art">art. 29</span> Expensas comunes; el <b>nuevo adquirente es solidariamente responsable</b> de deudas pendientes.</li>
+          <li>El derecho sobre bienes comunes es <b>inseparable</b> del bien privado: se transfiere con la unidad.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige / condiciona</h4><ul class="rule-list">
+          <li class="req">Exigir <b>paz y salvo de administración</b> o, en su defecto, constancia + cláusula de solidaridad del comprador.</li>
+          <li class="req">Constancia de transferencia de la cuota en bienes comunes; verificar el coeficiente del reglamento.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=4162 · SUIN 1665811 · Ley 2079/2021</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado ·</b> el requisito notarial de paz y salvo de expensas está en el <span class="art" style="background:transparent;padding:0">art. 29</span>: el notario lo exige y, de no obtenerse, deja constancia + solidaridad del nuevo propietario.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Patrimonio de familia — Ley 70/1931 · Ley 495/1999 (+ VIS: 91/1936, 861/2003)</h3><p class="sub">Limitación que puede impedir la venta</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Contenido clave</h4><ul>
+          <li>Ley 495/1999: permite constituir el patrimonio <b>por escritura pública</b>; tope de valor <b>250 SMLMV</b>; requiere dominio pleno, sin proindiviso ni hipoteca.</li>
+          <li>Cancelación en la misma forma: <b>voluntaria por escritura</b> (ambos cónyuges) o <b>judicial</b>; con <b>menores</b> beneficiarios exige autorización judicial.</li>
+          <li>VIS: Ley 91/1936 obliga a constituir el patrimonio inembargable <b>en la misma escritura</b> de compraventa.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige / condiciona</h4><ul class="rule-list">
+          <li class="stop">Si existe patrimonio de familia: <b>cancelarlo antes</b> de vender (causal que impide otorgar hasta el levantamiento).</li>
+          <li class="req">En VIS subsidiada: constituir el patrimonio de familia obligatorio en la escritura.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=39265 (70/1931) · i=38938 (495/1999) · SUIN 1832449 · Sent. C-107/2017, C-317/2010</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 54 de 1990 (mod. Ley 979 de 2005) — Unión marital y sociedad patrimonial</h3><p class="sub">Conecta con el deber de indagación de la Ley 258</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Contenido clave</h4><ul>
+          <li>Se <b>presume sociedad patrimonial</b> con unión marital ≥ 2 años; declaración/liquidación por escritura ante notario.</li>
+          <li>No forman parte del haber los bienes anteriores a la unión ni los recibidos por herencia/donación (sí sus frutos).</li>
+          <li>Sent. <b>C-075/2007</b>: el régimen aplica también a parejas del mismo sexo.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige / condiciona</h4><ul class="rule-list">
+          <li class="req">Indagar el estado civil real (unión marital vigente) — conecta con el art. 6 de la Ley 258.</li>
+          <li class="req">Si el bien es social de la sociedad patrimonial, considerar consentimiento del compañero o previa liquidación; declarar el origen del bien.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=30896 (54/1990) · i=30898 (979/2005)</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 1996 de 2019 — Capacidad legal y régimen de apoyos</h3><p class="sub">Eliminó la interdicción</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Artículos clave</h4><ul>
+          <li><span class="art">art. 6</span> Capacidad legal <b>plena</b> de toda persona mayor; la discapacidad no restringe la capacidad de ejercicio.</li>
+          <li><span class="art">arts. 15–16</span> Acuerdos de apoyo; por escritura pública el notario se entrevista por separado con el titular.</li>
+          <li><span class="art">art. 53</span> Prohíbe iniciar procesos de interdicción.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige / condiciona</h4><ul class="rule-list">
+          <li class="req">Un compareciente con discapacidad es <b>plenamente capaz</b>: comparece y firma directamente (no se exige interdicción ni curador).</li>
+          <li class="req">Si usa apoyos, acreditar el acuerdo de apoyo (escritura) o la adjudicación judicial de apoyos.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=99712 · SUIN 30037889 · Sent. C-022/2021, C-025/2021, C-052/2021 · Dcto 1429/2020</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 4 -->
+  <section id="b4">
+    <p class="eyebrow"><span class="n">4</span> Tributario y prevención de lavado</p>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Art. 90 E.T. (mod. art. 61 Ley 2010 de 2019) — Valor real</h3><p class="sub">La declaración juramentada del precio</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Regla vigente</h4><ul>
+          <li>El precio de enajenación es el valor comercial; en inmuebles <b>no inferior al costo, avalúo catastral ni autoavalúo</b> (art. 72 E.T.).</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Declaración <b>bajo juramento</b>: el precio es real, sin pactos privados de valor distinto ni sumas por fuera.</li>
+          <li class="stop">Sanción por omitirla: renta, ganancia ocasional, <b>impuesto de registro y derechos notariales sobre base de 4 veces</b> el valor de la escritura.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Senado ET art. 90 · Gestor Ley 2010/2019 i=159687 · DIAN Oficio 457/2020</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 223 de 1995 (arts. 226–235) — Impuesto de registro</h3><p class="sub">+ Decreto 650/1996 reglamentario</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Regla vigente</h4><ul>
+          <li><span class="art">art. 226</span> Hecho generador: inscripción en la ORIP. <span class="art">art. 227</span> Pagan las partes por mitades salvo pacto.</li>
+          <li><span class="art">art. 229</span> Base: valor del documento, no inferior a avalúo catastral/autoavalúo. <span class="art">art. 230</span> Tarifa fijada por Asambleas: <b>0,5%–1%</b> (actos con cuantía en ORIP).</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Relacionar el valor del acto (base) y la liquidación según la tarifa departamental aplicable.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor i=6968 · SUIN Dcto 650/1996 (1138942)</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado (Antioquia) ·</b> la tarifa para actos con cuantía sujetos a registro en ORIP es del <b>1%</b> (Ordenanza departamental ASAMANT; base ≥ avalúo catastral/autoavalúo). Otros departamentos: confirmar su ordenanza.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Arts. 398–399 E.T. — Retención en la fuente (notario retenedor)</h3><p class="sub">Enajenación de activo fijo de persona natural</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Regla vigente</h4><ul>
+          <li><span class="art">art. 398</span> Retención del <b>1%</b> del valor; se paga <b>antes de la enajenación</b>, ante el notario, que es el agente retenedor (recauda, declara y consigna).</li>
+          <li><span class="art">art. 399</span> Reducción escalonada para la casa/apto de habitación adquirida <b>antes del 1 de enero de 1987</b>.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Constancia del recaudo del 1% (o de la reducción del art. 399) como requisito previo a la autorización.</li>
+          <li>Aplica cuando el inmueble es <b>activo fijo</b> del vendedor persona natural.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> ET arts. 398–399 · DIAN Oficios 4860/2019, 6547/2019 · Concepto 11625/2025</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 2195 de 2022 + SIPLAFT notarial — Prevención de lavado (LA/FT)</h3><p class="sub">Circular 1536/2013 · Instrucciones 17/2016 y 08/2017 de la SNR</p></div><span class="est vig">Vigente</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Regla vigente</h4><ul>
+          <li>Toda notaría implementa el <b>SIPLAFT</b>; reporta operaciones sospechosas (ROS) directo a la <b>UIAF</b>.</li>
+          <li>Debida diligencia / conocimiento del cliente y verificación del <b>beneficiario final</b> (reforzado por la Ley 2195/2022).</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Declaración de <b>origen lícito de los fondos</b> y de actuar por cuenta propia (o identificación del beneficiario final).</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Ley 2195/2022 i=175606 · UIAF sector SNR · SNR Circular 1536/2013</p>
+        <div class="pvnote" style="color:var(--ok);background:var(--ok-tint)"><b>Verificado ·</b> el marco notarial vigente es Circular 1536/2013 + Instrucciones 17/2016 y 08/2017 + <b>Circular 1754 de 2017</b>. La “SARLAFT 2.0” de 2024 es de Supervigilancia, <b>no</b> aplica a notarías. No se identificó instrucción SNR posterior que reemplace este marco.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 5 -->
+  <section id="b5">
+    <p class="eyebrow"><span class="n">5</span> Vivienda de interés social (VIS/VIP)</p>
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Ley 2079 de 2021 (art. 13) + Ley 3/1991 + Dcto 1077/2015 — Restricción de enajenación</h3><p class="sub">La regla de los 10 años cambió</p></div><span class="est mod">Vigente mod.</span></div>
+      <div class="card-b">
+        <div class="grp"><h4>Regla vigente (cambió)</h4><ul>
+          <li>La restricción de enajenación es hoy de <b>cinco (5) años</b> (antes 10) y <b>solo aplica a la vivienda entregada 100% en especie (SFVE)</b>; las demás modalidades de subsidio quedaron <b>exentas</b>.</li>
+          <li>El subsidio es restituible si se transfiere o se deja de residir antes de 5 años; el Registrador inscribe la anotación de prohibición.</li>
+        </ul></div>
+        <div class="grp"><h4>Qué exige en la escritura</h4><ul class="rule-list">
+          <li class="req">Si es SFVE 100% en especie: advertencia de <b>prohibición de enajenar 5 años</b> + <b>condición resolutoria</b> por revocatoria del subsidio.</li>
+          <li class="req">Constituir patrimonio de familia inembargable (arts. 60 Ley 9/1989 · 38 Ley 3/1991).</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Gestor Ley 2079/2021 i=160946 · Minvivienda concepto ER0015805/2021 · Dcto 739/2021 i=165219</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRANSVERSAL -->
+  <section id="inx">
+    <p class="eyebrow"><span class="n">!</span> Alerta transversal de vigencia</p>
+    <div class="card">
+      <div class="card-h"><div class="t"><h3>Escritura pública electrónica — arts. 59 a 63 del Decreto 2106 de 2019</h3><p class="sub">Declarados inexequibles por la Corte Constitucional</p></div><span class="est inx">Inexequible</span></div>
+      <div class="card-b">
+        <div class="grp"><ul>
+          <li>La Sentencia <b>C-159 de 2021</b> declaró inexequibles los arts. 59 a 63 del Decreto 2106/2019 (el art. 59 habilitaba actos notariales electrónicos), con <b>efectos desde el 20 de junio de 2023</b>.</li>
+          <li class="stop"><b>No tratar la escritura pública electrónica como derecho vigente.</b> Regla de oro del normograma: el motor nunca debe insertar una cláusula basada en un artículo inexequible.</li>
+        </ul></div>
+        <p class="src"><b>Fuente:</b> Corte Constitucional C-159-21 · Gestor Normativo i=189866</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- REGLAS DERIVADAS -->
+  <section id="reglas">
+    <p class="eyebrow"><span class="n">→</span> Cláusulas y validaciones obligatorias derivadas</p>
+    <h2>El puente al árbol de preguntas</h2>
+    <p style="color:var(--ink-soft);font-size:14px;max-width:70ch;margin:0 0 16px">Cada regla es una condición ejecutable: <b>si</b> el caso cumple X, <b>entonces</b> insertar la cláusula / advertencia / anexo, con su norma. Esto alimenta directamente el motor de cláusulas y el informe de cumplimiento.</p>
+    <div class="card"><div class="card-b" style="padding-top:16px"><ul class="rule-list" style="gap:9px">
+      <li class="stop"><b>Bloqueante</b> — Bien afectado a vivienda familiar → exige firma de ambos cónyuges/compañeros <span class="art">art. 3 · Ley 258/1996</span></li>
+      <li class="stop"><b>Bloqueante</b> — Patrimonio de familia vigente → cancelar antes de vender <span class="art">Ley 70/1931 · 495/1999</span></li>
+      <li class="stop"><b>Bloqueante</b> — Inmueble no plenamente identificado → devolución en registro <span class="art">art. 16 · Ley 1579/2012</span></li>
+      <li class="req">Vendedor casado/unión marital → indagación + declaración juramentada de afectación <span class="art">art. 6 · Ley 258/1996</span></li>
+      <li class="req">Precio → declaración juramentada de valor real (evita base de 4×) <span class="art">art. 90 E.T.</span></li>
+      <li class="req">Persona natural vende activo fijo → constancia de retención del 1% <span class="art">art. 398 E.T.</span></li>
+      <li class="req">Siempre → declaración de origen lícito de fondos (SIPLAFT) <span class="art">Ley 2195/2022</span></li>
+      <li class="req">Propiedad horizontal → paz y salvo de administración o constancia + solidaridad <span class="art">art. 29 · Ley 675/2001</span></li>
+      <li class="req">Liquidación del impuesto de registro según tarifa departamental <span class="art">art. 230 · Ley 223/1995</span></li>
+      <li class="req">VIS con subsidio 100% en especie → advertencia de prohibición 5 años + condición resolutoria <span class="art">art. 13 · Ley 2079/2021</span></li>
+      <li class="req">Compareciente con discapacidad → capacidad plena; acreditar apoyos si los usa <span class="art">Ley 1996/2019</span></li>
+    </ul></div></div>
+  </section>
+
+  <!-- PENDIENTES -->
+  <section id="pendientes">
+    <p class="eyebrow"><span class="n">⚑</span> Estado de los pendientes</p>
+    <h2>Segunda pasada de verificación — casi todo cerrado</h2>
+    <div class="card">
+      <div class="card-b" style="padding-top:16px">
+        <div class="grp"><h4 style="color:var(--ok)">Cerrados en esta ronda</h4><ul style="gap:8px">
+          <li>Paz y salvo notarial en PH → <b>art. 29 de la Ley 675/2001</b>. ✓</li>
+          <li>Alcance de la Ley 854/2003 → modificó arts. 1 y 4 de la Ley 258; la unión marital está en el art. 6 de la Ley 258. ✓</li>
+          <li>Tarifa de impuesto de registro en Antioquia → <b>1%</b> (Ordenanza ASAMANT). ✓</li>
+          <li>Marco SIPLAFT notarial → Circular 1536/2013 + Instrucciones 17/2016, 08/2017 + Circular 1754/2017; SARLAFT 2.0 no aplica. ✓</li>
+          <li>Ley 2466 de 2025 → es reforma laboral, no afecta al notariado. ✓</li>
+          <li>Ley 1579/2012 → arts. 4 (títulos sujetos a registro) y 8 (matrícula) confirmados. ✓</li>
+        </ul></div>
+        <div class="grp"><h4 style="color:var(--warn)">Aún abiertos</h4><ul style="gap:8px">
+          <li>Numeración interna exacta del Decreto 1069/2015 equivalente al 2148/1983 (los portales <span style="font-family:var(--mono)">.gov.co</span> siguen bloqueando el texto consolidado literal).</li>
+          <li class="stop"><b>Validación jurídica final por el notario o el equipo legal antes de producción</b> — este documento es insumo verificado, no dictamen.</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>Alcance.</b> Este normograma cubre el acto de <b>compraventa de inmueble</b>. Es el primer corte de una rebanada vertical; el corpus completo se construye acto por acto. Verificación realizada en julio de 2026 contra fuentes oficiales indexadas; los ítems marcados <span class="est pv">Por verificar</span> requieren confirmación literal en un entorno con acceso directo a los portales oficiales.</p>
+    <p>Fuentes consultadas: Gestor Normativo (Función Pública), SUIN-Juriscol, Secretaría del Senado, DIAN, Minvivienda, UIAF y Superintendencia de Notariado y Registro.</p>
+  </footer>
+</div>

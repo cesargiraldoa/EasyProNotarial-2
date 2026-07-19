@@ -1,0 +1,330 @@
+<title>Árbol de preguntas — Compraventa (anclado al normograma verificado)</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --ink:#1B1E23; --ink-soft:#4A5058; --ink-faint:#7A828C;
+    --chrome:#26314B; --line:#E4E1D8; --line-strong:#CFCBBE;
+    --accent:#31456E; --accent-tint:#EEF1F7;
+    --strat:#7A3E12; --strat-tint:#F5EAE0;
+    --ins:#B23A2E; --ins-tint:#FBEEEC;
+    --ok:#2E7D53; --ok-tint:#E7F2EC;
+    --teal:#2A6E77; --teal-tint:#E2F0F1;
+    --warn:#B0781A; --warn-tint:#F7EEDB;
+    --crit:#B23B3B; --crit-tint:#F7E7E7;
+    --grey:#6C7079; --grey-tint:#ECEAE4;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",'Iowan Old Style',serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#181A1E; --ink:#E8E6E0; --ink-soft:#B4B7BD; --ink-faint:#868B93;
+      --chrome:#0F1116; --line:#2B2E35; --line-strong:#3A3E47;
+      --accent:#8FA6D6; --accent-tint:#1D2432; --strat:#D9A066; --strat-tint:#2A2015;
+      --ins:#E8776A; --ins-tint:#2C1E1C; --ok:#6CC08C; --ok-tint:#16241C;
+      --teal:#5FB6BF; --teal-tint:#12262A; --warn:#D6A648; --warn-tint:#2A2313;
+      --crit:#E07C7C; --crit-tint:#2A1818; --grey:#9BA0A9; --grey-tint:#24262B;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--strat:#7A3E12;--strat-tint:#F5EAE0;--ins:#B23A2E;--ins-tint:#FBEEEC;--ok:#2E7D53;--ok-tint:#E7F2EC;--teal:#2A6E77;--teal-tint:#E2F0F1;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--strat:#D9A066;--strat-tint:#2A2015;--ins:#E8776A;--ins-tint:#2C1E1C;--ok:#6CC08C;--ok-tint:#16241C;--teal:#5FB6BF;--teal-tint:#12262A;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 20px 90px;}
+
+  .top{background:var(--chrome);color:#EDEFF4;margin:0 -20px 0;padding:34px 20px 28px;}
+  .top-inner{max-width:980px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#CBD6E8;background:rgba(143,166,214,.16);border:1px solid rgba(143,166,214,.35);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(25px,4vw,36px);line-height:1.12;margin:16px 0 8px;text-wrap:balance;letter-spacing:-.01em;}
+  .top p{margin:0;color:#B9C1D4;max-width:68ch;font-size:15px;}
+  .ref{margin-top:16px;display:flex;flex-wrap:wrap;gap:9px 22px;font-size:12.5px;color:#9AA4BC;border-top:1px solid rgba(255,255,255,.1);padding-top:14px;}
+  .ref b{color:#DCE1EC;font-weight:600;}
+
+  nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin:0 -20px 6px;padding:10px 20px;display:flex;gap:6px;flex-wrap:wrap;font-size:12px;}
+  nav a{color:var(--ink-soft);text-decoration:none;padding:5px 10px;border-radius:8px;border:1px solid transparent;font-weight:500;}
+  nav a:hover{color:var(--accent);border-color:var(--line);} nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  section{margin-top:32px;scroll-margin-top:60px;}
+  .eyebrow{display:flex;align-items:center;gap:11px;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;}
+  .eyebrow .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--paper);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;}
+  h2{font-family:var(--serif);font-weight:600;font-size:21px;margin:0 0 6px;letter-spacing:-.01em;}
+
+  .callout{background:var(--accent-tint);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:12px;padding:14px 18px;margin-top:22px;font-size:13.5px;color:var(--ink-soft);}
+  .callout b{color:var(--accent);} .callout a{color:var(--accent);font-weight:600;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:9px 16px;margin:16px 0 4px;font-size:12.5px;color:var(--ink-soft);align-items:center;}
+  .legend span{display:inline-flex;align-items:center;gap:7px;}
+  .badge{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap;}
+  .badge.strat{color:var(--strat);background:var(--strat-tint);} .badge.dato{color:var(--ink-faint);background:var(--grey-tint);}
+  .tipo{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+  .tipo.bloq{color:var(--crit);background:var(--crit-tint);} .tipo.obl{color:var(--ins);background:var(--ins-tint);} .tipo.cond{color:var(--teal);background:var(--teal-tint);} .tipo.info{color:var(--ink-faint);background:var(--grey-tint);}
+
+  .block{border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 2.5%);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden;}
+  .block-h{display:flex;align-items:center;gap:13px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--accent-tint);}
+  .block-h .bn{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--paper);background:var(--accent);width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none;}
+  .block-h h3{margin:0;font-size:16px;font-weight:700;} .block-h .sub{margin:1px 0 0;font-size:12px;color:var(--ink-soft);}
+  .block-b{padding:4px 20px 14px;}
+
+  .qn{padding:14px 0 6px;border-top:1px dashed var(--line-strong);}
+  .qn:first-child{border-top:0;}
+  .qhead{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;}
+  .qhead .qt{font-size:14.5px;font-weight:600;color:var(--ink);flex:1;min-width:220px;}
+  .opts{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
+  .opt{font-family:var(--mono);font-size:11.5px;color:var(--accent);background:var(--accent-tint);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);padding:3px 8px;border-radius:7px;}
+
+  .rule{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:8px 0 2px;padding:8px 11px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 4%);border-radius:9px;border-left:3px solid var(--line-strong);}
+  .rule.b-bloq{border-left-color:var(--crit);} .rule.b-obl{border-left-color:var(--ins);} .rule.b-cond{border-left-color:var(--teal);} .rule.b-info{border-left-color:var(--grey);}
+  .rule .rt{font-size:13px;color:var(--ink-soft);grid-column:2;}
+  .rule .rt b{color:var(--ink);}
+  .rule .top-row{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .cite{font-family:var(--mono);font-size:11px;color:var(--ink);background:var(--accent-tint);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);padding:1px 7px;border-radius:5px;white-space:nowrap;}
+  .off{color:var(--ink-faint);font-size:12.5px;margin:7px 0 2px;display:flex;gap:7px;align-items:flex-start;}
+  .off::before{content:"⤫";color:var(--ink-faint);flex:none;}
+
+  .branch{margin:8px 0 2px 4px;padding:2px 0 2px 15px;border-left:2px solid var(--strat);}
+  .branch .cond{font-size:12.5px;color:var(--strat);font-weight:700;margin:6px 0 2px;display:flex;align-items:center;gap:7px;}
+  .branch .cond::before{content:"⋯ si";font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-faint);}
+  .branch .qn{padding:8px 0 2px;border-top:1px dotted var(--line);} .branch .qt{font-size:13.5px;font-weight:500;}
+
+  .card{border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 2.5%);box-shadow:var(--shadow);}
+  .card-b{padding:16px 20px;}
+  .card-b h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:700;}
+  pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink-soft);white-space:pre-wrap;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 4%);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;}
+  pre b{color:var(--accent);}
+
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:12.5px;line-height:1.7;}
+  footer b{color:var(--ink-soft);}
+  @media (max-width:560px){.qhead .qt{min-width:0;} .rule{grid-template-columns:1fr;} .rule .rt{grid-column:1;}}
+  @media (prefers-reduced-motion:no-preference){section{animation:f .5s ease both}@keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}}
+</style>
+
+<div class="top">
+  <div class="top-inner">
+    <span class="flag">🌳 Especificación v2 · anclada a norma verificada</span>
+    <h1>Árbol de preguntas — Compraventa de inmueble</h1>
+    <p>Reconstruido sobre el normograma verificado. Cada rama lleva su regla real y su cita: qué activa, si es obligatoria o bloqueante, y con qué norma vigente.</p>
+    <div class="ref">
+      <span>Acto: <b>Compraventa de inmueble</b></span>
+      <span>Base: <b>normograma verificado (18 normas)</b></span>
+      <span>Bloqueantes: <b>3</b></span>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <a href="#b0">0 · Acto</a><a href="#b1">1 · Partes</a><a href="#b2">2 · Inmueble</a>
+  <a href="#b3">3 · Estado jurídico</a><a href="#b4">4 · Precio</a><a href="#b5">5 · Entrega</a>
+  <a href="#b6">6 · Hipoteca</a><a href="#b7">7 · Anexos</a><a href="#bloq">Bloqueantes</a><a href="#wizard">Al wizard</a>
+</nav>
+
+<div class="wrap">
+
+  <div class="callout">
+    <b>Qué cambió respecto del primer borrador.</b> Antes las citas eran ilustrativas. Ahora cada regla está anclada al <b>normograma verificado</b>: <b>VIS 5 años</b> (no 10), paz y salvo en el <b>art. 29 Ley 675</b>, retención del <b>1% art. 398 E.T.</b>, valor real <b>art. 90 E.T.</b> Consulta la base en el <a href="https://claude.ai/code/artifact/ea5a0d43-8d21-4874-9932-cc5c5aa445d1">normograma de compraventa</a>.
+  </div>
+
+  <div class="legend">
+    <span><span class="badge strat">Estratégica</span> cambia el clausulado</span>
+    <span><span class="badge dato">Dato</span> solo rellena</span>
+    <span><span class="tipo bloq">Bloqueante</span> impide otorgar</span>
+    <span><span class="tipo obl">Obligatoria</span> cláusula/declaración forzosa</span>
+    <span><span class="tipo cond">Condicional</span> según la respuesta</span>
+  </div>
+
+  <!-- BLOQUE 0 -->
+  <section id="b0">
+    <div class="block">
+      <div class="block-h"><span class="bn">0</span><div><h3>Identificación del acto</h3><p class="sub">Define el esqueleto y qué secciones existirán.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">¿Qué derecho se transfiere?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Pleno dominio</span><span class="opt">Nuda propiedad</span><span class="opt">Usufructo</span><span class="opt">Cuota / proindiviso</span></div>
+          <div class="branch"><div class="cond">Nuda propiedad</div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Se reserva el usufructo el vendedor?</span></div>
+              <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">arts. 823 ss. C.C.</span></div><div class="rt">Inserta cláusula de reserva de usufructo y su condición (vitalicio/plazo).</div></div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿El comprador paga con crédito hipotecario?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Sí</span><span class="opt">No</span></div>
+          <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span></div><div class="rt">Si <b>sí</b>: activa el Bloque 6 (hipoteca) y la forma de pago con desembolso condicionado.</div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿Concurren otros actos en el mismo instrumento?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Solo compraventa</span><span class="opt">+ Hipoteca</span><span class="opt">+ Cancelación hipoteca previa</span><span class="opt">+ Cancelación patrimonio de familia</span></div>
+          <div class="rule b-info"><div class="top-row"><span class="tipo info">Estructura</span></div><div class="rt">Cada acto agrega su comparecencia, código de acto y valor en el formato de calificación.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 1 -->
+  <section id="b1">
+    <div class="block">
+      <div class="block-h"><span class="bn">1</span><div><h3>Las partes (intervinientes)</h3><p class="sub">Comparecencia, capacidad y representación.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Por cada VENDEDOR: ¿persona natural o jurídica?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Natural</span><span class="opt">Jurídica</span></div>
+          <div class="branch"><div class="cond">Persona natural — estado civil</div>
+            <div class="opts"><span class="opt">Soltero</span><span class="opt">Casado c/ soc. conyugal</span><span class="opt">Unión marital</span><span class="opt">Divorciado / viudo</span></div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 6 · Ley 258/1996</span></div><div class="rt">Casado o en unión marital → el notario <b>indaga</b> y el vendedor <b>declara bajo juramento</b> si el bien está afectado a vivienda familiar.</div></div>
+            <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">art. 3 · Ley 258/1996</span></div><div class="rt">Si el bien <b>está afectado</b> a vivienda familiar → exige <b>firma de ambos cónyuges/compañeros</b>. Sin ella, <b>no se puede otorgar</b> (nulidad).</div></div>
+            <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">Ley 54/1990 · 979/2005</span></div><div class="rt">Unión marital ≥ 2 años → posible sociedad patrimonial; si el bien es social, considerar consentimiento del compañero o previa liquidación.</div></div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Compareciente con discapacidad?</span></div>
+              <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">Ley 1996/2019</span></div><div class="rt"><b>Capacidad plena</b>: comparece y firma directamente. Si usa apoyos, acreditar el acuerdo de apoyo o la adjudicación judicial. Ya no opera la interdicción.</div></div></div></div>
+          <div class="branch"><div class="cond">Persona jurídica</div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">C. Comercio</span></div><div class="rt">Certificado de existencia y representación <b>vigente</b>; si estatutos/cuantía lo exigen, <b>autorización del órgano social</b> (se protocoliza).</div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿Alguna parte comparece por apoderado?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">No</span><span class="opt">Sí</span></div>
+          <div class="branch"><div class="cond">Sí</div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">Dcto 1069/2015 (ex-2148/83)</span></div><div class="rt">Cláusula de representación: poder, fecha, notaría, <b>vigencia</b> y facultades. El <b>poder especial inmobiliario debe identificar el inmueble</b>; se protocoliza.</div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">COMPRADORES: datos + estado civil</span><span class="badge strat">Estratégica</span></div>
+          <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">Ley 258/1996</span></div><div class="rt">El estado civil del comprador define si se ofrece <b>constituir o no</b> la afectación a vivienda familiar (y su constancia).</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 2 -->
+  <section id="b2">
+    <div class="block">
+      <div class="block-h"><span class="bn">2</span><div><h3>El inmueble</h3><p class="sub">Individualización jurídica del bien.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Matrícula, cédula catastral, dirección, área en sistema métrico, linderos</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">arts. 8 y 16 · Ley 1579/2012</span></div><div class="rt">Inmueble <b>no plenamente identificado</b> (matrícula, linderos, área métrica, nomenclatura) → <b>devolución en registro</b>. Es requisito de registrabilidad.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Urbano o rural?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Urbano</span><span class="opt">Rural</span></div>
+          <div class="branch"><div class="cond">Rural</div>
+            <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">Ley 1448/2011</span></div><div class="rt">Verificar Unidad Agrícola Familiar, restricciones agrarias y restitución de tierras; advertencias correspondientes.</div></div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Sometido a propiedad horizontal?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Sí</span><span class="opt">No</span></div>
+          <div class="branch"><div class="cond">Sí</div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 29 · Ley 675/2001</span></div><div class="rt">Exigir <b>paz y salvo de administración</b>; de no obtenerse, dejar constancia + <b>cláusula de solidaridad</b> del comprador por deudas de expensas.</div></div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">arts. 25–26 · Ley 675/2001</span></div><div class="rt">Parágrafo de régimen de PH + transferencia de la cuota en bienes comunes según el <b>coeficiente</b> del reglamento.</div></div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Es vivienda de interés social (VIS/VIP) con subsidio?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">No</span><span class="opt">Sí — subsidio 100% en especie</span><span class="opt">Sí — otra modalidad</span></div>
+          <div class="branch"><div class="cond">Subsidio 100% en especie (SFVE)</div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 13 · Ley 2079/2021</span></div><div class="rt">Advertencia de <b>prohibición de enajenar por 5 años</b> (¡no 10!) + <b>condición resolutoria</b> por revocatoria del subsidio.</div></div>
+            <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">Ley 91/1936 · art. 38 Ley 3/1991</span></div><div class="rt">Constituir <b>patrimonio de familia inembargable</b> en la misma escritura.</div></div></div>
+          <div class="off">Si <b>No</b> o subsidio de otra modalidad: se omiten la prohibición de 5 años y su condición resolutoria (la Ley 2079 las eliminó).</div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Segregación / englobe / parqueadero o depósito vinculado?</span><span class="badge strat">Estratégica</span></div>
+          <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">Dcto 1069/2015</span></div><div class="rt">Identifica predio matriz, áreas segregadas, remanente y matrículas adicionales.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 3 -->
+  <section id="b3">
+    <div class="block">
+      <div class="block-h"><span class="bn">3</span><div><h3>Título y estado jurídico del bien</h3><p class="sub">Tradición, gravámenes y saneamiento.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Título de adquisición del vendedor (escritura/sentencia, fecha, notaría, registro)</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-info"><div class="top-row"><span class="tipo info">Cláusula</span></div><div class="rt">Cláusula “Título de adquisición” encadenada a la tradición.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Gravámenes o limitaciones vigentes?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Libre</span><span class="opt">Hipoteca previa</span><span class="opt">Patrimonio de familia</span><span class="opt">Afectación viv. familiar</span><span class="opt">Embargo / demanda</span></div>
+          <div class="branch"><div class="cond">Patrimonio de familia constituido</div>
+            <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">Ley 70/1931 · 495/1999</span></div><div class="rt"><b>Cancelar antes de vender</b> (escritura con ambos cónyuges; con menores, autorización judicial). Impide otorgar hasta el levantamiento.</div></div></div>
+          <div class="branch"><div class="cond">Hipoteca previa</div>
+            <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span></div><div class="rt">Cláusula de cancelación / compromiso de cancelación de la hipoteca anterior con parte del crédito.</div></div></div>
+          <div class="off">Si <b>Libre</b>: cláusula estándar de saneamiento por evicción y vicios redhibitorios <span class="cite" style="margin-left:6px">arts. 1893, 1914 C.C.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 4 -->
+  <section id="b4">
+    <div class="block">
+      <div class="block-h"><span class="bn">4</span><div><h3>Precio y forma de pago</h3><p class="sub">Con control de coherencia y cargas tributarias.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Precio total (en letras y números)</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 90 E.T. (Ley 2010/2019)</span></div><div class="rt">Declaración <b>bajo juramento</b> de valor real. <b>Regla dura:</b> letras = números y la suma de pagos cuadra con el total. Omitir la declaración → base de <b>4×</b>.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Forma de pago?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Contado</span><span class="opt">Recursos propios + crédito</span><span class="opt">Con subsidio</span><span class="opt">Subrogación</span></div>
+          <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">art. 1546 C.C.</span></div><div class="rt">Genera los literales del precio (a, b, c), la condición de desembolso del banco y la <b>renuncia a la condición resolutoria</b> por forma de pago.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Origen de los fondos del comprador</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">Ley 2195/2022 · SIPLAFT</span></div><div class="rt">Declaración de <b>origen lícito de fondos</b> y de actuar por cuenta propia (o beneficiario final).</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Vendedor persona natural: ¿el inmueble es su activo fijo?</span><span class="badge strat">Estratégica</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 398 E.T.</span></div><div class="rt">Constancia del <b>recaudo de la retención del 1%</b> por el notario (o reducción del art. 399), previa a la autorización.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Liquidación de gastos e impuesto de registro</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 230 Ley 223/1995</span></div><div class="rt">Impuesto de registro según tarifa departamental (<b>1% en Antioquia</b>), base ≥ avalúo catastral. Cláusula de gastos y retención a cargo del vendedor.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 5 -->
+  <section id="b5">
+    <div class="block">
+      <div class="block-h"><span class="bn">5</span><div><h3>Entrega</h3><p class="sub">Momento y condición de la tradición material.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">¿Cuándo se entrega el inmueble?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">A la firma</span><span class="opt">Al desembolso</span><span class="opt">A plazo</span></div>
+          <div class="rule b-cond"><div class="top-row"><span class="tipo cond">Condicional</span><span class="cite">art. 1546 C.C.</span></div><div class="rt">Cláusula de entrega + renuncia a la condición resolutoria derivada de la forma de entrega.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 6 -->
+  <section id="b6">
+    <div class="block">
+      <div class="block-h"><span class="bn">6</span><div><h3>Hipoteca <span style="font-weight:400;color:var(--ink-faint);font-size:13px">— solo si hay crédito</span></h3><p class="sub">Sección completa de garantía.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Acreedor (banco), NIT; tipo (abierta sin límite / cerrada) y grado</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-info"><div class="top-row"><span class="tipo info">Sección</span></div><div class="rt">Constitución de hipoteca + objeto de la garantía, cuantía, aceleración de plazos y revocación de cupos (clausulado del banco).</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿El banco comparece por apoderado?</span><span class="badge strat">Estratégica</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span></div><div class="rt">Verificar poder vigente y certificado de existencia y representación del banco.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUE 7 -->
+  <section id="b7">
+    <div class="block">
+      <div class="block-h"><span class="bn">7</span><div><h3>Anexos y otorgamiento</h3><p class="sub">Documentos exigibles y cierre del instrumento.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Anexos aportados</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Cert. tradición</span><span class="opt">Paz y salvo predial</span><span class="opt">Paz y salvo admón (PH)</span><span class="opt">Cédulas</span><span class="opt">Cert. catastral</span><span class="opt">Cert. existencia y repr.</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">Ley 1579/2012</span></div><div class="rt">Relaciona cada anexo (emisor, número, fecha, <b>vigencia</b>) y <b>marca los faltantes</b> para el informe de cumplimiento.</div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Lectura, aprobación y firmas</span><span class="badge dato">Dato</span></div>
+          <div class="rule b-obl"><div class="top-row"><span class="tipo obl">Obligatoria</span><span class="cite">art. 13 · Dcto 960/1970</span></div><div class="rt">Constancia de lectura y otorgamiento; advertencia de obligación de registrar.</div></div>
+          <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">No usar</span><span class="cite">C-159/2021 — inexequible</span></div><div class="rt">La <b>escritura pública electrónica</b> (arts. 59–63 Dcto 2106/2019) es inexequible desde jun-2023: no ofrecer esa vía.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOQUEANTES -->
+  <section id="bloq">
+    <p class="eyebrow"><span class="n">!</span> Las 3 reglas bloqueantes</p>
+    <h2>Lo que impide otorgar la escritura</h2>
+    <div class="card"><div class="card-b"><div style="display:flex;flex-direction:column;gap:12px">
+      <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">art. 3 · Ley 258/1996</span></div><div class="rt"><b>Bien afectado a vivienda familiar</b> sin firma de ambos cónyuges/compañeros → nulidad.</div></div>
+      <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">Ley 70/1931 · 495/1999</span></div><div class="rt"><b>Patrimonio de familia vigente</b> no cancelado antes de la venta.</div></div>
+      <div class="rule b-bloq"><div class="top-row"><span class="tipo bloq">Bloqueante</span><span class="cite">art. 16 · Ley 1579/2012</span></div><div class="rt"><b>Inmueble no plenamente identificado</b> → devolución en registro.</div></div>
+    </div></div></div>
+  </section>
+
+  <!-- AL WIZARD -->
+  <section id="wizard">
+    <p class="eyebrow"><span class="n">→</span> Cómo se traduce al wizard</p>
+    <h2>Cada nodo es una regla ejecutable</h2>
+    <p style="color:var(--ink-soft);font-size:14px;max-width:70ch;margin:0 0 14px">El árbol no es un diagrama: es la estructura de datos que corre el wizard interactivo y el informe de cumplimiento. Cada nodo se modela así:</p>
+    <div class="card"><div class="card-b">
+      <pre>{
+  <b>id</b>: "vendedor_estado_civil",
+  <b>pregunta</b>: "Estado civil del vendedor",
+  <b>tipo</b>: "estrategica",
+  <b>opciones</b>: ["soltero","casado_sc","union_marital","divorciado","viudo"],
+  <b>reglas</b>: [
+    { si: "casado_sc || union_marital",
+      efecto: "insertar_clausula:indagacion_vivienda_familiar",
+      severidad: "obligatoria",  norma: "art. 6 Ley 258/1996" },
+    { si: "afectado_vivienda_familiar == true",
+      efecto: "exigir_firma:ambos_conyuges",
+      severidad: "bloqueante",   norma: "art. 3 Ley 258/1996" }
+  ]
+}</pre>
+      <p style="color:var(--ink-soft);font-size:13px;margin:14px 0 0">Con esta forma, el motor de cláusulas ensambla el texto y el informe de cumplimiento evalúa <span style="color:var(--crit);font-weight:600">bloqueantes</span>, <span style="color:var(--ins);font-weight:600">obligatorias</span> y <span style="color:var(--teal);font-weight:600">condicionales</span> — todo trazable a su norma.</p>
+    </div></div>
+  </section>
+
+  <footer>
+    <p><b>Especificación v2 — anclada a norma verificada.</b> Cada regla de este árbol proviene del normograma de compraventa y conserva su cita. Es el insumo directo del wizard interactivo y del motor de cláusulas de Ecosistema Notarial.</p>
+    <p>Pendiente único de la base: la validación jurídica final del notario/equipo legal. Las citas están verificadas contra fuente oficial; su interpretación operativa la confirma el notario.</p>
+  </footer>
+</div>
