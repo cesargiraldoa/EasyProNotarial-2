@@ -1,0 +1,184 @@
+<title>Editor vinculado — texto libre + campos en cascada (Ecosistema Notarial)</title>
+<style>
+  :root{
+    --paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;
+    --chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;
+    --accent:#31456E;--accent-tint:#EEF1F7;
+    --hl:#FCE96A;--hl-ink:#5A1712;--hl-line:#C9A400;
+    --ok:#2E7D53;--free:#8A9AB8;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--hl:#F2DE52;--hl-ink:#2A0E0A;--hl-line:#B79A18;--ok:#6CC08C;--free:#6E7C97;--shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);}}
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--hl:#FCE96A;--hl-ink:#5A1712;--hl-line:#C9A400;--ok:#2E7D53;--free:#8A9AB8;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--hl:#F2DE52;--hl-ink:#2A0E0A;--hl-line:#B79A18;--ok:#6CC08C;--free:#6E7C97;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .top{background:var(--chrome);color:#EDEFF4;padding:22px 20px;}
+  .top-inner{max-width:1280px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#F4D9CE;background:rgba(178,58,46,.22);border:1px solid rgba(232,119,106,.4);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(21px,3vw,28px);margin:12px 0 5px;}
+  .top p{margin:0;color:#B9C1D4;max-width:80ch;font-size:13.5px;}
+
+  .app{max-width:1280px;margin:16px auto;padding:0 20px 70px;display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start;}
+  @media (max-width:940px){.app{grid-template-columns:1fr;}}
+
+  .toolbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 4%);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:11px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;box-shadow:var(--shadow);margin-bottom:14px;}
+  .tb-btn{font-family:var(--sans);font-size:13px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);border-radius:8px;padding:6px 11px;cursor:pointer;min-width:34px;}
+  .tb-btn:hover{background:var(--accent-tint);border-color:var(--accent);}
+  .tb-btn b{font-family:Georgia,serif;} .tb-btn i{font-family:Georgia,serif;}
+  .tb-sep{width:1px;height:22px;background:var(--line-strong);margin:0 3px;}
+  .tb-note{font-size:11.5px;color:var(--ink-faint);margin-left:auto;}
+
+  .sheet{background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow);padding:clamp(20px,3vw,40px);font-family:var(--serif);font-size:15px;line-height:1.85;}
+  .sheet:focus{outline:none;}
+  .sheet h4{font-family:var(--sans);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);text-align:center;margin:0 0 18px;font-weight:700;}
+  .sheet p{margin:0 0 14px;text-align:justify;}
+  .clh{font-weight:700;}
+
+  /* Campo vinculado (el "marcado") */
+  .campo{background:var(--hl);color:var(--hl-ink);border-bottom:2px solid var(--hl-line);border-radius:3px;padding:0 3px;font-weight:600;white-space:pre-wrap;}
+  .campo:focus{outline:2px solid var(--hl-line);outline-offset:1px;}
+  .campo.flash{animation:fl 1.1s ease;}
+  @keyframes fl{0%,30%{box-shadow:0 0 0 4px color-mix(in srgb,var(--hl) 60%,transparent);}100%{box-shadow:none;}}
+  @media (prefers-reduced-motion:reduce){.campo.flash{animation:none;}}
+
+  .side{position:sticky;top:14px;display:flex;flex-direction:column;gap:14px;}
+  .panel{background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:15px 16px;}
+  .panel h3{font-family:var(--serif);font-size:15px;margin:0 0 3px;font-weight:600;}
+  .panel .sub{font-size:11.5px;color:var(--ink-faint);margin:0 0 12px;}
+  .fld{margin-bottom:10px;}
+  .fld label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .fld input{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;padding:7px 9px;}
+  .fld input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .fld .cnt{font-size:10.5px;color:var(--ink-faint);margin-top:2px;font-family:var(--mono);}
+  .legend{font-size:12px;color:var(--ink-soft);line-height:1.7;}
+  .legend .sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px;}
+  .legend .swy{background:var(--hl);border-bottom:2px solid var(--hl-line);}
+  .legend .swf{background:transparent;border:1px dashed var(--free);}
+  pre.json{background:var(--chrome);color:#D8E0F0;font-family:var(--mono);font-size:11px;line-height:1.5;border-radius:9px;padding:12px;overflow:auto;margin:0;max-height:190px;}
+  .status{font-size:12px;color:var(--ok);font-weight:600;min-height:16px;}
+  footer{max-width:1280px;margin:0 auto;padding:8px 20px 60px;color:var(--ink-faint);font-size:12px;line-height:1.6;}
+</style>
+
+<div class="top"><div class="top-inner">
+  <span class="flag">✎ Prueba de concepto · editor vinculado</span>
+  <h1>Documento editable con campos en cascada</h1>
+  <p>El texto es editable como en Word (escribe, borra, aplica <b>negrita</b>/<i>cursiva</i>). Los <b>campos vinculados</b> (en amarillo) siguen ligados al dato del caso: al editar uno, el cambio salta a todas sus copias y actualiza el panel — y viceversa. El texto libre se conserva; los campos nunca se pierden.</p>
+</div></div>
+
+<div class="app">
+  <div>
+    <div class="toolbar" id="toolbar">
+      <button class="tb-btn" data-cmd="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
+      <button class="tb-btn" data-cmd="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
+      <button class="tb-btn" data-cmd="underline" title="Subrayado (Ctrl+U)"><u>U</u></button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" data-cmd="insertUnorderedList" title="Lista">• Lista</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" data-cmd="undo" title="Deshacer">↶</button>
+      <button class="tb-btn" data-cmd="redo" title="Rehacer">↷</button>
+      <span class="tb-note">Selecciona texto y aplica formato · o edita libremente</span>
+    </div>
+
+    <article class="sheet" id="editor" contenteditable="true" spellcheck="false">
+      <h4>Escritura pública — Compraventa (fragmento de demostración)</h4>
+      <p>En la ciudad de Medellín, Departamento de Antioquia, a los catorce (14) días del mes de agosto de dos mil veintiséis (2026), ante el Notario Dieciséis del Círculo de Medellín, compareció <span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span>, mayor de edad, identificada con la cédula de ciudadanía número <span class="campo" data-field="cedula">1.017.884.330</span>, quien manifestó:</p>
+      <p><span class="clh">PRIMERO: OBJETO.</span> Que adquiere a título de compraventa el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. <span class="campo" data-field="matricula">001-1502334</span>, ubicado en la Calle 30 Sur #27-45 de Envigado.</p>
+      <p><span class="clh">CUARTO: PRECIO.</span> El precio de la venta es la suma de <span class="campo" data-field="precio">CUATROCIENTOS VEINTE MILLONES DE PESOS ($420.000.000)</span>, que la compradora paga de contado.</p>
+      <p><span class="clh">HIPOTECA.</span> Sobre el inmueble de matrícula <span class="campo" data-field="matricula">001-1502334</span> se constituye hipoteca abierta a favor del banco acreedor.</p>
+      <p style="margin-top:34px;text-align:center">_______________________________<br><span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span><br><span style="font-family:var(--sans);font-size:11px;color:var(--ink-soft)">C.C. <span class="campo" data-field="cedula">1.017.884.330</span> — Compradora</span></p>
+    </article>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h3>Datos del caso (vinculados)</h3>
+      <p class="sub">Editar aquí actualiza el documento; editar en el documento actualiza aquí.</p>
+      <div class="fld"><label>Compradora — nombre</label><input data-field="comprador"><div class="cnt" data-cnt="comprador"></div></div>
+      <div class="fld"><label>Cédula</label><input data-field="cedula"><div class="cnt" data-cnt="cedula"></div></div>
+      <div class="fld"><label>Matrícula inmobiliaria</label><input data-field="matricula"><div class="cnt" data-cnt="matricula"></div></div>
+      <div class="fld"><label>Precio (texto)</label><input data-field="precio"><div class="cnt" data-cnt="precio"></div></div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="panel">
+      <h3>Leyenda</h3>
+      <p class="legend"><span class="sw swy"></span><b>Campo vinculado</b> — ligado al dato; cascada a todas sus copias.<br><span class="sw swf"></span><b>Texto libre</b> — se edita y formatea como en Word.</p>
+    </div>
+    <div class="panel">
+      <h3>Lo que se guarda</h3>
+      <p class="sub">Los campos → datos estructurados del caso (portan al backend). El texto libre → contenido enriquecido del documento.</p>
+      <pre class="json" id="json"></pre>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <b>Prueba de concepto — datos ficticios.</b> Demuestra el principio de OnlyOffice: <b>content controls</b> (campos ligados al caso) incrustados en un documento editable con texto enriquecido. En producción se suma el <b>control de cambios en rojo</b> (tracked changes) y el guardado bidireccional contra el caso. No re-renderiza el documento: parcha solo el campo que cambió, por eso las ediciones libres se conservan.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var FIELDS=['comprador','cedula','matricula','precio'];
+  var state={};
+  var editor=document.getElementById('editor');
+  var statusEl=document.getElementById('status'), statusT=null;
+  function g(s,r){return (r||document).querySelector(s);}
+  function all(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+  function say(m){ statusEl.textContent=m; clearTimeout(statusT); statusT=setTimeout(function(){statusEl.textContent='';},1600); }
+
+  /* ---- cascada: propaga el valor de un campo a todas sus copias + panel ---- */
+  function cascade(field, value, source){
+    all('#editor .campo[data-field="'+field+'"]').forEach(function(el){
+      if(el!==source && el.textContent!==value){ el.textContent=value; flash(el); }
+    });
+    var inp=g('.panel input[data-field="'+field+'"]');
+    if(inp && inp.value!==value) inp.value=value;
+    var cnt=g('[data-cnt="'+field+'"]'); if(cnt) cnt.textContent=value.length+' car. · '+countCopies(field)+' copia(s) en el texto';
+    state[field]=value;
+    dumpJSON();
+  }
+  function countCopies(field){ return all('#editor .campo[data-field="'+field+'"]').length; }
+  function flash(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(function(){el.classList.remove('flash');},1200); }
+
+  /* ---- editar EN el documento: detecta (por snapshot) qué campo cambió y cascada ---- */
+  function snapshot(){ FIELDS.forEach(function(f){ var el=g('#editor .campo[data-field="'+f+'"]'); state[f]=el?el.textContent:''; }); }
+  editor.addEventListener('input',function(){
+    var changed=false;
+    FIELDS.forEach(function(f){
+      var els=all('#editor .campo[data-field="'+f+'"]'), edited=null;
+      for(var i=0;i<els.length;i++){ if(els[i].textContent!==state[f]){ edited=els[i]; break; } }
+      if(edited){ cascade(f, edited.textContent, edited); changed=true; }
+    });
+    if(changed) say('Campo actualizado en cascada'); else dumpJSON();
+  });
+
+  /* ---- editar EN el panel: empuja al documento ---- */
+  all('.panel input[data-field]').forEach(function(inp){
+    inp.addEventListener('input',function(){ cascade(inp.dataset.field, inp.value, null); say('Documento actualizado desde el panel'); });
+  });
+
+  /* ---- barra de formato (texto enriquecido) ---- */
+  g('#toolbar').addEventListener('click',function(e){
+    var b=e.target.closest('.tb-btn'); if(!b) return; e.preventDefault();
+    editor.focus(); document.execCommand(b.dataset.cmd,false,null);
+  });
+  document.addEventListener('keydown',function(e){
+    if(!(e.ctrlKey||e.metaKey)) return; var k=e.key.toLowerCase();
+    if(k==='b'||k==='i'||k==='u'){ /* dejar que el navegador aplique; execCommand nativo */ }
+  });
+
+  /* ---- estructura resultante ---- */
+  function dumpJSON(){
+    var o={};
+    FIELDS.forEach(function(f){ var el=g('#editor .campo[data-field="'+f+'"]'); o[f]=el?el.textContent:''; });
+    g('#json').textContent=JSON.stringify(o,null,2);
+  }
+
+  /* init panel values + counts */
+  FIELDS.forEach(function(f){ var el=g('#editor .campo[data-field="'+f+'"]'); var inp=g('.panel input[data-field="'+f+'"]');
+    if(el&&inp) inp.value=el.textContent; var cnt=g('[data-cnt="'+f+'"]'); if(cnt) cnt.textContent=(el?el.textContent.length:0)+' car. · '+countCopies(f)+' copia(s) en el texto'; });
+  snapshot(); dumpJSON();
+})();
+</script>
