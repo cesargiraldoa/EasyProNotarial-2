@@ -64,7 +64,7 @@
 <div class="top"><div class="top-inner">
   <span class="flag">✎ Prueba de concepto · editor vinculado</span>
   <h1>Documento editable con campos en cascada</h1>
-  <p>El texto es editable como en Word (escribe, borra, aplica <b>negrita</b>/<i>cursiva</i>). Los <b>campos vinculados</b> (en amarillo) siguen ligados al dato del caso: al editar uno, el cambio salta a todas sus copias y actualiza el panel — y viceversa. El texto libre se conserva; los campos nunca se pierden.</p>
+  <p>El texto es editable como en Word (escribe, borra, aplica <b>negrita</b>/<i>cursiva</i>). Los <b>campos vinculados</b> (amarillo) son <b>opcionales</b>: solo para datos que deben cascadear. ¿Una forma de pago muy específica que el formulario no contempla? <b>Haz clic en el documento y escríbela</b>, o usa <b>➕ Cláusula</b> — es texto libre, no depende del formulario.</p>
 </div></div>
 
 <div class="app">
@@ -78,14 +78,17 @@
       <span class="tb-sep"></span>
       <button class="tb-btn" data-cmd="undo" title="Deshacer">↶</button>
       <button class="tb-btn" data-cmd="redo" title="Rehacer">↷</button>
-      <span class="tb-note">Selecciona texto y aplica formato · o edita libremente</span>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" data-cmd="__clause" title="Insertar una cláusula de texto libre" style="border-color:var(--accent);color:var(--accent)">➕ Cláusula</button>
+      <span class="tb-note">Escribe libre en el documento · o inserta una cláusula</span>
     </div>
 
     <article class="sheet" id="editor" contenteditable="true" spellcheck="false">
       <h4>Escritura pública — Compraventa (fragmento de demostración)</h4>
       <p>En la ciudad de Medellín, Departamento de Antioquia, a los catorce (14) días del mes de agosto de dos mil veintiséis (2026), ante el Notario Dieciséis del Círculo de Medellín, compareció <span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span>, mayor de edad, identificada con la cédula de ciudadanía número <span class="campo" data-field="cedula">1.017.884.330</span>, quien manifestó:</p>
       <p><span class="clh">PRIMERO: OBJETO.</span> Que adquiere a título de compraventa el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. <span class="campo" data-field="matricula">001-1502334</span>, ubicado en la Calle 30 Sur #27-45 de Envigado.</p>
-      <p><span class="clh">CUARTO: PRECIO.</span> El precio de la venta es la suma de <span class="campo" data-field="precio">CUATROCIENTOS VEINTE MILLONES DE PESOS ($420.000.000)</span>, que la compradora paga de contado.</p>
+      <p><span class="clh">CUARTO: PRECIO.</span> El precio de la venta es la suma de <span class="campo" data-field="precio">CUATROCIENTOS VEINTE MILLONES DE PESOS ($420.000.000)</span>, que se cancela en la forma prevista en la cláusula siguiente.</p>
+      <p><span class="clh">QUINTO: FORMA DE PAGO.</span> El precio se cancela así: la suma de CIENTO VEINTE MILLONES DE PESOS ($120.000.000) que la compradora entrega en este acto con el producto de la redención de un CDT del Banco de Bogotá que se hará efectivo el 30 de septiembre de 2026; y el saldo de TRESCIENTOS MILLONES DE PESOS ($300.000.000) con el desembolso de un crédito hipotecario, condicionado a la venta previa del inmueble de matrícula 050-987654 de propiedad de la compradora, según promesa suscrita el 2 de agosto de 2026. <i>(Este párrafo es texto libre: lo escribió el protocolista; el formulario no lo contempla.)</i></p>
       <p><span class="clh">HIPOTECA.</span> Sobre el inmueble de matrícula <span class="campo" data-field="matricula">001-1502334</span> se constituye hipoteca abierta a favor del banco acreedor.</p>
       <p style="margin-top:34px;text-align:center">_______________________________<br><span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span><br><span style="font-family:var(--sans);font-size:11px;color:var(--ink-soft)">C.C. <span class="campo" data-field="cedula">1.017.884.330</span> — Compradora</span></p>
     </article>
@@ -159,9 +162,19 @@
     inp.addEventListener('input',function(){ cascade(inp.dataset.field, inp.value, null); say('Documento actualizado desde el panel'); });
   });
 
-  /* ---- barra de formato (texto enriquecido) ---- */
+  /* ---- barra de formato (texto enriquecido) + insertar cláusula libre ---- */
+  function insertClause(){
+    var p=document.createElement('p');
+    p.innerHTML='<span class="clh">NUEVA CLÁUSULA.</span> ';
+    var sel=window.getSelection(), ref=null;
+    if(sel.rangeCount){ var n=sel.anchorNode; n=n&&n.nodeType===3?n.parentElement:n; var block=n&&n.closest?n.closest('#editor > p, #editor > h4'):null; if(block&&block.parentNode===editor) ref=block; }
+    if(ref&&ref.nextSibling) editor.insertBefore(p,ref.nextSibling); else editor.appendChild(p);
+    var r=document.createRange(); r.selectNodeContents(p); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); editor.focus();
+    snapshot(); say('Cláusula insertada — escriba libremente');
+  }
   g('#toolbar').addEventListener('click',function(e){
     var b=e.target.closest('.tb-btn'); if(!b) return; e.preventDefault();
+    if(b.dataset.cmd==='__clause'){ insertClause(); return; }
     editor.focus(); document.execCommand(b.dataset.cmd,false,null);
   });
   document.addEventListener('keydown',function(e){
