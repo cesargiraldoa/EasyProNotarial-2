@@ -210,6 +210,14 @@
         <label class="chk"><input type="checkbox" id="ax_cedulas" checked> Cédulas</label>
       </div>
     </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">6</span> Otorgamiento y firmas</legend>
+      <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="numEscritura" value="2.847"></div><div class="field"><label>Fecha de otorgamiento</label><input type="text" id="fechaOtorg" value="catorce (14) días del mes de agosto del año dos mil veintiséis (2026)"></div></div>
+      <label class="chk"><input type="checkbox" id="huella" checked> Se toma impresión dactilar de los otorgantes</label>
+      <label class="chk"><input type="checkbox" id="testigos"> Concurren testigos instrumentales</label>
+      <p class="hint">Cierre del instrumento: lectura, protocolización, constancias fiscales, firmas y autorización notarial — las cuatro fases del art. 13 del Decreto 960/1970.</p>
+    </fieldset>
   </form>
 
   <div class="out">
@@ -267,6 +275,7 @@
       inmdesc:g('inmdesc').value, linderos:g('linderos').value, matricula:g('matricula').value, catastral:g('catastral').value,
       ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, titulo:g('titulo').value, gravamen:g('gravamen').value,
       tipoNegocio:g('tipoNegocio').value, tituloTipo:g('tituloTipo').value, subsidio:g('subsidio').checked, subsidioEnt:g('subsidioEnt').value, posesion2:g('posesion2').checked, firmaRuego:g('firmaRuego').checked, interprete:g('interprete').checked, pep:g('pep').checked, cuentaTercero:g('cuentaTercero').checked,
+      numEscritura:g('numEscritura').value, fechaOtorg:g('fechaOtorg').value, huella:g('huella').checked, testigos:g('testigos').checked,
       total:num('total'), inicial:num('inicial'), saldo:num('saldo'),
       ax:{tradicion:g('ax_tradicion').checked, predial:g('ax_predial').checked, admin:g('ax_admin').checked, cedulas:g('ax_cedulas').checked},
       V:data.vendedores, C:data.compradores };
@@ -376,7 +385,7 @@
       +'<table><tr><td>CÓD. '+negCod+(s.derecho==='nuda'?' (NUDA PROPIEDAD)':'')+'</td><td>'+IF('total','$'+pts(s.total))+'</td></tr>'
       +(s.credito?'<tr><td>CÓD. 0219 — HIPOTECA ABIERTA SIN LÍMITE</td><td>'+IF('saldo','$'+pts(s.saldo))+'</td></tr>':'')+'</table></div>';
 
-    h+='<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los '+I('catorce (14) días del mes de agosto del año dos mil veintiséis (2026)')+', ante el Notario Dieciséis del Círculo Notarial de Medellín, ';
+    h+='<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los '+IF('fechaOtorg',s.fechaOtorg)+', ante el Notario Dieciséis del Círculo Notarial de Medellín, ';
     if(s.apod){ h+='compareció '+IF('apodNombre',s.apodN)+', mayor de edad, quien obra en nombre y representación de '+persList(V,'v')+', en virtud del poder conferido por '+IF('apodPoder',s.apodP)+', que se protocoliza '+D('Dcto 1069/2015')+', y en adelante la parte representada se denominará '+VEND+', y por su conducto manifest'+adq+':'; }
     else { h+='se presentó'+(vpl?'ron':'')+' '+persList(V,'v')+'; quien'+(vpl?'es':'')+' obra'+tf+' en su propio nombre, y en el texto de este instrumento se llamará'+tf+' '+VEND+', y manifest'+adq+':'; }
     h+='<span class="fill"> ————</span></p>';
@@ -432,7 +441,46 @@
     if(s.interprete) h+='<p class="cl">'+R('Comparece un intérprete que tradujo íntegramente el instrumento a el (los) otorgante(s) que no domina(n) el idioma; se deja constancia de su comprensión y aprobación.','art. 38 · Dcto 960/70')+'<span class="fill"> —</span></p>';
     if(s.firmaRuego) h+='<p class="cl">'+R('Manifestando uno de los otorgantes no saber o no poder firmar, firma por él a su ruego un tercero, en presencia de dos testigos hábiles que también suscriben; se toma su impresión dactilar.','art. 39 · Dcto 960/70')+'<span class="fill"> —</span></p>';
     if(s.pep||s.cuentaTercero) h+='<p class="para"><span class="clh">Parágrafo — Debida diligencia.</span> '+R((s.cuentaTercero?'Se identifica al beneficiario final por cuya cuenta se actúa. ':'')+(s.pep?'Se deja constancia de la condición de Persona Expuesta Políticamente y de la debida diligencia reforzada aplicada.':''),'Dcto 830/2021')+'</p>';
-    h+='<p class="cl" style="margin-top:18px;color:var(--ink-faint);font-size:12.5px;font-family:var(--sans)">Se procede a la lectura, otorgamiento, firma y autorización conforme al Artículo 13 del Decreto 960 de 1970 '+D('Dcto 960/1970')+'.</p>';
+    h+=otorgamiento(s);
+    return h;
+  }
+
+  /* ---------- otorgamiento, protocolización, constancias fiscales, autorización y firmas ---------- */
+  function otorgamiento(s){
+    var V=s.V, C=s.C, vpl=V.length>1;
+    var vend=vpl?'los vendedores':'el vendedor';
+    var L=liquidar(s);
+    var derNot=L.items[0].v, iva=L.items[1].v, impReg=L.items[2].v, ret=L.items[3].v;
+    var sech='text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:24px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)';
+    var h='<div class="sech" data-sec="otorgamiento" style="'+sech+'">OTORGAMIENTO Y AUTORIZACIÓN</div>';
+
+    h+='<p class="cl"><span class="clh">LECTURA Y OTORGAMIENTO.</span> '+R('Leído el presente instrumento por los comparecientes, advertidos del derecho a revisarlo y de la responsabilidad penal por faltar a la verdad, y enterados de su contenido, alcance y efectos legales, lo aprobaron y firman en un mismo acto ante el Notario que autoriza, con lo cual queda perfeccionado el otorgamiento.','Dcto 960/1970')+'<span class="fill"> ——</span></p>';
+
+    var docs=[];
+    if(s.apod) docs.push('el poder que acredita la representación de la parte vendedora');
+    if(anyJuridica(s)) docs.push('el certificado de existencia y representación legal');
+    if(s.ax.tradicion) docs.push('el certificado de tradición y libertad del inmueble');
+    if(s.ax.predial) docs.push('el paz y salvo del impuesto predial');
+    if(s.ph&&s.ax.admin) docs.push('el paz y salvo de expensas de la copropiedad');
+    if(s.subsidio) docs.push('el acto de asignación del subsidio de vivienda');
+    if(docs.length) h+='<p class="cl" data-sec="protocolizacion"><span class="clh">DOCUMENTOS QUE SE PROTOCOLIZAN.</span> '+R('Se agregan al protocolo, como parte integrante de esta escritura, los siguientes documentos habilitantes: '+docs.join('; ')+'.','Dcto 1069/2015')+'<span class="fill"> —</span></p>';
+
+    h+='<p class="cl" data-sec="fiscal"><span class="clh">CONSTANCIAS FISCALES.</span> El Notario deja constancia de que, actuando como agente retenedor, recaudó la retención en la fuente a cargo de '+vend+' por '+I(fmt(ret))+' '+D('art. 398 E.T.')+'; que los derechos notariales de esta escritura ascienden a '+I(fmt(derNot))+' más IVA de '+I(fmt(iva))+'; y que el impuesto de registro liquidado es de '+I(fmt(impReg))+' '+D('RES-2026-000964-6')+'.<span class="fill"> —</span></p>';
+
+    h+='<p class="cl"><span class="clh">AUTORIZACIÓN.</span> '+R('El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número '+esc(s.numEscritura)+'—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.','Dcto 960/1970')+'<span class="fill"> ——</span></p>';
+
+    function sig(name,role){ return '<div style="margin-top:30px;text-align:center"><div style="border-top:1px solid var(--ink);width:84%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">'+name+'</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">'+role+'</div></div>'; }
+    function rl(p,base){ if(p.tipo==='juridica') return base+' · '+esc(p.repr)+' (rep. legal) · NIT '+esc(p.id); return base+' · C.C. '+esc(p.id)+(s.huella?' · huella dactilar':''); }
+    var sigs='';
+    if(s.apod) sigs+=sig(esc(s.apodN),'Apoderado de '+vend);
+    else V.forEach(function(p){ sigs+=sig(esc(p.nombre), rl(p,'Vendedor')); });
+    C.forEach(function(p){ sigs+=sig(esc(p.nombre), rl(p,'Comprador'+(s.credito?' e hipotecante':''))); });
+    if(s.interprete) sigs+=sig('_______________','Intérprete oficial · art. 38 Dcto 960/1970');
+    if(s.firmaRuego) sigs+=sig('_______________','Firma a ruego del otorgante que no firma · art. 39');
+    if(s.firmaRuego||s.testigos){ sigs+=sig('_______________','Testigo instrumental'); sigs+=sig('_______________','Testigo instrumental'); }
+
+    h+='<div data-sec="firmas" style="margin-top:22px"><div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 34px">'+sigs+'</div>';
+    h+='<div style="margin-top:36px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">EL NOTARIO DIECISÉIS DEL CÍRCULO DE MEDELLÍN</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Autoriza · Escritura Nro. '+esc(s.numEscritura)+'</div></div></div>';
     return h;
   }
 
@@ -480,6 +528,10 @@
     if(s.pep) it.push({t:'warn',h:'PEP — debida diligencia reforzada',p:'Persona Expuesta Políticamente: declaración y verificación de fuente de riqueza.',n:'Dcto 830/2021'});
     if(s.cuentaTercero) it.push({t:'warn',h:'Beneficiario final',p:'Actúa por cuenta de tercero: identificar y registrar el beneficiario final.',n:'Dcto 830/2021'});
     it.push(s.posesion2?{t:'ok',h:'Ganancia ocasional (15%)',p:'Posesión ≥ 2 años: la utilidad grava como ganancia ocasional al 15% (se liquida en renta, no en notaría).',n:'art. 313 E.T.'}:{t:'warn',h:'Utilidad como renta ordinaria',p:'Posesión < 2 años: la utilidad tributa como renta ordinaria (tarifa marginal), no como ganancia ocasional.',n:'E.T. 300'});
+    it.push({t:'ok',h:'Otorgamiento en unidad de acto',p:'Lectura, aprobación y firma de los comparecientes ante el notario — las cuatro fases del art. 13.',n:'Dcto 960/1970'});
+    it.push({t:'obl',h:'Protocolización de documentos habilitantes',p:'Los soportes del acto (poder, certificados, paz y salvos, subsidio) se agregan al protocolo.',n:'Dcto 1069/2015'});
+    it.push({t:'obl',h:'Autorización notarial',p:'Constancia de autorización de la Escritura Nro. '+esc(s.numEscritura)+' e imposición de la fe pública, con las constancias fiscales de retención, derechos e impuesto de registro.',n:'Dcto 960/1970'});
+    if(!s.numEscritura.trim()) it.push({t:'warn',h:'Falta el número de escritura',p:'La autorización y las copias requieren el número de instrumento del protocolo.',n:'Dcto 960/1970'});
     return it;
   }
   var LBL={ok:'Cumple',obl:'Obligatoria ✓',warn:'Advertencia',crit:'Bloqueante'};
@@ -533,7 +585,7 @@
   window.addEventListener('scroll',hideTip,true);
 
   /* ---------- resaltado y navegación ---------- */
-  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',titulo:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'compliance',interprete:'compliance',pep:'compliance',cuentaTercero:'compliance'};
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',titulo:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas'};
   var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
   var lastId=null;
   function secForId(id){ if(!id) return null; if(FIELD_SEC[id]) return FIELD_SEC[id]; if(/^v\d/.test(id)) return 'comparecencia'; if(/^c\d/.test(id)) return 'aceptacion'; return null; }
