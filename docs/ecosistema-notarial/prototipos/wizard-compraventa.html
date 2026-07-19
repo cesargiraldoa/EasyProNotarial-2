@@ -191,6 +191,10 @@
       <div class="field" id="wrap-subsidio" hidden><label>Entidad del subsidio</label><input type="text" id="subsidioEnt" value="Caja de Compensación COMFAMA"></div>
       <label class="chk"><input type="checkbox" id="posesion2" checked> El vendedor poseyó el inmueble 2 años o más</label>
       <label class="chk"><input type="checkbox" id="firmaRuego"> Un otorgante firma a ruego (no sabe/no puede firmar)</label>
+      <div class="sub-group" id="wrap-ruego" hidden>
+        <div class="row2"><div class="field"><label>Firma a ruego — nombre</label><input type="text" id="ruegoNom" value="GLORIA PATRICIA MEJÍA RÚA"></div><div class="field"><label>Firma a ruego — C.C.</label><input type="text" id="ruegoId" value="32.556.101"></div></div>
+        <p class="hint">La firma a ruego exige la concurrencia de dos testigos instrumentales (art. 39 Dcto 960/1970).</p>
+      </div>
       <label class="chk"><input type="checkbox" id="interprete"> Requiere intérprete / traductor</label>
       <label class="chk"><input type="checkbox" id="pep"> Alguna parte es PEP (persona expuesta políticamente)</label>
       <label class="chk"><input type="checkbox" id="cuentaTercero"> Alguna parte actúa por cuenta de un tercero (beneficiario final)</label>
@@ -219,6 +223,11 @@
       <div class="field"><label>Fecha de otorgamiento</label><input type="date" id="fechaOtorg" value="2026-08-14"><p class="hint" id="fechahint"></p></div>
       <label class="chk"><input type="checkbox" id="huella" checked> Se toma impresión dactilar de los otorgantes</label>
       <label class="chk"><input type="checkbox" id="testigos"> Concurren testigos instrumentales</label>
+      <div class="sub-group" id="wrap-testigos" hidden>
+        <div class="row2"><div class="field"><label>Testigo 1 — nombre</label><input type="text" id="tg1n" value="SEBASTIÁN RÍOS MEJÍA"></div><div class="field"><label>Testigo 1 — C.C.</label><input type="text" id="tg1c" value="1.036.640.220"></div></div>
+        <div class="row2"><div class="field"><label>Testigo 2 — nombre</label><input type="text" id="tg2n" value="VALENTINA GÓMEZ LOAIZA"></div><div class="field"><label>Testigo 2 — C.C.</label><input type="text" id="tg2c" value="1.128.445.117"></div></div>
+        <p class="hint">Los testigos instrumentales firman y se identifican en el pliego de firmas.</p>
+      </div>
       <p class="hint">Cierre del instrumento: lectura, protocolización, constancias fiscales, firmas y autorización notarial — las cuatro fases del art. 13 del Decreto 960/1970.</p>
     </fieldset>
   </form>
@@ -284,6 +293,7 @@
       tipoNegocio:g('tipoNegocio').value, tituloTipo:g('tituloTipo').value, subsidio:g('subsidio').checked, subsidioEnt:g('subsidioEnt').value, posesion2:g('posesion2').checked, firmaRuego:g('firmaRuego').checked, interprete:g('interprete').checked, pep:g('pep').checked, cuentaTercero:g('cuentaTercero').checked,
       numEscritura:g('numEscritura').value, fechaOtorg:g('fechaOtorg').value, huella:g('huella').checked, testigos:g('testigos').checked,
       hojaInicial:g('hojaInicial').value, pepAny:(g('pep').checked||data.vendedores.concat(data.compradores).some(function(p){return p.pep;})),
+      tg1n:g('tg1n').value, tg1c:g('tg1c').value, tg2n:g('tg2n').value, tg2c:g('tg2c').value, ruegoNom:g('ruegoNom').value, ruegoId:g('ruegoId').value,
       total:num('total'), inicial:num('inicial'), saldo:num('saldo'),
       ax:{tradicion:g('ax_tradicion').checked, predial:g('ax_predial').checked, admin:g('ax_admin').checked, cedulas:g('ax_cedulas').checked},
       V:data.vendedores, C:data.compradores };
@@ -508,9 +518,13 @@
     else V.forEach(function(p){ sigs+=ficha(p,'Vendedor'); });
     C.forEach(function(p){ sigs+=ficha(p,'Comprador'); });
     if(s.credito) sigs+=firmante('____________________________','Apoderado(a) especial',{apoderaDe:esc(s.banco)+' — NIT '+esc(s.bancoNit)});
-    if(s.interprete) sigs+=firmante('____________________________','Intérprete oficial · art. 38 Dcto 960/1970');
-    if(s.firmaRuego) sigs+=firmante('____________________________','Firma a ruego del otorgante que no puede firmar · art. 39');
-    if(s.firmaRuego||s.testigos){ sigs+=firmante('____________________________','Testigo instrumental'); sigs+=firmante('____________________________','Testigo instrumental'); }
+    var ln='____________________________', cc=function(v){return 'C.C. '+(v?esc(v):'____________');};
+    if(s.interprete) sigs+=firmante(ln,'Intérprete oficial · art. 38 Dcto 960/1970');
+    if(s.firmaRuego) sigs+=firmante(s.ruegoNom?esc(s.ruegoNom):ln, cc(s.ruegoId)+' · Firma a ruego del otorgante que no puede firmar · art. 39');
+    if(s.firmaRuego||s.testigos){
+      sigs+=firmante(s.tg1n?esc(s.tg1n):ln, cc(s.tg1c)+' · Testigo instrumental');
+      sigs+=firmante(s.tg2n?esc(s.tg2n):ln, cc(s.tg2c)+' · Testigo instrumental');
+    }
 
     h+='<p class="cl"><span class="clh">HOJAS DE PAPEL NOTARIAL.</span> Se extendió en las hojas de papel notarial números '+IF('hojaInicial',s.hojaInicial)+' y siguientes.<span class="fill"> —</span></p>';
     h+='<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+IF('hojaInicial',s.hojaInicial)+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.numEscritura)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
@@ -621,7 +635,7 @@
   window.addEventListener('scroll',hideTip,true);
 
   /* ---------- resaltado y navegación ---------- */
-  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas',tg1n:'firmas',tg1c:'firmas',tg2n:'firmas',tg2c:'firmas',ruegoNom:'firmas',ruegoId:'firmas'};
   var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
   var lastId=null;
   function secForId(id){ if(!id) return null; if(FIELD_SEC[id]) return FIELD_SEC[id];
@@ -642,6 +656,7 @@
   function renderOutput(){
     var s=G();
     g('wrap-banco').hidden=!s.credito; g('wrap-apod').hidden=!s.apod; g('wrap-ph').hidden=!s.ph; g('wrap-subsidio').hidden=!s.subsidio; g('wrap-afect').hidden=!casadoOUnion(s.V);
+    g('wrap-testigos').hidden=!(s.testigos||s.firmaRuego); g('wrap-ruego').hidden=!s.firmaRuego;
     g('cuadre').innerHTML=(s.inicial+s.saldo===s.total)?'<span style="color:var(--ok)">✓ Los pagos cuadran con el total.</span>':'<span style="color:var(--crit)">× Inicial + saldo = '+pts(s.inicial+s.saldo)+' ≠ total '+pts(s.total)+'.</span>';
     g('fechahint').innerHTML=s.fechaOtorg?'En la escritura: «a los '+esc(fechaText(s.fechaOtorg))+'».':'<span style="color:var(--crit)">Seleccione la fecha de otorgamiento.</span>';
     g('titulohint').innerHTML='En la escritura: «…la Escritura Pública número '+esc(s.tituloNum)+' del '+esc(fechaCorta(s.tituloFecha))+' de la '+esc(s.tituloNotaria)+'».';
