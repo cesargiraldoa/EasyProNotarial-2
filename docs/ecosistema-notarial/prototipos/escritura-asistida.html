@@ -189,7 +189,7 @@
   <form class="panel form" id="form" autocomplete="off">
     <fieldset>
       <legend><span class="bn">0</span> Acto</legend>
-      <div class="field"><label>Derecho que se transfiere</label><select id="derecho"><option value="dominio" selected>Pleno dominio</option><option value="nuda">Nuda propiedad (reserva de usufructo)</option></select></div>
+      <div class="field"><label>Derecho que se transfiere</label><select id="derecho"><option value="dominio" selected>Pleno dominio</option><option value="nuda">Nuda propiedad (reserva de usufructo)</option><option value="usufructo">Usufructo</option><option value="cuota">Derechos y acciones (cuota proindiviso)</option><option value="uso">Uso y habitación</option></select></div>
       <label class="chk"><input type="checkbox" id="credito" checked> La parte compradora paga con crédito hipotecario</label>
       <div id="wrap-banco">
         <div class="field"><label>Banco acreedor / NIT</label><div class="row2"><input type="text" id="banco" value="BANCO DAVIVIENDA S.A."><input type="text" id="bancoNit" value="860.034.313-7"></div></div>
@@ -565,7 +565,7 @@
       +'<span class="k">Folio matrícula</span><span>'+IF('matricula',s.matricula||'—')+'</span>'
       +'<span class="k">Cód. catastral</span><span>'+IF('catastral',s.catastral||'—')+'</span>'
       +'<span class="k">Ubicación</span><span>'+IF('inmdesc',s.inmdesc.slice(0,80)+(s.inmdesc.length>80?'…':''))+'</span></div>'
-      +'<table><tr><td>CÓD. '+negCod+(s.derecho==='nuda'?' (NUDA PROPIEDAD)':'')+'</td><td>'+IF('total','$'+pts(s.total))+'</td></tr>'
+      +'<table><tr><td>CÓD. '+negCod+({nuda:' (NUDA PROPIEDAD)',usufructo:' (USUFRUCTO)',cuota:' (DERECHOS Y ACCIONES)',uso:' (USO Y HABITACIÓN)'}[s.derecho]||'')+'</td><td>'+IF('total','$'+pts(s.total))+'</td></tr>'
       +(s.credito?'<tr><td>CÓD. 0219 — HIPOTECA ABIERTA SIN LÍMITE</td><td>'+IF('saldo','$'+pts(s.saldo))+'</td></tr>':'')+'</table></div>';
 
     h+='<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los '+IF('fechaOtorg',fechaText(s.fechaOtorg))+', ante el Notario Dieciséis del Círculo Notarial de Medellín, ';
@@ -573,7 +573,8 @@
     else { h+='se presentó'+(vpl?'ron':'')+' '+persList(V,'v')+'; quien'+(vpl?'es':'')+' obra'+tf+' en su propio nombre, y en el texto de este instrumento se llamará'+tf+' '+VEND+', y manifest'+adq+':'; }
     h+='<span class="fill"></span></p>';
 
-    var derechoTxt = s.derecho==='nuda' ? 'la nuda propiedad, reservándose el usufructo vitalicio,' : 'el derecho de dominio y la posesión';
+    var DER={dominio:'el derecho de dominio y la posesión',nuda:'la nuda propiedad, reservándose el usufructo vitalicio,',usufructo:'el derecho de usufructo',cuota:'los derechos y acciones (cuota proindiviso) que le corresponden',uso:'el derecho de uso y habitación'};
+    var derechoTxt = DER[s.derecho]||DER.dominio;
     h+='<p class="cl" data-sec="objeto"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE.</span> Por medio del presente instrumento transfiere'+tf+' a título de '+negTit+' en favor de '+buyersFavor(C)+' '+derechoTxt+' sobre el siguiente bien inmueble: '+IF('inmdesc',s.inmdesc)+'. FOLIO DE MATRÍCULA INMOBILIARIA NRO. '+IF('matricula',mat)+'. Cuyos linderos generales son: '+IF('linderos',s.linderos)+'.<span class="fill"></span></p>';
     h+='<p class="para"><span class="clh">Parágrafo primero.</span> No obstante la mención de la cabida, área y linderos, el inmueble se transfiere como cuerpo cierto.</p>';
     if(s.ph){
@@ -1143,15 +1144,35 @@
   q('#mode-edicion').addEventListener('click',function(){ if(!window.EA.editMode){ setMode('edicion'); } });
 
   /* ----- exportar a PDF (formato correcto: recalcula guiones al ancho de página) ----- */
+  var PRINT_CSS=[
+    '@page{size:A4;margin:18mm 16mm;}',
+    'html,body{margin:0;background:#fff;color:#000;}',
+    'body{font-family:Georgia,"Times New Roman",serif;font-size:11.5pt;line-height:1.75;}',
+    '.sheet{max-width:180mm;margin:0 auto;}',
+    'p{margin:0 0 10px;text-align:justify;}',
+    '.clh{font-weight:700;}',
+    '.fill{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;color:#000;letter-spacing:.05em;}',
+    '.campo{background:transparent !important;color:#000 !important;border:0 !important;font-weight:400 !important;padding:0 !important;}',
+    '.cmt{background:transparent !important;border:0 !important;}',
+    '.mark{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000 !important;}',
+    '.cite,.hl,.hl-sec{background:transparent !important;box-shadow:none !important;}',
+    '.cite{display:none !important;}',
+    '.calif{border:1px solid #000;padding:8px 10px;margin-bottom:14px;font-size:9.5pt;}',
+    '.calif h4{text-align:center;margin:0 0 6px;font-size:9.5pt;}',
+    '.calif table{width:100%;border-collapse:collapse;margin-top:6px;} .calif td{border-top:1px solid #999;padding:3px 4px;}',
+    '.sech{text-align:center;font-weight:700;text-transform:uppercase;font-size:10.5pt;margin:16px 0 10px;padding:5px 0;border-top:1px solid #000;border-bottom:1px solid #000;}',
+    'p.cl,p.para{page-break-inside:avoid;}'
+  ].join('');
+  var PRINT_JS='var L=new Array(401).join("\\u2014");function fill(){var ps=document.querySelectorAll("p.cl,p.para");for(var j=0;j<ps.length;j++){var pp=ps[j],last=pp.lastElementChild;if(!(last&&last.className&&(""+last.className).indexOf("fill")>=0)){var s=document.createElement("span");s.className="fill";pp.appendChild(s);}}var sp=document.querySelectorAll(".fill");for(var i=0;i<sp.length;i++){var f=sp[i];f.textContent=L;f.style.width="0px";var h=f.parentElement,cs=getComputedStyle(h);var right=h.getBoundingClientRect().right-parseFloat(cs.paddingRight||0);var left=f.getBoundingClientRect().left;var w=right-left-2;f.style.width=(w>4?w:0)+"px";}}window.onload=function(){fill();setTimeout(function(){window.focus();window.print();},120);};';
   function exportPDF(){
-    var sheet=editor, prev=sheet.style.width;
-    function restore(){ sheet.style.width=prev; document.body.classList.remove('printing'); fillNow(); }
-    sheet.style.width='642px';           // ancho de texto A4 con márgenes ~16-18mm (solo para medir los guiones)
-    fillNow(true);                        // materializa los guiones para el PDF aunque estemos en Redacción
-    try{ window.print(); }              // print-CSS (@media print) oculta el chrome solo al imprimir
-    catch(e){ alert('Tu navegador no permite imprimir desde aquí. Ábrelo en una pestaña normal (Ctrl/Cmd+P) para guardar el PDF.'); }
-    restore();                            // restaura de inmediato: la pantalla nunca queda en modo impresión
-    setTimeout(restore, 150);            // red de seguridad
+    var inner=editor.innerHTML;
+    var doc='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Escritura pública</title><style>'+PRINT_CSS+'</style></head><body><article class="sheet">'+inner+'</article><script>'+PRINT_JS+'<\/script></body></html>';
+    var w=window.open('','_blank');
+    if(w){ w.document.open(); w.document.write(doc); w.document.close(); return; }
+    // popup bloqueado → descargar HTML listo para imprimir
+    try{ var blob=new Blob([doc],{type:'text/html'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='escritura.html'; document.body.appendChild(a); a.click(); a.remove();
+      alert('Se descargó la escritura como HTML. Ábrela y usa Ctrl/Cmd+P para guardar el PDF (el navegador bloqueó la ventana de impresión aquí).'); }
+    catch(e){ alert('No se pudo exportar desde esta vista. Abre el archivo en una pestaña propia y usa Ctrl/Cmd+P.'); }
   }
   q('#btnPDF').addEventListener('click',exportPDF);
 
@@ -1161,10 +1182,25 @@
     var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SR){ if(btn){ btn.disabled=true; btn.title='Tu navegador no soporta dictado por voz'; if(hint) hint.textContent='Dictado por voz no disponible en este navegador (usa Chrome).'; } return; }
     var rec=new SR(); rec.lang='es-CO'; rec.interimResults=true; rec.continuous=true; var base='', on=false;
-    btn.addEventListener('click',function(){ if(on){ rec.stop(); return; } base=ta.value?ta.value.replace(/\s+$/,'')+' ':''; try{ rec.start(); }catch(e){} });
+    function errMsg(code){
+      if(code==='not-allowed'||code==='service-not-allowed') return 'Micrófono bloqueado en esta vista incrustada. Abre la escritura en una pestaña propia (o el archivo .html directo) y permite el micrófono.';
+      if(code==='no-speech') return 'No se escuchó nada, intenta de nuevo.';
+      if(code==='audio-capture') return 'No se detectó micrófono en el dispositivo.';
+      if(code==='network') return 'Sin conexión para el servicio de dictado.';
+      return 'No se pudo iniciar el dictado ('+(code||'desconocido')+').';
+    }
+    // Pedir permiso de micrófono explícitamente (mejora el prompt en pestaña propia)
+    function ensureMic(cb){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ cb(true); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(st){ st.getTracks().forEach(function(t){t.stop();}); cb(true); })
+        .catch(function(){ hint.textContent=errMsg('not-allowed'); cb(false); });
+    }
+    btn.addEventListener('click',function(){ if(on){ rec.stop(); return; }
+      ensureMic(function(ok){ if(!ok) return; base=ta.value?ta.value.replace(/\s+$/,'')+' ':''; try{ rec.start(); hint.textContent='Iniciando micrófono…'; }catch(e){ hint.textContent=errMsg(''); } });
+    });
     rec.onstart=function(){ on=true; btn.classList.add('rec'); btn.textContent='⏹ Detener'; hint.textContent='Escuchando… dicta los linderos.'; };
-    rec.onend=function(){ on=false; btn.classList.remove('rec'); btn.textContent='🎤 Dictar'; hint.textContent=''; };
-    rec.onerror=function(ev){ hint.textContent='Error de dictado: '+(ev.error||''); };
+    rec.onend=function(){ on=false; btn.classList.remove('rec'); btn.textContent='🎤 Dictar'; };
+    rec.onerror=function(ev){ hint.textContent=errMsg(ev.error); };
     rec.onresult=function(ev){ var txt=''; for(var i=ev.resultIndex;i<ev.results.length;i++){ txt+=ev.results[i][0].transcript; } ta.value=base+txt; ta.dispatchEvent(new Event('input',{bubbles:true})); };
   })();
 
