@@ -84,3 +84,22 @@ Principio: **cada dato se captura una sola vez, de forma estructurada, y el moto
 - **Un dato, muchos destinos.** La matrícula, los nombres, el banco/NIT o la referencia del título se escriben una vez y aparecen en todas sus ubicaciones (carátula de calificación, objeto, título, hipoteca, firmas). Cambiar el origen actualiza todas las copias.
 - **Referencias de escritura estructuradas.** El título de adquisición (y, por venir, el reglamento de P.H. y el poder) se capturan como *número + fecha (selector) + notaría* y el motor compone *"la Escritura Pública número 2.410 del 18 de junio de 2019 de la Notaría 12 de Medellín"*.
 - **Beneficio:** menos tecleo, menos errores de copia, consistencia garantizada, y el mismo patrón se porta al backend (campos del caso → plantilla de cláusula).
+
+## 10. Captura por extracción — no digitar lo que se puede leer
+
+Dolor real recogido en Medellín (Notaría 16 y Notaría 1, jul-2026): **digitar los linderos es tedioso y fuente de errores**. Un jurídico-abogado que aún elabora documentos en la 16 pidió **extraer los linderos del documento registrado en la SNR** y, ojalá, **datos de cédulas y otros por escáner / foto / voz**.
+
+Es la evolución del principio 9: de *captura única → cascada* a **captura por extracción → validación → cascada**. El humano no digita el dato: el sistema lo **lee de su fuente autoritativa** y el humano **confirma**.
+
+**No confundir con la marcación de campos variables (abandonada).** Aquella pedía adivinar *"¿qué palabra de la plantilla es variable?"*. Esto extrae un **dato conocido** (el lindero, la matrícula) desde una **fuente autoritativa** hacia un **campo con nombre**: extracción dirigida y validada, no adivinación.
+
+| Dato | Mejor fuente | Nota |
+|---|---|---|
+| Linderos, cabida, cédula catastral | **Escritura de adquisición registrada** (título anterior) | El certificado de tradición no siempre trae linderos completos; la escritura sí |
+| Matrícula, cadena de tradición, gravámenes | **Certificado de Tradición y Libertad** (SNR / VUR) | |
+| Identificación de intervinientes | **Código de barras PDF417** de la cédula (amarilla y digital) | Más confiable que OCR de la foto; escáner/foto |
+| Cláusulas de texto libre (p. ej. formas de pago) | **Voz → texto** (dictado) | Útil para prosa, siempre con confirmación |
+
+**Regla de oro:** extraer → **resaltar** → el humano **valida** antes de que el dato entre a la escritura. Un lindero nunca entra sin confirmación (fe pública).
+
+Encaja en la arquitectura existente del software: `notarial_document_intelligence` (lectura/parseo de documentos) e `inverse_conversion_engine`. No es un módulo nuevo: es conectar el motor a las fuentes.
