@@ -18,6 +18,7 @@ Acto piloto **compraventa** validado en el sandbox (wizard de alta fidelidad + e
   - Cumplimiento en vivo + liquidación 2026 + popups de norma + resaltado en cascada.
 - **Editor del protocolista** (`prototipos/editor-vinculado.html`), POC: texto libre tipo Word + **campos vinculados en cascada** + **vincular/desvincular selección** + **biblioteca de cláusulas** + **control de cambios en rojo** (aceptar/rechazar). Modelo OnlyOffice.
 - Documentación: `README.md`, `decisiones-diseno.md` (10 decisiones), `normograma-compraventa.md` (18 normas), `mapa-situaciones.md` (~320 situaciones).
+- **Corpus Notaría 16 analizado** (sesión 2026-07-20): `corpus-notaria16/inventario.md` (40 docs, 5 protocolistas) + `corpus-notaria16/capa-notaria16-compraventa.md` (biblioteca de cláusulas, orden canónico, notas 1–8, ficha de firma, **clasificación en dos capas** por-ley vs estilo, propuesta de estándar único, e irregularidades detectadas que validan el pitch). Analizados 13 docs (4 compraventa + 9 compraventa/hipoteca); pendientes de extraer los otros 27 (cancelaciones, donaciones, leasing, sucesión, aporte, liquidación SC).
 
 ## Pendientes inmediatos (arreglos — mañana)
 1. **Concordancia de género** — hay errores al leer. Auditar todo el texto del wizard donde se asume masculino:
