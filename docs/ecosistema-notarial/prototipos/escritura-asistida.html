@@ -342,6 +342,7 @@
       <button type="button" class="mode-tab" id="mode-captura" aria-selected="true">1 · Captura</button>
       <button type="button" class="mode-tab" id="mode-edicion" aria-selected="false">2 · Redacción (editar a mano)</button>
       <button type="button" class="mode-tab" id="btnPDF" title="Exportar la escritura a PDF">📄 Exportar PDF</button>
+      <button type="button" class="mode-tab" id="btnWord" title="Exportar la escritura a Word (.doc)">📝 Exportar Word</button>
       <span class="tb-note" id="modehint">La escritura se genera en vivo desde los datos.</span>
     </div>
     <div class="toolbar" id="toolbar" hidden>
@@ -953,11 +954,15 @@
   function revealChange(){ if(!lastId) return; var t=g('escritura').querySelector('[data-f="'+lastId+'"]');
     if(!t){ var key=secForId(lastId); if(key&&key!=='compliance') t=g('escritura').querySelector('[data-sec="'+key+'"]'); }
     if(t && !inView(t)){ t.scrollIntoView({behavior:'smooth',block:'center'}); } }
+  function afterFieldEdit(){
+    if(window.EA && window.EA.editMode){ window.EA.syncFromForm(window.EA.buildDoc(), lastId); }
+    else { renderOutput(); revealChange(); }
+  }
   g('form').addEventListener('input',function(e){ var t=e.target;
     if(t.classList && t.classList.contains('money')){ onMoneyInput(t); }
-    if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; renderOutput(); revealChange(); }
-    else if(t.dataset && t.dataset.scope && t.dataset.key){ updateFirmante(t); lastId='firmas'; renderOutput(); revealChange(); }
-    else if(t.id){ lastId=t.id; renderOutput(); revealChange(); } });
+    if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; afterFieldEdit(); }
+    else if(t.dataset && t.dataset.scope && t.dataset.key){ updateFirmante(t); lastId='firmas'; afterFieldEdit(); }
+    else if(t.id){ lastId=t.id; afterFieldEdit(); } });
   g('form').addEventListener('change',function(e){ var t=e.target;
     if(t.dataset && t.dataset.key==='tipo'){ updateParty(t); renderParties(); renderOutput(); scrollToKey(t.dataset.side==='v'?'comparecencia':'aceptacion'); }
     else if(t.dataset && t.dataset.side!==undefined){ scrollToId(lastId); }
@@ -989,6 +994,8 @@
   window.EA.labels = function(){ return editorLabels(); };
   window.EA.render = function(){ renderOutput(); };
   window.EA.fill = function(force){ fillLeaders(force); };
+  /* valores de todos los campos calculados desde los datos actuales (clave data-field → texto mostrado) */
+  window.EA.fieldValues = function(){ var tmp=document.createElement('div'); tmp.innerHTML=renderEscritura(G()); var map={}; var sp=tmp.querySelectorAll('[data-f]'); for(var i=0;i<sp.length;i++){ var k=sp[i].getAttribute('data-f'); if(!(k in map)) map[k]=sp[i].textContent; } return map; };
 
   /* ----- pantalla de arranque: elegir acto → cargar plantilla ----- */
   function selectActo(acto){
@@ -1196,6 +1203,19 @@
   q('#mode-captura').addEventListener('click',function(){ if(window.EA.editMode){ setMode('captura'); } });
   q('#mode-edicion').addEventListener('click',function(){ if(!window.EA.editMode){ setMode('edicion'); } });
   window.EA.setMode=setMode;
+  /* sincroniza valores del formulario al documento editado (posicional: cada aparición recibe su propio valor),
+     preservando el texto escrito a mano; luego salta al lugar del cambio. */
+  window.EA.syncFromForm=function(freshHTML,focusKey){
+    var tmp=document.createElement('div'); tmp.innerHTML=freshHTML;
+    var freshByKey={}; Array.prototype.forEach.call(tmp.querySelectorAll('.campo'),function(el){ var k=el.getAttribute('data-field'); (freshByKey[k]=freshByKey[k]||[]).push(el.textContent); });
+    var liveByKey={}; Array.prototype.forEach.call(editor.querySelectorAll('.campo'),function(el){ var k=el.getAttribute('data-field'); (liveByKey[k]=liveByKey[k]||[]).push(el); });
+    for(var k in freshByKey){ var fv=freshByKey[k], lv=liveByKey[k]||[];
+      for(var i=0;i<lv.length;i++){ var nv=(i<fv.length?fv[i]:fv[fv.length-1]); if(lv[i].textContent!==nv){ lv[i].textContent=nv; flash(lv[i]); } }
+      var inp=q('#vinculados input[data-field="'+k+'"]'); if(inp && inp!==document.activeElement && fv.length && inp.value!==fv[0]) inp.value=fv[0];
+      if(fv.length) state[k]=fv[0]; }
+    fillNow();
+    if(focusKey){ var first=copies(focusKey)[0]; if(first){ flash(first); if(!inViewEd(first)) first.scrollIntoView({behavior:'smooth',block:'center'}); } }
+  };
 
   /* ----- exportar a PDF (formato correcto: recalcula guiones al ancho de página) ----- */
   var PRINT_CSS=[
@@ -1229,6 +1249,28 @@
     catch(e){ alert('No se pudo exportar desde esta vista. Abre el archivo en una pestaña propia y usa Ctrl/Cmd+P.'); }
   }
   q('#btnPDF').addEventListener('click',exportPDF);
+
+  /* ----- exportar a Word (.doc compatible: HTML con namespaces de Office) ----- */
+  function exportWord(){
+    var clone=editor.cloneNode(true);
+    // limpiar para Word: quitar guiones de relleno, citas y resaltados de edición; neutralizar campos/comentarios/marcas
+    Array.prototype.forEach.call(clone.querySelectorAll('.fill'),function(f){ f.parentNode.removeChild(f); });
+    Array.prototype.forEach.call(clone.querySelectorAll('.cite'),function(c){ c.parentNode.removeChild(c); });
+    Array.prototype.forEach.call(clone.querySelectorAll('.campo'),function(c){ c.removeAttribute('style'); c.className=''; });
+    Array.prototype.forEach.call(clone.querySelectorAll('.cmt'),function(c){ c.className=''; });
+    Array.prototype.forEach.call(clone.querySelectorAll('.hl,.hl-sec'),function(c){ c.classList.remove('hl','hl-sec'); });
+    var wcss='body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.5;} p{margin:0 0 8pt;text-align:justify;} .clh{font-weight:bold;} .mark{}';
+    var head='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Escritura</title>'
+      +'<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->'
+      +'<style>@page{size:21cm 29.7cm;margin:2.5cm 2cm;}'+wcss+'</style></head><body>';
+    var html=head+clone.innerHTML+'</body></html>';
+    try{
+      var blob=new Blob(['﻿'+html],{type:'application/msword'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='escritura.doc';
+      document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+    }catch(e){ alert('No se pudo exportar a Word desde esta vista. Abre el archivo en una pestaña propia e inténtalo de nuevo.'); }
+  }
+  q('#btnWord').addEventListener('click',exportWord);
 
   /* ----- dictado por voz en linderos (Web Speech API) ----- */
   (function(){
