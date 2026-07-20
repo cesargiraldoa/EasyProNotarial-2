@@ -141,6 +141,43 @@
 
   footer{max-width:1300px;margin:0 auto;padding:10px 20px 60px;color:var(--ink-faint);font-size:12px;line-height:1.6;}
   footer b{color:var(--ink-soft);}
+  /* resaltado multicolor */
+  .hl-palette{display:inline-flex;gap:3px;align-items:center;padding:0 2px;}
+  .hl-sw{width:18px;height:18px;border:1px solid var(--line-strong);border-radius:5px;cursor:pointer;padding:0;font-size:11px;line-height:1;color:var(--ink-soft);}
+  .hl-sw:hover{outline:2px solid var(--accent);outline-offset:1px;}
+  .hl-sw.hl-none{background:var(--paper);}
+  .mark{color:#1B1E23;border-radius:2px;padding:0 1px;}
+  /* comentarios */
+  .cmt{background:color-mix(in srgb,#7AA9D6 26%,transparent);border-bottom:2px solid #4E86B8;border-radius:2px;cursor:pointer;}
+  .cmt.sel{background:color-mix(in srgb,#7AA9D6 48%,transparent);}
+  .cmt-card{border:1px solid var(--line-strong);border-radius:9px;padding:9px 10px;margin-bottom:8px;background:var(--paper);}
+  .cmt-card.resuelto{opacity:.55;}
+  .cmt-card .q{font-family:var(--serif);font-size:11.5px;color:var(--ink-soft);border-left:3px solid #4E86B8;padding-left:6px;margin-bottom:5px;}
+  .cmt-card textarea{width:100%;font-family:var(--sans);font-size:12px;border:1px solid var(--line-strong);border-radius:6px;padding:5px 7px;resize:vertical;min-height:38px;color:var(--ink);background:var(--paper);}
+  .cmt-card .acts{display:flex;gap:6px;margin-top:5px;}
+  .cmt-card .acts button{font:inherit;font-size:11px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink-soft);border-radius:6px;padding:3px 8px;cursor:pointer;}
+  .cmt-card .acts button:hover{border-color:var(--accent);color:var(--accent);}
+  /* botón de voz */
+  .voz-btn{float:right;font:inherit;font-size:10.5px;font-weight:600;border:1px solid var(--line-strong);background:var(--paper);color:var(--accent);border-radius:6px;padding:1px 7px;cursor:pointer;text-transform:none;letter-spacing:0;}
+  .voz-btn.rec{background:var(--crit);color:#fff;border-color:var(--crit);animation:vozpulse 1.1s infinite;}
+  @keyframes vozpulse{0%,100%{opacity:1}50%{opacity:.6}}
+  @media (prefers-reduced-motion:reduce){.voz-btn.rec{animation:none;}}
+  /* impresión / PDF: solo la escritura */
+  @media print{
+    @page{size:A4;margin:18mm 16mm;}
+    .top,.form,.side,.toolbar,.modebar,.estado,footer{display:none !important;}
+    .app{display:block;max-width:none;margin:0;padding:0;}
+    .out{display:block;}
+    .sheet{border:0 !important;box-shadow:none !important;border-radius:0 !important;padding:0 !important;background:#fff !important;color:#000 !important;font-size:11.5pt;}
+    .sheet::before{display:none !important;}
+    .campo{background:transparent !important;color:#000 !important;border:0 !important;font-weight:400 !important;}
+    .cmt{background:transparent !important;border:0 !important;}
+    .mark{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .cite{display:none !important;}
+    .fill{color:#000 !important;}
+    p.cl,p.para{page-break-inside:avoid;}
+  }
+  body.printing .side,body.printing .form,body.printing .toolbar,body.printing .modebar,body.printing .estado{visibility:hidden;}
 </style>
 
 <div class="top"><div class="top-inner">
@@ -185,7 +222,7 @@
     <fieldset>
       <legend><span class="bn">2</span> Inmueble</legend>
       <div class="field"><label>Descripción y área</label><textarea id="inmdesc">APARTAMENTO NRO. 1402 de la Torre 3 del Conjunto Residencial Miravalle — Propiedad Horizontal, situado en la Calle 30 Sur #27-45 del municipio de Envigado (Antioquia), destinado a vivienda, con un área privada aproximada de 68,40 m²</textarea></div>
-      <div class="field"><label>Linderos</label><textarea id="linderos">Su área y linderos están determinados por el perímetro comprendido entre los puntos 1 al 28 y 1, punto de partida, de la planta del piso 14 de la Torre 3, plano RPH-19</textarea></div>
+      <div class="field"><label>Linderos <button type="button" id="btnVoz" class="voz-btn" title="Dictar por voz">🎤 Dictar</button></label><textarea id="linderos">Su área y linderos están determinados por el perímetro comprendido entre los puntos 1 al 28 y 1, punto de partida, de la planta del piso 14 de la Torre 3, plano RPH-19</textarea><div id="vozhint" style="font-size:10.5px;color:var(--ink-faint);margin-top:2px"></div></div>
       <div class="row2"><div class="field"><label>Matrícula inmobiliaria</label><input type="text" id="matricula" value="001-1502334"></div><div class="field"><label>Cédula catastral</label><input type="text" id="catastral" value="05266010300030014020"></div></div>
       <div class="row2"><div class="field"><label>Avalúo catastral ($)</label><input type="text" inputmode="decimal" class="money" id="avaluoCatastral" value="121923000"></div><div class="field"><label>NUPRE</label><input type="text" id="nupre" value="AAB0071ONED"></div></div>
       <label class="chk"><input type="checkbox" id="ph" checked> Sometido a propiedad horizontal</label>
@@ -266,6 +303,7 @@
     <div class="modebar">
       <button type="button" class="mode-tab" id="mode-captura" aria-selected="true">1 · Captura</button>
       <button type="button" class="mode-tab" id="mode-edicion" aria-selected="false">2 · Redacción (editar a mano)</button>
+      <button type="button" class="mode-tab" id="btnPDF" title="Exportar la escritura a PDF">📄 Exportar PDF</button>
       <span class="tb-note" id="modehint">La escritura se genera en vivo desde los datos.</span>
     </div>
     <div class="toolbar" id="toolbar" hidden>
@@ -275,6 +313,16 @@
       <span class="tb-sep"></span>
       <button class="tb-btn link" data-act="vincular" title="Vincular la selección como campo">🔗 Vincular</button>
       <button class="tb-btn" data-act="desvincular" title="Convertir el campo del cursor en texto libre">🔓 Desvincular</button>
+      <span class="tb-sep"></span>
+      <span class="hl-palette" title="Resaltar la selección">
+        <button class="hl-sw" data-hl="#FCE96A" style="background:#FCE96A" title="Amarillo"></button>
+        <button class="hl-sw" data-hl="#B7E4C7" style="background:#B7E4C7" title="Verde"></button>
+        <button class="hl-sw" data-hl="#F7C5D9" style="background:#F7C5D9" title="Rosa"></button>
+        <button class="hl-sw" data-hl="#BFE3F5" style="background:#BFE3F5" title="Azul"></button>
+        <button class="hl-sw" data-hl="#FBD9A8" style="background:#FBD9A8" title="Naranja"></button>
+        <button class="hl-sw hl-none" data-hl="none" title="Quitar resaltado">⌫</button>
+      </span>
+      <button class="tb-btn" data-act="comentar" title="Agregar comentario a la selección">💬 Comentar</button>
       <span class="tb-sep"></span>
       <button class="tb-btn" id="btnTrack" data-act="track" title="Control de cambios">🔴 Control de cambios</button>
       <button class="tb-btn" data-act="accept" title="Aceptar todos los cambios" hidden>✓ Aceptar</button>
@@ -294,6 +342,11 @@
       <p style="font-size:11px;color:var(--ink-faint);margin:0 0 10px">Editar aquí actualiza todas las copias en la escritura.</p>
       <div id="vinculados"></div>
       <div id="vincstatus" style="font-size:12px;color:var(--ok);font-weight:600;min-height:16px;margin-top:4px"></div>
+    </div>
+    <div class="panel" id="pane-comentarios" hidden style="padding:15px 16px">
+      <h3 style="font-family:var(--serif);font-size:15px;margin:0 0 3px;font-weight:600">💬 Comentarios</h3>
+      <p style="font-size:11px;color:var(--ink-faint);margin:0 0 10px">Selecciona texto y pulsa “💬 Comentar”. Como en Word: quedan anclados y se pueden resolver.</p>
+      <div id="comentarios"><p style="font-size:11.5px;color:var(--ink-faint)">Sin comentarios todavía.</p></div>
     </div>
     <div class="panel cmp" id="cumplimiento"></div>
     <div class="panel liq" id="liquidacion"></div>
@@ -1003,11 +1056,59 @@
   function acceptChanges(){ all('ins.track',editor).forEach(function(n){ var f=document.createDocumentFragment(); while(n.firstChild) f.appendChild(n.firstChild); n.parentNode.replaceChild(f,n); }); all('del.track',editor).forEach(function(n){ n.parentNode.removeChild(n); }); editor.normalize(); snapshot(); rebuildVinc(); fillNow(); say('Cambios aceptados'); }
   function rejectChanges(){ all('ins.track',editor).forEach(function(n){ n.parentNode.removeChild(n); }); all('del.track',editor).forEach(function(n){ var f=document.createDocumentFragment(); while(n.firstChild) f.appendChild(n.firstChild); n.parentNode.replaceChild(f,n); }); editor.normalize(); snapshot(); rebuildVinc(); fillNow(); say('Cambios rechazados'); }
 
+  q('#toolbar').addEventListener('mousedown',function(e){ if(e.target.closest('button')) e.preventDefault(); }); /* preservar selección */
   q('#toolbar').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; e.preventDefault();
+    if(b.dataset.hl!==undefined){ resaltar(b.dataset.hl); return; }
     if(b.dataset.cmd){ editor.focus(); document.execCommand(b.dataset.cmd,false,null); return; }
     var a=b.dataset.act;
     if(a==='vincular') vincular(); else if(a==='desvincular') desvincular();
+    else if(a==='comentar') comentar();
     else if(a==='track') setTrack(!track); else if(a==='accept') acceptChanges(); else if(a==='reject') rejectChanges(); });
+
+  /* ----- resaltado multicolor ----- */
+  function resaltar(color){
+    var sel=window.getSelection(); if(!sel.rangeCount||sel.isCollapsed){ say('Selecciona el texto a resaltar'); return; }
+    var range=sel.getRangeAt(0); if(!editor.contains(range.commonAncestorContainer)){ say('Selecciona dentro de la escritura'); return; }
+    if(color==='none'){
+      var frag=range.cloneContents(); // quitar marcas: reemplazar por texto
+      var marks=[]; var n=range.commonAncestorContainer; n=n.nodeType===3?n.parentElement:n;
+      all('.mark',editor).forEach(function(m){ if(sel.containsNode(m,true)){ marks.push(m); } });
+      marks.forEach(function(m){ m.replaceWith(document.createTextNode(m.textContent)); });
+      editor.normalize(); say('Resaltado quitado'); return;
+    }
+    var span=document.createElement('span'); span.className='mark'; span.style.background=color;
+    try{ span.appendChild(range.extractContents()); range.insertNode(span); }catch(err){ say('No se pudo resaltar esa selección'); return; }
+    editor.normalize(); sel.removeAllRanges(); say('Texto resaltado');
+  }
+
+  /* ----- comentarios (estilo Word) ----- */
+  var comments=[], cmtSeq=0;
+  function comentar(){
+    var sel=window.getSelection(); if(!sel.rangeCount||sel.isCollapsed){ say('Selecciona el texto a comentar'); return; }
+    var range=sel.getRangeAt(0); if(!editor.contains(range.commonAncestorContainer)){ say('Selecciona dentro de la escritura'); return; }
+    if(range.cloneContents().querySelector('.cmt')){ say('Esa selección ya tiene un comentario'); return; }
+    var id='c'+(++cmtSeq); var quote=range.toString().slice(0,120);
+    var span=document.createElement('span'); span.className='cmt'; span.setAttribute('data-cmt',id);
+    try{ span.appendChild(range.extractContents()); range.insertNode(span); }catch(err){ say('No se pudo comentar esa selección'); return; }
+    editor.normalize(); sel.removeAllRanges();
+    comments.push({id:id,quote:quote,text:'',resolved:false});
+    renderComments(); say('Comentario agregado'); var ta=q('#comentarios [data-for="'+id+'"]'); if(ta) ta.focus();
+  }
+  function renderComments(){
+    var box=q('#comentarios'); if(!box) return;
+    if(!comments.length){ box.innerHTML='<p style="font-size:11.5px;color:var(--ink-faint)">Sin comentarios todavía.</p>'; return; }
+    box.innerHTML=comments.map(function(c){
+      return '<div class="cmt-card'+(c.resolved?' resuelto':'')+'" data-card="'+c.id+'">'
+        +'<div class="q" data-goto="'+c.id+'">“'+esc(c.quote)+'”</div>'
+        +'<textarea data-for="'+c.id+'" placeholder="Escribe tu comentario…">'+esc(c.text)+'</textarea>'
+        +'<div class="acts"><button data-cres="'+c.id+'">'+(c.resolved?'Reabrir':'Resolver')+'</button><button data-cdel="'+c.id+'">Eliminar</button></div></div>';
+    }).join('');
+  }
+  q('#comentarios').addEventListener('input',function(e){ var t=e.target; if(t.matches&&t.matches('textarea[data-for]')){ var c=comments.find(function(x){return x.id===t.dataset.for;}); if(c) c.text=t.value; } });
+  q('#comentarios').addEventListener('click',function(e){ var t=e.target;
+    if(t.dataset.goto){ var sp=editor.querySelector('.cmt[data-cmt="'+t.dataset.goto+'"]'); if(sp){ all('.cmt.sel',editor).forEach(function(x){x.classList.remove('sel');}); sp.classList.add('sel'); sp.scrollIntoView({block:'center'}); } }
+    else if(t.dataset.cres){ var c=comments.find(function(x){return x.id===t.dataset.cres;}); if(c){ c.resolved=!c.resolved; renderComments(); } }
+    else if(t.dataset.cdel){ var id=t.dataset.cdel; var sp=editor.querySelector('.cmt[data-cmt="'+id+'"]'); if(sp) sp.replaceWith(document.createTextNode(sp.textContent)); editor.normalize(); comments=comments.filter(function(x){return x.id!==id;}); renderComments(); } });
 
   /* ----- modo Captura / Redacción ----- */
   function setMode(m){
@@ -1015,8 +1116,8 @@
     window.EA.editMode=ed;
     q('#mode-captura').setAttribute('aria-selected', ed?'false':'true');
     q('#mode-edicion').setAttribute('aria-selected', ed?'true':'false');
-    q('#toolbar').hidden=!ed; q('#pane-vinc').hidden=!ed;
-    q('#modehint').textContent = ed ? 'Documento editable: escribe libre, vincula, inserta cláusulas o activa control de cambios.' : 'La escritura se genera en vivo desde los datos.';
+    q('#toolbar').hidden=!ed; q('#pane-vinc').hidden=!ed; q('#pane-comentarios').hidden=!ed;
+    q('#modehint').textContent = ed ? 'Documento editable: escribe libre, vincula, resalta, comenta o activa control de cambios.' : 'La escritura se genera en vivo desde los datos.';
     if(ed){
       var labels=window.EA.labels(); for(var k in labels){ fieldMeta[k]={label:labels[k]}; }
       editor.innerHTML=window.EA.buildDoc();
@@ -1030,6 +1131,31 @@
   }
   q('#mode-captura').addEventListener('click',function(){ if(window.EA.editMode){ setMode('captura'); } });
   q('#mode-edicion').addEventListener('click',function(){ if(!window.EA.editMode){ setMode('edicion'); } });
+
+  /* ----- exportar a PDF (formato correcto: recalcula guiones al ancho de página) ----- */
+  function exportPDF(){
+    var sheet=editor; var prev=sheet.style.width;
+    document.body.classList.add('printing');
+    sheet.style.width='642px';           // ancho de texto A4 con márgenes ~16-18mm
+    fillNow();
+    function done(){ document.body.classList.remove('printing'); sheet.style.width=prev; fillNow(); window.removeEventListener('afterprint',done); }
+    window.addEventListener('afterprint',done);
+    setTimeout(function(){ window.print(); }, 60);
+  }
+  q('#btnPDF').addEventListener('click',exportPDF);
+
+  /* ----- dictado por voz en linderos (Web Speech API) ----- */
+  (function(){
+    var btn=document.getElementById('btnVoz'), ta=document.getElementById('linderos'), hint=document.getElementById('vozhint');
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){ if(btn){ btn.disabled=true; btn.title='Tu navegador no soporta dictado por voz'; if(hint) hint.textContent='Dictado por voz no disponible en este navegador (usa Chrome).'; } return; }
+    var rec=new SR(); rec.lang='es-CO'; rec.interimResults=true; rec.continuous=true; var base='', on=false;
+    btn.addEventListener('click',function(){ if(on){ rec.stop(); return; } base=ta.value?ta.value.replace(/\s+$/,'')+' ':''; try{ rec.start(); }catch(e){} });
+    rec.onstart=function(){ on=true; btn.classList.add('rec'); btn.textContent='⏹ Detener'; hint.textContent='Escuchando… dicta los linderos.'; };
+    rec.onend=function(){ on=false; btn.classList.remove('rec'); btn.textContent='🎤 Dictar'; hint.textContent=''; };
+    rec.onerror=function(ev){ hint.textContent='Error de dictado: '+(ev.error||''); };
+    rec.onresult=function(ev){ var txt=''; for(var i=ev.resultIndex;i<ev.results.length;i++){ txt+=ev.results[i][0].transcript; } ta.value=base+txt; ta.dispatchEvent(new Event('input',{bubbles:true})); };
+  })();
 
   renderBiblio();
 })();
