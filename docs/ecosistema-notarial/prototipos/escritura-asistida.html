@@ -909,11 +909,15 @@
   function updateParty(t){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; var p=arr[+t.dataset.idx]; if(!p) return; var k=t.dataset.key;
     if(t.type==='checkbox') p[k]=t.checked; else if(k==='cuota') p[k]=parseFloat(t.value)||0; else p[k]=t.value; }
   function updateFirmante(t){ var p=t.dataset.scope==='ruego'?data.ruego:data.testigos[+t.dataset.idx]; if(!p) return; p[t.dataset.key]=t.value; }
+  function inView(el){ var r=el.getBoundingClientRect(); return r.top>=48 && r.bottom<=(window.innerHeight||document.documentElement.clientHeight)-8; }
+  function revealChange(){ if(!lastId) return; var t=g('escritura').querySelector('[data-f="'+lastId+'"]');
+    if(!t){ var key=secForId(lastId); if(key&&key!=='compliance') t=g('escritura').querySelector('[data-sec="'+key+'"]'); }
+    if(t && !inView(t)){ t.scrollIntoView({behavior:'smooth',block:'center'}); } }
   g('form').addEventListener('input',function(e){ var t=e.target;
     if(t.classList && t.classList.contains('money')){ onMoneyInput(t); }
-    if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; renderOutput(); }
-    else if(t.dataset && t.dataset.scope && t.dataset.key){ updateFirmante(t); lastId='firmas'; renderOutput(); }
-    else if(t.id){ lastId=t.id; renderOutput(); } });
+    if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; renderOutput(); revealChange(); }
+    else if(t.dataset && t.dataset.scope && t.dataset.key){ updateFirmante(t); lastId='firmas'; renderOutput(); revealChange(); }
+    else if(t.id){ lastId=t.id; renderOutput(); revealChange(); } });
   g('form').addEventListener('change',function(e){ var t=e.target;
     if(t.dataset && t.dataset.key==='tipo'){ updateParty(t); renderParties(); renderOutput(); scrollToKey(t.dataset.side==='v'?'comparecencia':'aceptacion'); }
     else if(t.dataset && t.dataset.side!==undefined){ scrollToId(lastId); }
@@ -980,7 +984,10 @@
     if(!fs.length) h='<p style="font-size:11.5px;color:var(--ink-faint)">No hay campos. Selecciona texto y pulsa 🔗 Vincular.</p>';
     q('#vinculados').innerHTML=h;
   }
-  q('#vinculados').addEventListener('input',function(e){ var t=e.target; if(t.matches&&t.matches('input[data-field]')){ cascade(t.dataset.field,t.value,null); fillNow(); say('Actualizado en toda la escritura'); } });
+  function inViewEd(el){ var r=el.getBoundingClientRect(); return r.top>=48 && r.bottom<=(window.innerHeight||document.documentElement.clientHeight)-8; }
+  q('#vinculados').addEventListener('input',function(e){ var t=e.target; if(t.matches&&t.matches('input[data-field]')){ cascade(t.dataset.field,t.value,null); fillNow();
+    var first=copies(t.dataset.field)[0]; if(first && !inViewEd(first)){ first.scrollIntoView({behavior:'smooth',block:'center'}); }
+    say('Actualizado en toda la escritura'); } });
 
   editor.addEventListener('input',function(){
     if(!window.EA||!window.EA.editMode) return;
