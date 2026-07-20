@@ -177,7 +177,6 @@
     .fill{color:#000 !important;}
     p.cl,p.para{page-break-inside:avoid;}
   }
-  body.printing .side,body.printing .form,body.printing .toolbar,body.printing .modebar,body.printing .estado{visibility:hidden;}
 </style>
 
 <div class="top"><div class="top-inner">
@@ -1134,13 +1133,14 @@
 
   /* ----- exportar a PDF (formato correcto: recalcula guiones al ancho de página) ----- */
   function exportPDF(){
-    var sheet=editor; var prev=sheet.style.width;
-    document.body.classList.add('printing');
-    sheet.style.width='642px';           // ancho de texto A4 con márgenes ~16-18mm
+    var sheet=editor, prev=sheet.style.width;
+    function restore(){ sheet.style.width=prev; document.body.classList.remove('printing'); fillNow(); }
+    sheet.style.width='642px';           // ancho de texto A4 con márgenes ~16-18mm (solo para medir los guiones)
     fillNow();
-    function done(){ document.body.classList.remove('printing'); sheet.style.width=prev; fillNow(); window.removeEventListener('afterprint',done); }
-    window.addEventListener('afterprint',done);
-    setTimeout(function(){ window.print(); }, 60);
+    try{ window.print(); }              // print-CSS (@media print) oculta el chrome solo al imprimir
+    catch(e){ alert('Tu navegador no permite imprimir desde aquí. Ábrelo en una pestaña normal (Ctrl/Cmd+P) para guardar el PDF.'); }
+    restore();                            // restaura de inmediato: la pantalla nunca queda en modo impresión
+    setTimeout(restore, 150);            // red de seguridad
   }
   q('#btnPDF').addEventListener('click',exportPDF);
 
