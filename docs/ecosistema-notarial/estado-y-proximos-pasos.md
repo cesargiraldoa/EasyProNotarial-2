@@ -20,11 +20,9 @@ Acto piloto **compraventa** validado en el sandbox (wizard de alta fidelidad + e
 - Documentación: `README.md`, `decisiones-diseno.md` (10 decisiones), `normograma-compraventa.md` (18 normas), `mapa-situaciones.md` (~320 situaciones).
 - **Corpus Notaría 16 analizado** (sesión 2026-07-20): `corpus-notaria16/inventario.md` (40 docs, 5 protocolistas) + `corpus-notaria16/capa-notaria16-compraventa.md` (biblioteca de cláusulas, orden canónico, notas 1–8, ficha de firma, **clasificación en dos capas** por-ley vs estilo, propuesta de estándar único, e irregularidades detectadas que validan el pitch). Analizados 13 docs (4 compraventa + 9 compraventa/hipoteca); pendientes de extraer los otros 27 (cancelaciones, donaciones, leasing, sucesión, aporte, liquidación SC).
 
-## Pendientes inmediatos (arreglos — mañana)
-1. **Concordancia de género** — hay errores al leer. Auditar todo el texto del wizard donde se asume masculino:
-   - `pers()` usa "identificado" fijo; los roles del pliego de firmas ("Vendedor/Comprador") no concuerdan.
-   - Falta decidir la fuente del género: añadir campo **género** por persona (o derivarlo del estado civil/terminación) y propagar a "identificado/a", "domiciliado/a", "el/la vendedor(a)", etc.
-2. **Guiones no se llenan** — hoy `.fill` es un guion corto estático (`———`). Deben **rellenar la línea hasta el margen** (line-leader con guiones), como en la escritura real, para impedir intercalar texto.
+## Pendientes inmediatos (arreglos)
+1. ✅ **RESUELTO (2026-07-20) — Concordancia de género.** Añadido campo **género** (M/F) por persona natural en el formulario (`partyCard`), en el modelo (`nueva()` + seed) y propagado en `pers()` a "identificad{o/a}" y "domiciliad{o/a}", y en `labelEstado(e,genero)` al estado civil (solter{o/a}, casad{o/a}, divorciad{o/a}, viud{o/a}); la ficha de firma también concuerda el estado civil. Verificado en navegador (Playwright): Rodrigo→M, Marta→F, Laura→F correctos + toggle en vivo.
+2. ✅ **RESUELTO (2026-07-20) — Guiones de relleno.** `.fill` ahora es un line-leader que rellena la línea hasta el margen derecho: CSS `inline-block; overflow:hidden; white-space:nowrap` + `fillLeaders()` que mide el espacio restante de la última línea y ajusta el ancho; recalcula en `resize`. Verificado: 17-18/18 spans rellenan según el ancho.
 3. **One-pager Hoy vs. Ecosistema** — DESCARTADO por ahora (sin desgaste). No retomar salvo que se pida.
 
 ## Próximas tareas (en orden sugerido)
