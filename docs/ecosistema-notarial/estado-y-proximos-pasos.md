@@ -5,7 +5,28 @@
 _Última actualización: sesión del 2026-07-20._
 
 ## Dónde vamos (una línea)
-Acto piloto **compraventa** validado en el sandbox (wizard de alta fidelidad + editor del protocolista). Siguiente: arreglos menores, extracción del corpus de la Notaría 16, y arrancar el 2.º acto (hipoteca).
+**`prototipos/escritura-asistida.html`** es el prototipo principal y está **listo para grabar demo**: pantalla de arranque (elegir acto → carga plantilla) + vista única (captura + escritura editable + biblioteca) para **compraventa** y **compraventa+hipoteca**, con exportar a PDF y Word. Siguiente: 3.er acto y extraer los 27 documentos restantes del corpus.
+
+## ⭐ Prototipo principal: `prototipos/escritura-asistida.html`
+Es donde vive el producto ahora (reemplaza la separación wizard/editor). **Rama de trabajo actual: `claude/previous-work-context-pz5704`.** Artifact clickeable: https://claude.ai/code/artifact/b33c60bd-ae04-412f-95d4-29d01ffed0aa
+
+**Flujo:** el protocolista abre → **pantalla "Elige el acto"** (2 tarjetas: Compraventa · Compraventa+Hipoteca, sin "próximamente") → carga la plantilla → **modo Captura** (formulario izq · escritura centro · biblioteca+cumplimiento+liquidación der; se redacta en vivo) ↔ **modo Redacción** (edita a mano, biblioteca, comentarios, resaltado, control de cambios) → **Exportar PDF / Word**.
+
+**Funciones ya construidas y verificadas (Playwright):**
+- Elegir acto carga la plantilla (con/sin hipoteca) + botón "↩ Cambiar acto".
+- **Edición inmediata:** editar un campo (en formulario, panel "Datos vinculados" o directo en el documento) refleja al instante en TODAS sus apariciones y **salta/resalta** el lugar — desde la 1.ª tecla, en Captura y Redacción. Sync **posicional** (la carátula muestra `$cifra`, la cláusula las letras).
+- **Miles y centavos en vivo** en los campos de dinero.
+- **Guiones de relleno** en todos los párrafos (Captura + PDF); en Redacción se colapsan para que el texto refluya al instante.
+- **Liquidación integrada** al cuerpo de la escritura ("DERECHOS, RECAUDOS Y VALORES A PAGAR").
+- **5 tipos de derecho:** Pleno dominio · Nuda propiedad · Usufructo · Derechos y acciones (cuota) · Uso y habitación.
+- **Redacción (OnlyOffice-like):** contenteditable, vincular/desvincular (campos que cascadean), **control de cambios** (verde/rojo + aceptar/rechazar), **biblioteca de la Notaría 16** (6 cláusulas que se insertan en el cursor), **comentarios estilo Word** (anclados + resolver/eliminar), **resaltado multicolor** (5 colores + quitar).
+- **🎤 Dictado por voz** en linderos (Web Speech `es-CO`; pide permiso de micrófono).
+- **📄 Exportar PDF** (abre pestaña nueva → imprimir; recalcula guiones al ancho A4) y **📝 Exportar Word** (`.doc` compatible).
+- Renombre a **"Escritura asistida"** y **"BETA"** (no "datos ficticios").
+
+**⚠ Nota de entorno:** dentro del **Artifact incrustado**, el sandbox bloquea **popups (PDF), descargas (Word) y micrófono (voz)**. Para demo, **abrir el `.html` descargado en una pestaña propia de Chrome** (o expandir el Artifact a pantalla completa) — ahí todo corre sin restricciones. El archivo es autónomo (CSS/JS embebido).
+
+**Arquitectura interna (para retomar):** dos IIFE en el mismo archivo — (1) el "wizard" (formulario + `renderEscritura` + liquidación + cumplimiento, expone `window.EA.buildDoc/labels/render/fill/fieldValues/syncFromForm`), (2) el "motor de edición" (contenteditable sobre `#escritura`, `setMode('captura'|'edicion')`, cascada, biblioteca, comentarios, resaltado, control de cambios). En Redacción `renderOutput()` no re-genera; el form sincroniza por `window.EA.syncFromForm(buildDoc(), key)` (posicional). Guiones: `fillLeaders(force)` colapsa en edición y materializa con `force` para PDF.
 
 ## Hecho hasta hoy (todo en la rama `claude/github-integration-gl79ne`)
 - **Wizard de compraventa** (`prototipos/wizard-compraventa.html`), pieza principal, con:
@@ -26,8 +47,8 @@ Acto piloto **compraventa** validado en el sandbox (wizard de alta fidelidad + e
 3. **One-pager Hoy vs. Ecosistema** — DESCARTADO por ahora (sin desgaste). No retomar salvo que se pida.
 
 ## Próximas tareas (en orden sugerido)
-1. **Extraer el corpus de la Notaría 16** (35 documentos, 5 protocolistas, en `uploads/.../notaria16/`). Producir la **capa por notaría**: biblioteca de cláusulas, orden de los actos, notas y ficha de firma. **Clasificar cada cláusula/nota en dos capas**: _por ley_ (→ normograma compartido) vs _estilo/orden_ (→ capa Notaría 16). Detectar variaciones entre protocolistas y proponer estándar único.
-   - Actos vistos en el corpus: compraventa, venta de nuda propiedad, compraventa+hipoteca, hipoteca, cancelación de hipoteca, cancelación de patrimonio de familia, donación, insinuación+donación, sucesión, aporte a sociedad, liquidación soc. conyugal/renuncia a gananciales, leasing, minutas semilla (vivienda/leasing).
+0. **[NUEVO] 3.er acto** — elegir el siguiente acto a construir con fidelidad al corpus y sumarlo a la pantalla "Elige el acto" de `escritura-asistida.html`: candidatos con corpus rico → **hipoteca sola**, **cancelación de hipoteca** (5 docs) o **cancelación de patrimonio de familia** (5 docs). Requiere: extraer esos `.doc`, su clausulado/orden, y una tarjeta nueva en el lanzador que cargue esa plantilla.
+1. **Extraer los 27 documentos restantes del corpus de la Notaría 16** (ya extraídos los 13 de compraventa/hipoteca → `corpus-notaria16/`). Producir la **capa por notaría** de los demás actos (cancelaciones, donación/insinuación, sucesión, aporte, liquidación SC, leasing, minutas semilla), clasificando por-ley vs estilo. El ZIP del corpus es efímero: si no está, el usuario lo vuelve a subir. Método probado: extractor cp1252 (`corpus-notaria16/` tiene el detalle).
 2. ✅ **RESUELTO (2026-07-20) — Paso 2 — Hipoteca (2.º acto).** Implementado el **encadenamiento compraventa + hipoteca** completo en el wizard, con fidelidad al corpus real de la 16: 12 cláusulas de hipoteca (constitución, solidaridad, título del hipotecante, obligaciones garantizadas con monto/plazo/cuotas, valor del acto, declaraciones, seguros, extinción del plazo, vigencia/novación, cesión, gastos), **comparecencia y aceptación del acreedor** (apoderado del banco), y ratificación Ley 258. Nuevos campos de formulario: plazo, cuotas, apoderado del banco, poder E.P., avalúo catastral, NUPRE. Verificado en navegador (con y sin crédito). _Pendiente futuro: normograma/árbol dedicados de hipoteca como acto raíz independiente._
 3. ✅ **RESUELTO (2026-07-20) — Conectar editor ↔ wizard.** El wizard tiene botón **"✎ Abrir en el editor del protocolista"** que serializa la escritura completa (transforma los `<span class="ins" data-f>` en `<span class="campo" data-field>`, quita badges de citas y guiones) y la pasa por `localStorage` (`easypro_editor_handoff`). El editor la recibe al cargar, fusiona etiquetas amigables de los ~37 campos y muestra aviso; los campos **cascadean** (editar en panel → actualiza todas las copias) y quedan listos para biblioteca y control de cambios. Verificado end-to-end en navegador (sin residuos, sin errores). _Nota: usa `localStorage`, que en Chrome se comparte entre archivos `file://`; en otros navegadores conviene servirlo desde un mismo origen (servidor local)._
 4. **Captura por extracción** (decisión 10): prototipar la extracción de **linderos** desde una escritura registrada (tenemos el texto de las minutas de la 16) que **prellena** el campo con resaltado "por validar". Luego cédula (PDF417) y voz.

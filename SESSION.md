@@ -1,6 +1,39 @@
 ﻿# SESSION.md â€” EasyProNotarial-2
 
 ---
+## Sesión 2026-07-20 — Ecosistema Notarial: "Escritura asistida"
+
+**Objetivo de la sesión:** Retomar el ecosistema notarial (contexto del doc `Ecosistema_notarial_19jul26`), analizar el corpus real de la Notaría 16, y evolucionar los prototipos hacia UNA sola herramienta lista para grabar demo.
+
+**Realizado:**
+- **Corpus Notaría 16 analizado:** inventario de 40 docs (5 protocolistas) + extracción y análisis de los 13 de compraventa/compraventa+hipoteca → biblioteca de cláusulas, orden canónico, notas 1–8, ficha de firma, clasificación en dos capas (por-ley vs estilo) y estándar único. Docs en `docs/ecosistema-notarial/corpus-notaria16/`.
+- **Arreglos del wizard de compraventa:** concordancia de género con **4 categorías legales** (Dcto 0732/2026 · Sent. T-033/2022: F/M/No Binario/Transgénero) y guiones de relleno hasta el margen.
+- **Acto 2 — Hipoteca:** encadenamiento compraventa+hipoteca completo (12 cláusulas + comparecencia del acreedor + ratificación Ley 258).
+- **Prototipo principal nuevo `escritura-asistida.html`** (unifica wizard+editor en una vista): pantalla de arranque "elige el acto → carga plantilla" (Compraventa · Compraventa+Hipoteca), captura en vivo ↔ redacción a mano, biblioteca de la 16, comentarios estilo Word, resaltado multicolor, control de cambios, dictado por voz, exportar **PDF y Word**, miles/centavos, liquidación integrada al cuerpo, edición inmediata (sync posicional), 5 tipos de derecho. Todo verificado en navegador (Playwright).
+- **Política registrada:** "demo = real" (la escritura contiene todos los elementos, no un resumen).
+
+**Archivos creados/modificados:**
+- `docs/ecosistema-notarial/prototipos/escritura-asistida.html` — **prototipo principal** (nuevo)
+- `docs/ecosistema-notarial/prototipos/wizard-compraventa.html` — género 4-cat, guiones, acto 2, handoff
+- `docs/ecosistema-notarial/prototipos/editor-vinculado.html` — recepción del handoff
+- `docs/ecosistema-notarial/prototipos/demo-ecosistema-notarial.html` + `_build-demo.py` — demo combinada (nuevo)
+- `docs/ecosistema-notarial/corpus-notaria16/inventario.md` + `capa-notaria16-compraventa.md` — análisis del corpus (nuevo)
+- `docs/ecosistema-notarial/normograma-compraventa.md` — Dcto 0732/2026 (género)
+- `docs/ecosistema-notarial/estado-y-proximos-pasos.md` — punto de retomar actualizado
+
+**Pendientes para la próxima sesión:**
+1. **3.er acto** (elegir: hipoteca sola / cancelación de hipoteca / cancelación de patrimonio de familia) → extraer su corpus y sumar tarjeta al lanzador de `escritura-asistida.html`.
+2. **Extraer los 27 documentos restantes** del corpus de la Notaría 16 (capa por-notaría de los demás actos).
+3. **Captura por extracción** (linderos desde escritura registrada → prellenado con "por validar"; luego cédula PDF417 y voz).
+4. Exportar 100% robusto y probar la demo desde el `.html` local (dentro del Artifact el sandbox bloquea popups/descargas/micrófono).
+
+**Estado al cierre:**
+- Backend: sin cambios esta sesión (trabajo en prototipos HTML del ecosistema).
+- Frontend: sin cambios esta sesión.
+- BD producción: sin cambios.
+- Git: árbol limpio; todo en la rama `claude/previous-work-context-pz5704` (pusheado). Artifact principal: https://claude.ai/code/artifact/b33c60bd-ae04-412f-95d4-29d01ffed0aa
+
+---
 ## SesiÃ³n 2026-05-28 (sesiÃ³n 3)
 
 **Objetivo de la sesiÃ³n:** Resolver 2 bugs reportados: (1) no se detecta ADQUISICIÃ“N, (2) no se detecta/muestra INDAGACIÃ“N SOBRE AFECTACIÃ“N A VIVIENDA FAMILIAR.
