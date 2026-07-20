@@ -40,6 +40,16 @@ Acto piloto **compraventa** validado en el sandbox (wizard de alta fidelidad + e
 - **Política de completitud (demo = real).** Una demo NO es un resumen: la escritura generada debe contener **todos** los elementos que tendría la escritura real (todas las cláusulas y parágrafos, notas 1‑8, SARLAFT/STRADATA, REDAM, biometría, anexos, avalúo, fichas de firma completas). Aplicar esta regla a todo acto nuevo.
 - **Comparación Hoy vs. Ecosistema** (dolores reales de la 16 y la 1, jul-2026): hoy reutilizan una escritura vieja parecida y la editan (arrastra datos del cliente anterior, errores de copy-paste, cláusulas que sobran/faltan; revisión difícil; cada protocolista su formato). Nuestra respuesta: arrancar limpio desde datos+reglas, digitar poco por cascada, red de cumplimiento aunque no haya jurídico, biblioteca por notaría como estándar sin rigidez.
 
+## Escritura asistida — vista única (nuevo prototipo principal)
+`prototipos/escritura-asistida.html` (sesión 2026-07-20, tarde) — **unifica captura + escritura editable + biblioteca en UNA sola vista** (antes eran wizard + editor separados). Incluye:
+- **Renombre** wizard→"Escritura asistida"; **"BETA"** en vez de "datos ficticios".
+- **Miles y centavos en vivo** en los campos de dinero (`.money`, `fmtMoneyStr`/`parseMoney`; `pts()`/`money()` con decimales).
+- **Guiones de relleno en TODOS los párrafos** (cláusulas, parágrafos y notas) — `fillLeaders()` los añade automáticamente.
+- **Liquidación integrada al cuerpo** de la escritura (bloque "DERECHOS, RECAUDOS Y VALORES A PAGAR" tras las constancias fiscales, donde va según el corpus).
+- **Modo Captura ↔ Redacción:** en Captura la escritura se genera en vivo; en Redacción es editable (contenteditable) con toolbar (vincular/desvincular, control de cambios, aceptar/rechazar), **biblioteca de la Notaría 16** que inserta cláusulas, y panel "Datos vinculados" que cascadea.
+- Verificado end-to-end en navegador (modo, biblioteca, cascada, control de cambios; sin errores).
+- **Pendiente (siguientes capas):** comentarios estilo Word · resaltado multicolor · dictado por voz en linderos · exportar a PDF con formato (guiones y demás).
+
 ## Demo clickeable (para ver el HTML renderizado)
 - **Artifact combinado (wizard + editor con el handoff en vivo):** https://claude.ai/code/artifact/814ac9b7-a9b4-43b6-b27d-3c4b317093a0 — una sola página con 2 pestañas; en “Captura” se pulsa “Abrir en el editor” y el borrador salta al editor con los campos vinculados. Generado por `prototipos/_build-demo.py` (empaqueta `wizard-compraventa.html` + `editor-vinculado.html` en `prototipos/demo-ecosistema-notarial.html` vía iframes + postMessage; regenerar tras editar los prototipos: `python3 prototipos/_build-demo.py`).
 - **Recordatorio:** GitHub NO renderiza HTML (muestra el código fuente). Para ver los prototipos: abrir el Artifact, o abrir los `.html` localmente en el navegador.
