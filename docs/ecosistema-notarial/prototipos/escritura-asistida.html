@@ -863,15 +863,19 @@
   /* ---------- render de salida ---------- */
   /* guiones de relleno: rellenan la línea hasta el margen derecho (line-leader) para impedir intercalar texto */
   var LEADER='—'.repeat(400);
-  function fillLeaders(){
+  function fillLeaders(force){
     var box=g('escritura'); if(!box) return;
     /* garantizar un guion de relleno al final de cada cláusula, parágrafo y nota */
     var paras=box.querySelectorAll('p.cl, p.para');
     for(var j=0;j<paras.length;j++){ var pp=paras[j]; var last=pp.lastElementChild;
       if(!(last && last.classList && last.classList.contains('fill'))){ var sp=document.createElement('span'); sp.className='fill'; pp.appendChild(sp); } }
     var spans=box.querySelectorAll('.fill');
+    /* al editar a mano (Redacción), los guiones se colapsan para que el texto refluya y se vea de inmediato.
+       Se materializan solo en Captura y al exportar PDF (force=true). */
+    var editing = (window.EA && window.EA.editMode) && !force;
     for(var i=0;i<spans.length;i++){
-      var f=spans[i];
+      var f=spans[i]; f.contentEditable='false';
+      if(editing){ f.textContent=''; f.style.width='0px'; continue; }
       f.textContent=LEADER; f.style.width='0px';               // colapsa para medir el fin del texto
       var host=f.parentElement;
       var cs=window.getComputedStyle(host);
@@ -940,7 +944,7 @@
   window.EA.buildDoc = function(){ return buildHandoff().html; };
   window.EA.labels = function(){ return editorLabels(); };
   window.EA.render = function(){ renderOutput(); };
-  window.EA.fill = function(){ fillLeaders(); };
+  window.EA.fill = function(force){ fillLeaders(force); };
 
   initMoney(); renderParties(); renderFirmantes(); renderOutput();
 })();
@@ -956,7 +960,7 @@
   function escA(s){return esc(s).replace(/"/g,'&quot;');}
   function say(m){ var el=q('#vincstatus'); if(!el)return; el.textContent=m; clearTimeout(statusT); statusT=setTimeout(function(){el.textContent='';},1900); }
   function flash(el){ if(!el)return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(function(){el.classList.remove('flash');},1100); }
-  function fillNow(){ if(window.EA&&window.EA.fill) window.EA.fill(); }
+  function fillNow(force){ if(window.EA&&window.EA.fill) window.EA.fill(force); }
 
   /* ----- campos vinculados / cascada ----- */
   function docFields(){ var seen={},out=[]; all('.campo',editor).forEach(function(el){ var f=el.dataset.field; if(f&&!seen[f]){seen[f]=1;out.push(f);} }); return out; }
@@ -1136,7 +1140,7 @@
     var sheet=editor, prev=sheet.style.width;
     function restore(){ sheet.style.width=prev; document.body.classList.remove('printing'); fillNow(); }
     sheet.style.width='642px';           // ancho de texto A4 con márgenes ~16-18mm (solo para medir los guiones)
-    fillNow();
+    fillNow(true);                        // materializa los guiones para el PDF aunque estemos en Redacción
     try{ window.print(); }              // print-CSS (@media print) oculta el chrome solo al imprimir
     catch(e){ alert('Tu navegador no permite imprimir desde aquí. Ábrelo en una pestaña normal (Ctrl/Cmd+P) para guardar el PDF.'); }
     restore();                            // restaura de inmediato: la pantalla nunca queda en modo impresión
