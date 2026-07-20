@@ -67,6 +67,12 @@ artículos clave, qué exige en la escritura y fuente. Insumo directo de las tab
 - Sent. C-075/2007: aplica a parejas del mismo sexo.
 - **Exige:** indagar estado civil real (conecta con art. 6 Ley 258); si es bien social, consentimiento del compañero.
 
+### Decreto 0732 de 2026 — Componente "sexo" en documentos de identidad · `VIGENTE`
+- Reglamenta la actualización del componente **sexo** e incorpora **4 categorías**: Femenino (F), Masculino (M), No Binario (NB) y Transgénero (T). Desarrolla la exhortación de la **Sent. C.C. T-033 de 2022**.
+- El trámite se surte **ante notario** (manifestación de voluntad; sin certificados médicos/psicológicos; primera actualización gratuita) y luego se actualiza ante la Registraduría.
+- **Exige (para el motor):** capturar el género en las 4 categorías por persona y **concordar la redacción** de la escritura (identificad{o/a/e}, domiciliad{o/a/e}, estado civil, artículos el/la/le). NB y T → lenguaje incluyente (‑e).
+- **Fuente:** Min. Justicia (comunicado, jul-2026).
+
 ### Ley 1996 de 2019 — Capacidad legal y régimen de apoyos · `VIGENTE`
 - **Art. 6:** capacidad plena; **eliminó la interdicción**.
 - **Arts. 15-16:** acuerdos de apoyo (por escritura; el notario entrevista por separado).

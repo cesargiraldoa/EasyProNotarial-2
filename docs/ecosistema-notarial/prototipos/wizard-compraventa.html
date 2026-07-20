@@ -286,8 +286,14 @@
   function R(s,cite){ return '<span class="rulec">'+s+'</span><span class="cite">'+cite+'</span>'; }
   function D(cite){ return '<span class="cite">'+cite+'</span>'; }
   function g(id){ return document.getElementById(id); }
-  function labelEstado(e,genero){ var f=genero==='F';
-    return {soltero:f?'soltera':'soltero',casado_sc:'casad'+(f?'a':'o')+' con sociedad conyugal vigente',union:'en unión marital de hecho',divorciado:f?'divorciada':'divorciado',viudo:f?'viuda':'viudo'}[e]||e; }
+  /* Concordancia de género — componente "sexo" (4 categorías, Decreto 0732 de 2026 · Sent. T-033/2022): M, F, No Binario, Transgénero.
+     Terminación gramatical: M→o, F→a, NB/T→e (lenguaje incluyente). */
+  function genEnding(g){ return g==='F'?'a':(g==='NB'||g==='T')?'e':'o'; }
+  function genArt(g){ return g==='F'?'la':(g==='NB'||g==='T')?'le':'el'; }
+  var GENEROS=[['M','Masculino'],['F','Femenino'],['NB','No binario'],['T','Transgénero']];
+  function generoOpts(sel){ return GENEROS.map(function(o){return '<option value="'+o[0]+'"'+((sel||'M')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join(''); }
+  function labelEstado(e,genero){ var x=genEnding(genero);
+    return {soltero:'solter'+x,casado_sc:'casad'+x+' con sociedad conyugal vigente',union:'en unión marital de hecho',divorciado:'divorciad'+x,viudo:'viud'+x}[e]||e; }
 
   /* ---------- estado global (campos fijos) ---------- */
   function G(){ var num=function(id){return parseInt(g(id).value,10)||0;};
@@ -331,7 +337,7 @@
     } else {
       h+='<div class="field"><label>Tipo de documento</label><select '+da+' data-key="tipoDoc">'+docOpts(p.tipoDoc)+'</select></div>';
       h+='<div class="row2"><div class="field"><label>Número de documento</label><input type="text" '+da+' data-key="id" value="'+attr(p.id)+'"></div><div class="field"><label>Cuota %</label><input type="number" '+da+' data-key="cuota" value="'+p.cuota+'"></div></div>';
-      h+='<div class="row2"><div class="field"><label>Domicilio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div><div class="field"><label>Género (concordancia)</label><select '+da+' data-key="genero"><option value="M"'+(p.genero!=='F'?' selected':'')+'>Masculino</option><option value="F"'+(p.genero==='F'?' selected':'')+'>Femenino</option></select></div></div>';
+      h+='<div class="row2"><div class="field"><label>Domicilio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div><div class="field"><label>Género — sexo (Dcto 0732/2026)</label><select '+da+' data-key="genero">'+generoOpts(p.genero)+'</select></div></div>';
       h+='<div class="field"><label>Estado civil</label><select '+da+' data-key="estado">'+estadoOpts(p.estado)+'</select></div>';
     }
     h+='<div class="sub-group" style="margin-top:8px"><div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:2px">Datos para la firma</div>';
@@ -408,7 +414,7 @@
   /* ---------- construcción de la escritura ---------- */
   function pers(p,side,i){
     var f=side+i;
-    var gn = p.genero==='F'?'a':'o';
+    var gn = genEnding(p.genero);
     var dom = p.ciudad ? ', domiciliad'+(p.tipo==='juridica'?'a':gn)+' en '+IF(f+'ciudad',p.ciudad) : '';
     if(p.tipo==='juridica') return IF(f+'nombre',p.nombre)+', persona jurídica identificada con NIT '+IF(f+'id',p.id)+dom+', representada legalmente por '+IF(f+'repr',p.repr)+', quien acredita su existencia y representación con el certificado que se protocoliza con este instrumento';
     return IF(f+'nombre',p.nombre)+', mayor de edad'+dom+', identificad'+gn+' con '+IF(f+'tipoDoc',docFrase(p.tipoDoc))+' número '+IF(f+'id',p.id)+', de estado civil '+IF(f+'estado',labelEstado(p.estado,p.genero));
