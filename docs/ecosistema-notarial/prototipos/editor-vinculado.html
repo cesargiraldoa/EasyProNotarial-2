@@ -268,7 +268,22 @@
     else if(a==='reject') rejectChanges();
   });
 
+  /* ---------- recepción del borrador del wizard ---------- */
+  function loadHandoff(){
+    var raw; try{ raw=localStorage.getItem('easypro_editor_handoff'); }catch(e){ return false; }
+    if(!raw) return false;
+    var d; try{ d=JSON.parse(raw); }catch(e){ return false; }
+    if(!d||!d.html) return false;
+    if(d.labels) for(var k in d.labels){ fieldMeta[k]={label:d.labels[k]}; }
+    editor.innerHTML='<h4>Escritura pública — borrador recibido del asistente de captura</h4>'+d.html;
+    var when=d.ts?new Date(d.ts):null;
+    g('#note').textContent='Borrador recibido del wizard'+(when?' · '+when.toLocaleTimeString():'')+' — edítalo, vincula, inserta cláusulas o activa control de cambios';
+    return true;
+  }
+
   /* init */
+  var got=loadHandoff();
   renderBiblio(); snapshot(); rebuildPanel();
+  if(got) say('Documento cargado desde el wizard — '+docFields().length+' campos vinculados');
 })();
 </script>

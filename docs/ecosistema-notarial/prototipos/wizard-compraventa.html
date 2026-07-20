@@ -239,6 +239,7 @@
 
   <div class="out">
     <div class="estado" id="estado"></div>
+    <div style="margin:10px 0 4px"><button type="button" id="btnEditor" class="addbtn" style="width:100%;background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600">✎ Abrir en el editor del protocolista →</button><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">Pasa este borrador —con los campos ya vinculados— al editor para rematar (texto libre, biblioteca, control de cambios).</div></div>
     <article class="sheet" id="escritura"></article>
     <div class="panel cmp" id="cumplimiento"></div>
     <div class="panel liq" id="liquidacion"></div>
@@ -797,6 +798,29 @@
     if(t.id==='add-vend'){ data.vendedores.push(nueva()); equalizar('v'); renderParties(); renderOutput(); }
     else if(t.id==='add-comp'){ data.compradores.push(nueva()); equalizar('c'); renderParties(); renderOutput(); }
     else if(t.classList && t.classList.contains('rm')){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; arr.splice(+t.dataset.idx,1); equalizar(t.dataset.side); renderParties(); renderOutput(); } });
+
+  /* ---------- handoff al editor del protocolista ---------- */
+  function editorLabels(){
+    var m={matricula:'Matrícula inmobiliaria',total:'Precio total',inicial:'Cuota inicial',saldo:'Saldo / monto hipoteca',banco:'Banco acreedor',bancoNit:'NIT del banco',plazoAnios:'Plazo (años)',numCuotas:'N.º de cuotas',apoderadoBanco:'Apoderado(a) del banco',poderBancoEP:'Poder del banco (E.P.)',poderBancoNot:'Notaría del poder',avaluoCatastral:'Avalúo catastral',nupre:'NUPRE',inmdesc:'Descripción del inmueble',linderos:'Linderos',catastral:'Cédula catastral',tituloNum:'Título — E.P. número',tituloFecha:'Título — fecha',tituloNotaria:'Título — notaría',fechaOtorg:'Fecha de otorgamiento',hojaInicial:'Hoja de papel notarial',phReg:'Reglamento PH',numEscritura:'Número de escritura'};
+    data.vendedores.forEach(function(p,i){ var n='Vendedor '+(i+1); m['v'+i+'nombre']=n+' — nombre'; m['v'+i+'id']=n+' — documento'; m['v'+i+'ciudad']=n+' — domicilio'; m['v'+i+'tipoDoc']=n+' — tipo de documento'; m['v'+i+'estado']=n+' — estado civil'; m['v'+i+'repr']=n+' — representante legal'; });
+    data.compradores.forEach(function(p,i){ var n='Comprador '+(i+1); m['c'+i+'nombre']=n+' — nombre'; m['c'+i+'id']=n+' — documento'; m['c'+i+'ciudad']=n+' — domicilio'; m['c'+i+'cuota']=n+' — cuota'; m['c'+i+'tipoDoc']=n+' — tipo de documento'; m['c'+i+'estado']=n+' — estado civil'; });
+    return m;
+  }
+  function buildHandoff(){
+    var html=renderEscritura(G());
+    html=html.replace(/<span class="ins" data-f="([^"]+)">/g,'<span class="campo" data-field="$1">')
+             .replace(/<span class="rulec">/g,'<span>')
+             .replace(/<span class="cite">[\s\S]*?<\/span>/g,'')
+             .replace(/<span class="fill"><\/span>/g,'')
+             .replace(/<span class="ins">/g,'<span>');
+    return {html:html,labels:editorLabels(),ts:Date.now()};
+  }
+  g('btnEditor').addEventListener('click',function(){
+    var ok=true;
+    try{ localStorage.setItem('easypro_editor_handoff',JSON.stringify(buildHandoff())); }catch(e){ ok=false; }
+    if(ok){ window.open('editor-vinculado.html','_blank'); }
+    else { alert('No se pudo pasar al editor (almacenamiento del navegador no disponible en file://). Ábrelo desde un servidor local o el mismo origen.'); }
+  });
 
   renderParties(); renderFirmantes(); renderOutput();
 })();
