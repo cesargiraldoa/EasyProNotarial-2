@@ -5,6 +5,10 @@ Estos documentos son el **insumo durable** que alimenta el software real (backen
 
 > **Origen:** prototipado en un sandbox HTML (iteración rápida, cero riesgo). Lo validado aquí se porta al software.
 
+## 👉 Empezar aquí al retomar
+
+**[`estado-y-proximos-pasos.md`](./estado-y-proximos-pasos.md)** — punto de retomar: qué está hecho, pendientes, próximas tareas y decisiones clave. Es lo primero que se lee cada sesión (la continuidad depende del repo, no de la memoria del asistente).
+
 ## Conocimiento (Markdown — porta al backend como datos)
 
 | Archivo | Contenido |
