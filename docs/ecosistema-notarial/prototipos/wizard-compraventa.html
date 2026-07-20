@@ -131,7 +131,12 @@
       <legend><span class="bn">0</span> Acto</legend>
       <div class="field"><label>Derecho que se transfiere</label><select id="derecho"><option value="dominio" selected>Pleno dominio</option><option value="nuda">Nuda propiedad (reserva de usufructo)</option></select></div>
       <label class="chk"><input type="checkbox" id="credito" checked> La parte compradora paga con crédito hipotecario</label>
-      <div class="field" id="wrap-banco"><label>Banco acreedor / NIT</label><div class="row2"><input type="text" id="banco" value="BANCO DAVIVIENDA S.A."><input type="text" id="bancoNit" value="860.034.313-7"></div></div>
+      <div id="wrap-banco">
+        <div class="field"><label>Banco acreedor / NIT</label><div class="row2"><input type="text" id="banco" value="BANCO DAVIVIENDA S.A."><input type="text" id="bancoNit" value="860.034.313-7"></div></div>
+        <div class="row2"><div class="field"><label>Plazo (años)</label><input type="number" id="plazoAnios" value="20"></div><div class="field"><label>N.º de cuotas</label><input type="number" id="numCuotas" value="240"></div></div>
+        <div class="field"><label>Apoderado(a) del banco</label><input type="text" id="apoderadoBanco" value="CLAUDIA HELENA MAZO ARBOLEDA"></div>
+        <div class="row2"><div class="field"><label>Poder del banco — E.P.</label><input type="text" id="poderBancoEP" value="1.245 del 12-02-2024"></div><div class="field"><label>Notaría del poder</label><input type="text" id="poderBancoNot" value="Notaría 20 de Medellín"></div></div>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -158,6 +163,7 @@
       <div class="field"><label>Descripción y área</label><textarea id="inmdesc">APARTAMENTO NRO. 1402 de la Torre 3 del Conjunto Residencial Miravalle — Propiedad Horizontal, situado en la Calle 30 Sur #27-45 del municipio de Envigado (Antioquia), destinado a vivienda, con un área privada aproximada de 68,40 m²</textarea></div>
       <div class="field"><label>Linderos</label><textarea id="linderos">Su área y linderos están determinados por el perímetro comprendido entre los puntos 1 al 28 y 1, punto de partida, de la planta del piso 14 de la Torre 3, plano RPH-19</textarea></div>
       <div class="row2"><div class="field"><label>Matrícula inmobiliaria</label><input type="text" id="matricula" value="001-1502334"></div><div class="field"><label>Cédula catastral</label><input type="text" id="catastral" value="05266010300030014020"></div></div>
+      <div class="row2"><div class="field"><label>Avalúo catastral ($)</label><input type="number" id="avaluoCatastral" value="121923000"></div><div class="field"><label>NUPRE</label><input type="text" id="nupre" value="AAB0071ONED"></div></div>
       <label class="chk"><input type="checkbox" id="ph" checked> Sometido a propiedad horizontal</label>
       <div class="field" id="wrap-ph"><label>Reglamento de P.H. (E.P., fecha, notaría)</label><input type="text" id="phReg" value="E.P. 1.982 del 3 de mayo de 2019, Notaría 12 de Medellín"></div>
       <div class="field"><label>¿Vivienda de interés social (VIS)?</label><select id="vis"><option value="no" selected>No</option><option value="sfve">Sí — subsidio 100% en especie</option><option value="otra">Sí — otra modalidad</option></select></div>
@@ -298,6 +304,8 @@
   /* ---------- estado global (campos fijos) ---------- */
   function G(){ var num=function(id){return parseInt(g(id).value,10)||0;};
     return { derecho:g('derecho').value, credito:g('credito').checked, banco:g('banco').value, bancoNit:g('bancoNit').value,
+      plazoAnios:num('plazoAnios'), numCuotas:num('numCuotas'), apoderadoBanco:g('apoderadoBanco').value, poderBancoEP:g('poderBancoEP').value, poderBancoNot:g('poderBancoNot').value,
+      avaluoCatastral:num('avaluoCatastral'), nupre:g('nupre').value,
       apod:g('apoderado').checked, apodN:g('apodNombre').value, apodP:g('apodPoder').value, afect:g('afectada').value,
       inmdesc:g('inmdesc').value, linderos:g('linderos').value, matricula:g('matricula').value, catastral:g('catastral').value,
       ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, tituloNum:g('tituloNum').value, tituloFecha:g('tituloFecha').value, tituloNotaria:g('tituloNotaria').value, gravamen:g('gravamen').value,
@@ -494,11 +502,37 @@
     if(s.credito){
       var hipNames=C.map(function(p,i){return IF('c'+i+'nombre',p.nombre);}).join(' y ');
       h+='<div class="sech" data-sec="hipoteca" style="text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:22px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)">HIPOTECA ABIERTA CON CUANTÍA INDETERMINADA</div>';
+      var ACR='EL ACREEDOR', monto=money(s.saldo);
       h+='<p class="cl">Compareci'+(cpl?'eron':'ó')+' '+hipNames+', de las condiciones civiles indicadas, quien'+(cpl?'es':'')+' obra'+hN+' en su propio nombre y en adelante se denominará'+hN+' '+HIP+', y '+(cpl?'manifestaron':'manifestó')+':<span class="fill"></span></p>';
-      h+='<p class="cl"><span class="clh">PRIMERO: CONSTITUCIÓN DE HIPOTECA.</span> Que '+HIP+', además de comprometer su responsabilidad personal, constituye'+hN+' HIPOTECA DE PRIMER GRADO, ABIERTA Y SIN LÍMITE DE CUANTÍA a favor del '+IF('banco',s.banco)+', con NIT '+IF('bancoNit',s.bancoNit)+', sobre el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. '+IF('matricula',mat)+', anteriormente descrito y alinderado.<span class="fill"></span></p>';
-      h+='<p class="para"><span class="clh">Parágrafo.</span> La hipoteca comprende el inmueble con todas sus mejoras, anexidades presentes o futuras, frutos y cánones '+D('arts. 2445–2446 C.C.')+'.</p>';
-      h+='<p class="cl"><span class="clh">SEGUNDO: OBJETO DE LA GARANTÍA.</span> Garantiza al '+IF('banco',s.banco)+', además del crédito de vivienda, cualquier obligación que '+HIP+' tenga'+hN+' o llegue'+hN+' a contraer, en moneda legal o en UVR, y sus intereses, costas y gastos de cobranza; la garantía estará vigente mientras exista alguna obligación pendiente de pago.<span class="fill"></span></p>';
-      h+='<p class="cl"><span class="clh">TERCERO: ACELERACIÓN DE PLAZOS.</span> El Banco podrá dar por vencidos los plazos: a) por mora en el pago; b) si '+HIP+' enajena'+hN+' o grava'+hN+' el inmueble sin su consentimiento; c) si sobreviene acción judicial que afecte el inmueble hipotecado. '+HIP+' acepta'+hN+' las cláusulas anteriores.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">PRIMERO: OBJETO — CONSTITUCIÓN DE HIPOTECA.</span> Que '+HIP+' constituye'+hN+' HIPOTECA ABIERTA, DE PRIMER GRADO Y SIN LÍMITE DE CUANTÍA a favor del '+IF('banco',s.banco)+', establecimiento de crédito con domicilio en Medellín, con NIT '+IF('bancoNit',s.bancoNit)+', quien en adelante se denominará '+ACR+', sobre el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. '+IF('matricula',mat)+', anteriormente descrito y alinderado, '+R('conforme con los artículos 2432 y siguientes del Código Civil.','arts. 2432 ss · C.C.')+'<span class="fill"></span></p>';
+      h+='<p class="para"><span class="clh">Parágrafo.</span> La hipoteca se extiende al inmueble con todas sus mejoras, anexidades y construcciones presentes o futuras, frutos pendientes, rentas y cánones, y a las indemnizaciones de seguros y de expropiación '+D('arts. 2445–2446 C.C.')+'.</p>';
+
+      if(cpl) h+='<p class="cl"><span class="clh">SEGUNDO: SOLIDARIDAD.</span> '+HIP+', en su condición de constituyentes del gravamen, se obligan solidariamente frente a '+ACR+' respecto de la totalidad de las obligaciones garantizadas.<span class="fill"></span></p>';
+      var nT=cpl?'TERCERO':'SEGUNDO', nO=cpl?'CUARTO':'TERCERO', nV=cpl?'QUINTO':'CUARTO', nSx=cpl?'SEXTO':'QUINTO', nSp=cpl?'SÉPTIMO':'SEXTO', nOc=cpl?'OCTAVO':'SÉPTIMO', nNv=cpl?'NOVENO':'OCTAVO', nDx=cpl?'DÉCIMO':'NOVENO', nD1=cpl?'DÉCIMO PRIMERO':'DÉCIMO';
+
+      h+='<p class="cl"><span class="clh">'+nT+': TÍTULO DE ADQUISICIÓN DEL HIPOTECANTE.</span> El inmueble que se hipoteca fue adquirido por '+HIP+' a título de compraventa, según consta en este mismo instrumento.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nO+': OBLIGACIONES GARANTIZADAS.</span> Con la presente hipoteca se garantiza el Crédito Hipotecario de Vivienda Individual a Largo Plazo aprobado por '+ACR+' a '+HIP+' por la suma de '+IF('saldo',monto)+', que será pagada dentro del plazo de '+IF('plazoAnios',s.plazoAnios+' años')+' en '+IF('numCuotas',s.numCuotas+' cuotas')+' mensuales sucesivas, mes vencido, la primera un mes después del desembolso.<span class="fill"></span></p>';
+      h+='<p class="para"><span class="clh">Parágrafo — Hipoteca abierta.</span> Por ser hipoteca abierta y sin límite de cuantía, garantiza además toda clase de obligaciones, en moneda legal o en UVR, presentes o futuras, directas o indirectas, que '+HIP+' haya contraído o llegue'+hN+' a contraer a favor de '+ACR+' —préstamos, descuentos, avales, garantías, tarjetas de crédito, sobregiros—, con sus intereses remuneratorios y moratorios, costas y gastos de cobranza; no se extingue por prorrogarse, cambiarse o renovarse las obligaciones garantizadas.</p>';
+
+      h+='<p class="cl"><span class="clh">'+nV+': VALOR DEL ACTO.</span> Para efectos exclusivos de la liquidación de derechos notariales y de registro se fija la suma de '+IF('saldo',monto)+'. '+R('Se protocoliza la carta de aprobación del crédito expedida por '+ACR+', sin que ello implique modificación del carácter de hipoteca abierta sin límite de cuantía; '+HIP+' declara'+hN+' no haber recibido desembolsos anteriores.','art. 58 · Ley 788/2002')+'<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nSx+': DECLARACIONES DEL HIPOTECANTE.</span> '+HIP+' declara'+hN+': a) que el inmueble es de su exclusiva propiedad y está libre de gravámenes distintos de esta hipoteca; b) que la garantía se extiende a mejoras e indemnizaciones; c) que entregará a '+ACR+' la primera copia con mérito ejecutivo dentro de los treinta (30) días siguientes al registro; d) que notificará a '+ACR+' cualquier enajenación o gravamen posterior; e) que atenderá las obligaciones urbanísticas y de conservación del inmueble.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nSp+': SEGUROS.</span> '+HIP+' se obliga'+hN+' a amparar el inmueble contra incendio y terremoto, y su propia vida (deudor), con compañía aceptada por '+ACR+', cediéndole el derecho sobre las indemnizaciones hasta concurrencia de la deuda; en su defecto, '+ACR+' podrá —sin estar obligado— contratar los seguros con cargo a '+HIP+' '+D('art. 1101 C.Com.')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nOc+': EXTINCIÓN DEL PLAZO (ACELERACIÓN).</span> '+ACR+' podrá declarar vencidos los plazos y exigir el pago total: a) por mora en el pago de cualquier obligación; b) si '+HIP+' enajena'+hN+' o grava'+hN+' el inmueble sin autorización; c) por embargo o acción judicial que afecte el inmueble; d) por falsedad en la información suministrada; e) por destinación del crédito distinta de la pactada; f) por no contratar o mantener los seguros; g) por demérito de la garantía según avalúo de perito de Lonja.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nNv+': VIGENCIA Y AUSENCIA DE NOVACIÓN.</span> La hipoteca permanecerá vigente mientras exista alguna obligación pendiente a favor de '+ACR+'. Las prórrogas, novaciones o modificaciones de las obligaciones no extinguen la garantía '+D('art. 2457 C.C.')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nDx+': CESIÓN.</span> '+ACR+' podrá ceder total o parcialmente el crédito y la garantía sin necesidad de nueva comparecencia de '+HIP+', quien desde ahora acepta'+hN+' la cesión '+D('art. 24 · Ley 546/1999')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nD1+': GASTOS.</span> Los gastos, derechos notariales e impuesto de registro que genere esta hipoteca son de cargo de '+HIP+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl" data-sec="acreedor">Presente '+IF('apoderadoBanco',s.apoderadoBanco)+', mayor de edad, en su condición de Apoderado(a) Especial de '+IF('banco',s.banco)+', según poder conferido por Escritura Pública '+IF('poderBancoEP',s.poderBancoEP)+' de la '+IF('poderBancoNot',s.poderBancoNot)+', manifestó: Que en nombre de '+ACR+' ACEPTA la hipoteca y las declaraciones contenidas en este instrumento, por hallarse a entera satisfacción.<span class="fill"></span></p>';
+
+      if(casadoOUnion(C)) h+='<p class="cl">'+R('EFECTOS DE LA LEY 258 DE 1996: Compareciendo nuevamente '+HIP+', manifiesta'+hN+' que la afectación a vivienda familiar constituida en este mismo instrumento no será oponible a la presente hipoteca, la cual acepta'+hN+' y ratifica'+hN+'.','art. 6 · Ley 258/1996')+'<span class="fill"></span></p>';
     }
 
     if(s.interprete) h+='<p class="cl">'+R('Comparece un intérprete que tradujo íntegramente el instrumento a el (los) otorgante(s) que no domina(n) el idioma; se deja constancia de su comprensión y aprobación.','art. 38 · Dcto 960/70')+'<span class="fill"></span></p>';
@@ -530,6 +564,29 @@
 
     h+='<p class="cl" data-sec="fiscal"><span class="clh">CONSTANCIAS FISCALES.</span> El Notario deja constancia de que, actuando como agente retenedor, recaudó la retención en la fuente a cargo de '+vend+' por '+I(fmt(ret))+' '+D('art. 398 E.T.')+'; que los derechos notariales de esta escritura ascienden a '+I(fmt(derNot))+' más IVA de '+I(fmt(iva))+'; y que el impuesto de registro liquidado es de '+I(fmt(impReg))+' '+D('RES-2026-000964-6')+'.<span class="fill"></span></p>';
 
+    /* ---- Notas y constancias finales (estándar Notaría 16) ---- */
+    var cpl=C.length>1, cDecl=cpl?'los compradores declaran':'la parte compradora declara';
+    h+='<div class="sech" data-sec="notas" style="'+sech+'">NOTAS Y CONSTANCIAS FINALES</div>';
+    var nn=0, nota=function(t){ nn++; return '<p class="para"><span class="clh">NOTA '+nn+'.</span> '+t+'</p>'; };
+    if(s.credito){
+      h+=nota('El valor base para la liquidación de derechos corresponde a la suma indicada por la entidad crediticia en la carta de aprobación que se protocoliza con este instrumento.');
+      h+=nota(R('El (la) apoderado(a) de '+esc(s.banco)+' suscribe fuera del despacho notarial, conforme al artículo 12 del Decreto 2148 de 1983 (compilado en el Decreto 1069 de 2015).','art. 12 · Dcto 2148/1983'));
+      h+=nota(R('La presente escritura debe registrarse dentro de los noventa (90) días siguientes; transcurridos dos (2) meses causará intereses moratorios.','Ley 1579/2012'));
+    }
+    h+=nota('El (los) compareciente(s) hace(n) constar que ha(n) verificado cuidadosamente su nombre completo, número de documento de identidad y demás datos personales consignados.');
+    h+=nota(R('AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES: los comparecientes autorizan a la Notaría, como responsable, a almacenar y tratar sus datos. STRADATA SEARCH: en cumplimiento de la Circular 1536 del 17 de septiembre de 2013 de la S.N.R. y del artículo 17 de la Ley 1581 de 2012, se consultó la información de los intervinientes.','Circular SNR 1536/2013 · Ley 1581/2012'));
+    if(anyNatural(C)) h+=nota(R('REDAM: ante la indisponibilidad de la base de datos del Registro de Deudores Alimentarios Morosos, '+cDecl+' bajo juramento no tener obligaciones alimentarias en mora superiores a tres (3) meses.','Ley 2097/2021 · Dcto 1310/2022'));
+    if(s.ph) h+=nota(R('PAZ Y SALVO DE EXPENSAS: se '+(s.ax.admin?'protocoliza el paz y salvo de las expensas comunes de la copropiedad':'deja constancia de que no existe administración ni se causan expensas comunes, y el comprador se hace solidario por las que llegaren a existir')+'.','art. 29 · Ley 675/2001'));
+    h+=nota(R('IDENTIFICACIÓN BIOMÉTRICA: la identidad de los comparecientes se verificó mediante autenticación biométrica.','art. 18 · Dcto Ley 019/2012'));
+    h+=nota('NOTIFICACIONES ELECTRÓNICAS: cada otorgante manifestó su consentimiento según se indica en su respectiva ficha de firma.');
+
+    var anx=[];
+    if(s.ax.tradicion) anx.push('certificado de tradición y libertad');
+    if(s.ax.predial) anx.push('paz y salvo del impuesto predial y de valorización');
+    if(s.ph&&s.ax.admin) anx.push('paz y salvo de expensas comunes');
+    if(anx.length) h+='<p class="para"><span class="clh">ANEXOS.</span> Se presentaron y se agregan: '+anx.join('; ')+'.</p>';
+    h+='<p class="para"><span class="clh">AVALÚO CATASTRAL DEL INMUEBLE.</span> '+IF('avaluoCatastral',money(s.avaluoCatastral))+'. NUPRE: '+IF('nupre',s.nupre)+'.</p>';
+
     h+='<p class="cl"><span class="clh">AUTORIZACIÓN.</span> '+R('El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número '+esc(s.numEscritura)+'—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.','Dcto 960/1970')+'<span class="fill"></span></p>';
 
     var blank='<span style="color:var(--line-strong)">____________________</span>';
@@ -557,7 +614,7 @@
     if(s.apod){ var pd=V.map(function(p){return esc(p.nombre)+' — C.C. '+esc(p.id);}).join('; '); sigs+=firmante(esc(s.apodN),'C.C. ____________',{apoderaDe:pd}); }
     else V.forEach(function(p){ sigs+=ficha(p,'Vendedor'); });
     C.forEach(function(p){ sigs+=ficha(p,'Comprador'); });
-    if(s.credito) sigs+=firmante('____________________________','Apoderado(a) especial',{apoderaDe:esc(s.banco)+' — NIT '+esc(s.bancoNit)});
+    if(s.credito) sigs+=firmante(s.apoderadoBanco?esc(s.apoderadoBanco):'____________________________','Apoderado(a) especial · C.C. ____________',{apoderaDe:esc(s.banco)+' — NIT '+esc(s.bancoNit)});
     if(s.interprete) sigs+=firmante('____________________________','Intérprete oficial · art. 38 Dcto 960/1970');
     if(s.firmaRuego) sigs+=fichaAux(s.ruego,'Firma a ruego del otorgante que no puede firmar · art. 39');
     if(s.firmaRuego||s.testigosOn){ s.testigos.forEach(function(p){ sigs+=fichaAux(p,'Testigo instrumental'); }); }
@@ -671,7 +728,7 @@
   window.addEventListener('scroll',hideTip,true);
 
   /* ---------- resaltado y navegación ---------- */
-  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',plazoAnios:'hipoteca',numCuotas:'hipoteca',apoderadoBanco:'acreedor',poderBancoEP:'acreedor',poderBancoNot:'acreedor',avaluoCatastral:'notas',nupre:'notas',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
   var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
   var lastId=null;
   function secForId(id){ if(!id) return null; if(id==='firmas') return 'firmas'; if(FIELD_SEC[id]) return FIELD_SEC[id];
