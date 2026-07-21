@@ -89,6 +89,47 @@ class CorpusResponse(BaseModel):
     tarifas: list[LegalTarifaOut]
 
 
+class HallazgoOut(BaseModel):
+    codigo: str
+    severidad: str
+    mensaje: str
+    efecto: str
+    norma_id: int | None = None
+    norma: str | None = None
+
+
+class CorpusBusquedaHit(BaseModel):
+    source_type: str
+    source_id: int
+    source_ref: str
+    titulo: str
+    chunk_text: str
+    score: float
+    acto_code: str | None = None
+    vigencia_desde: date | None = None
+    vigencia_hasta: date | None = None
+
+
+class CorpusBusquedaResponse(BaseModel):
+    q: str
+    acto: ActoCode | None = None
+    corpus_acto_code: str | None = None
+    fecha: date
+    hits: list[CorpusBusquedaHit]
+
+
+class BibliotecaClausulaOut(BaseModel):
+    id: int
+    acto_code: str
+    titulo: str
+    texto: str
+    capa: str
+    orden: int
+    condicional: bool
+    vigencia_desde: date | None = None
+    vigencia_hasta: date | None = None
+
+
 class CaseMeta(BaseModel):
     id: int
     notary_id: int

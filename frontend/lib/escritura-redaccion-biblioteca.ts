@@ -6,6 +6,39 @@ export type BibliotecaRedaccionItem = {
   html: string;
 };
 
+type BibliotecaClausulaLike = {
+  titulo: string;
+  texto: string;
+  capa: string;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function htmlConCampos(texto: string) {
+  return escapeHtml(texto).replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, field: string) => {
+    const safeField = escapeHtml(field);
+    return `<span class="campo" data-field="${safeField}">${safeField}</span>`;
+  });
+}
+
+export function bibliotecaItemFromClausula(clausula: BibliotecaClausulaLike): BibliotecaRedaccionItem {
+  const isNota = /^nota\b/i.test(clausula.titulo.trim());
+  const className = isNota || clausula.capa === "estilo" ? "para" : "cl";
+  const titulo = clausula.titulo.trim();
+  return {
+    titulo,
+    detalle: clausula.capa,
+    html: `<p class="${className}"><span class="clh">${escapeHtml(titulo.toUpperCase())}.</span> ${htmlConCampos(clausula.texto)}</p>`,
+  };
+}
+
 export const BIBLIO: BibliotecaRedaccionItem[] = [
   {
     titulo: "Renuncia a la condicion resolutoria (pago)",

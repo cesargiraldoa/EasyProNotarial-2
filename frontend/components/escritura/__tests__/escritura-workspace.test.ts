@@ -9,6 +9,7 @@ import { EscrituraWorkspace } from "../escritura-workspace";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const apiMocks = vi.hoisted(() => ({
+  getBibliotecaEscritura: vi.fn(),
   getCorpus: vi.fn(),
   getEscrituraState: vi.fn(),
   saveEscrituraState: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("next/link", async () => {
 });
 
 vi.mock("@/lib/api-escritura", () => ({
+  getBibliotecaEscritura: apiMocks.getBibliotecaEscritura,
   getCorpus: apiMocks.getCorpus,
   getEscrituraState: apiMocks.getEscrituraState,
   saveEscrituraState: apiMocks.saveEscrituraState,
@@ -147,6 +149,19 @@ describe("EscrituraWorkspace", () => {
       reglas: [],
       tarifas: [],
     }));
+    apiMocks.getBibliotecaEscritura.mockResolvedValue([
+      {
+        id: 1,
+        acto_code: "compraventa",
+        titulo: "Nota REDAM",
+        texto: "Ante la indisponibilidad de la base de datos del Registro de Deudores Alimentarios Morosos, el compareciente declara no tener obligaciones alimentarias en mora.",
+        capa: "por_ley",
+        orden: 1,
+        condicional: false,
+        vigencia_desde: null,
+        vigencia_hasta: null,
+      },
+    ]);
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -217,6 +232,7 @@ describe("EscrituraWorkspace", () => {
     await waitFor(() => {
       expect(editorNode(container).textContent).toContain("Registro de Deudores Alimentarios");
     });
+    expect(apiMocks.getBibliotecaEscritura).toHaveBeenCalled();
   });
 
   it("aplica resaltado y comentario sobre la seleccion", async () => {

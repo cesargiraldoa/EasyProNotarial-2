@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 from datetime import date
 from html import unescape
 from html.parser import HTMLParser
@@ -18,6 +19,9 @@ from app.models.case_document_version import CaseDocumentVersion
 from app.models.user import User
 from app.schemas.escritura import (
     ActoCode,
+    BibliotecaClausulaOut,
+    CorpusBusquedaHit,
+    CorpusBusquedaResponse,
     CorpusResponse,
     DocumentoIn,
     DocumentoOut,
@@ -29,8 +33,10 @@ from app.schemas.escritura import (
     LegalTarifaOut,
 )
 from app.services.document_persistence import get_or_create_document, persist_case_document_version
+from app.services.escritura_reglas import evaluar_reglas
 from app.services.gari_document_service import build_gari_docx_buffer
 from app.services.legal_corpus import clausulas_vigentes, normas_vigentes, reglas_vigentes, tarifas_vigentes
+from app.services.legal_rag import buscar_corpus
 
 router = APIRouter(prefix="/escritura", tags=["escritura"])
 
@@ -85,6 +91,16 @@ def _parse_state(data_json: str | None) -> dict:
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="data_json del caso debe ser un objeto JSON.")
     return parsed
+
+
+def _state_date(acto: ActoCode, state: dict) -> date | None:
+    raw = state.get("cFechaOtorg") if acto == "cancelacion" else state.get("fechaOtorg")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        return date.fromisoformat(raw.strip())
+    except ValueError:
+        return None
 
 
 def _serialize_state(case: Case, acto: ActoCode | None = None) -> EscrituraStateOut:
@@ -208,6 +224,44 @@ def get_escritura_corpus(
     )
 
 
+@router.get("/corpus/buscar", response_model=CorpusBusquedaResponse)
+def buscar_escritura_corpus(
+    q: str = Query(..., min_length=1),
+    acto: ActoCode | None = Query(default=None),
+    fecha: date | None = Query(default=None),
+    top_k: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _ = current_user
+    effective_date = fecha or date.today()
+    corpus_acto = _corpus_acto_code(acto) if acto else None
+    hits = buscar_corpus(db, q, effective_date, acto_code=corpus_acto, top_k=top_k)
+    return CorpusBusquedaResponse(
+        q=q,
+        acto=acto,
+        corpus_acto_code=corpus_acto,
+        fecha=effective_date,
+        hits=[CorpusBusquedaHit(**asdict(hit)) for hit in hits],
+    )
+
+
+@router.get("/biblioteca", response_model=list[BibliotecaClausulaOut])
+def get_escritura_biblioteca(
+    acto: ActoCode = Query(...),
+    fecha: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _ = current_user
+    effective_date = fecha or date.today()
+    corpus_acto = _corpus_acto_code(acto)
+    return [
+        BibliotecaClausulaOut.model_validate(item, from_attributes=True)
+        for item in clausulas_vigentes(db, corpus_acto, effective_date)
+    ]
+
+
 @router.get("/cases/{case_id}", response_model=EscrituraStateOut)
 def get_escritura_case(
     case_id: int,
@@ -245,8 +299,18 @@ def generate_escritura_document(
     current_user: User = Depends(require_roles(*WRITE_ROLES)),
 ):
     case = load_case_for_user(db, case_id, current_user)
-    if payload.cumplimiento_bloqueantes > 0:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="hay bloqueantes por resolver")
+    state = _parse_state(case.act_data.data_json if case.act_data else "{}")
+    effective_date = _state_date(payload.acto, state) or date.today()
+    hallazgos = evaluar_reglas(db, _corpus_acto_code(payload.acto), effective_date, {**state, "acto": payload.acto})
+    bloqueantes = [hallazgo for hallazgo in hallazgos if hallazgo.severidad == "BLOCK"]
+    if bloqueantes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "hay bloqueantes por resolver",
+                "bloqueantes": [asdict(hallazgo) for hallazgo in bloqueantes],
+            },
+        )
 
     structured_text = html_to_structured_text(payload.html)
     if case.act_data is None:

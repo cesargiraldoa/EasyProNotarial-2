@@ -11,13 +11,16 @@ import { LiquidacionPanel } from "@/components/escritura/liquidacion-panel";
 import {
   escrituraDownloadUrl,
   generarDocumento,
+  getBibliotecaEscritura,
   getCorpus,
   getEscrituraState,
   saveEscrituraState,
+  type BibliotecaClausula,
   type CorpusResponse,
   type DocumentoResponse,
   type EscrituraCaseMeta,
 } from "@/lib/api-escritura";
+import { bibliotecaItemFromClausula, type BibliotecaRedaccionItem } from "@/lib/escritura-redaccion-biblioteca";
 import { defaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
 
 type Props = {
@@ -129,6 +132,10 @@ function humanActo(acto: ActoCode) {
   return "Compraventa";
 }
 
+function redaccionItemFromApi(clausula: BibliotecaClausula): BibliotecaRedaccionItem {
+  return bibliotecaItemFromClausula(clausula);
+}
+
 function parseApiError(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   if (raw.includes("hay bloqueantes por resolver")) return "hay bloqueantes por resolver";
@@ -152,6 +159,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
+  const [biblioteca, setBiblioteca] = useState<BibliotecaRedaccionItem[] | null>(null);
+  const [bibliotecaError, setBibliotecaError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [documento, setDocumento] = useState<DocumentoResponse | null>(null);
@@ -163,8 +172,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
 
   const resultado = useMemo(() => {
     if (!acto || !state) return null;
-    return generar(acto, state);
-  }, [acto, state]);
+    return generar(acto, state, corpus ? { tarifas: corpus.tarifas } : undefined);
+  }, [acto, state, corpus]);
 
   async function selectActo(nextActo: ActoCode) {
     if (mode === "redaccion" && redaccionDirty && !window.confirm("Al cambiar de acto se perderan las ediciones de Redaccion no guardadas. Continuar?")) {
@@ -180,6 +189,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setError(null);
     setCorpus(null);
     setCorpusError(null);
+    setBiblioteca(null);
+    setBibliotecaError(null);
     setIsLoadingState(true);
     try {
       const saved = await getEscrituraState(caseId);
@@ -192,6 +203,12 @@ export function EscrituraWorkspace({ caseId }: Props) {
         setCorpus(corpusResult);
       } catch (issue) {
         setCorpusError(parseApiError(issue));
+      }
+      try {
+        const clausulas = await getBibliotecaEscritura(nextActo, stateDate(nextActo, nextState));
+        setBiblioteca(clausulas.map(redaccionItemFromApi));
+      } catch (issue) {
+        setBibliotecaError(parseApiError(issue));
       }
     } catch (issue) {
       setError(parseApiError(issue));
@@ -387,6 +404,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
                 bloqueantes={resultado.cumplimiento.tiles.bloqueante}
                 isSaving={isSaving}
                 isGenerating={isGenerating}
+                bibliotecaItems={biblioteca}
+                bibliotecaError={bibliotecaError}
                 onSaveDraft={handleSaveRedaccionDraft}
                 onExportWord={(html) => handleGenerateFromHtml(html, "redaccion")}
                 onDirtyChange={setRedaccionDirty}

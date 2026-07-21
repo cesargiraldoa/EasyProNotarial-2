@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -16,9 +17,12 @@ from app.models.base import Base
 from app.models.case import Case
 from app.models.case_document import CaseDocument
 from app.models.case_document_version import CaseDocumentVersion
+from app.models.legal_embedding import LegalEmbedding
 from app.models.notary import Notary
 from app.models.user import User
 from app.modules.escritura.router import router as escritura_router
+from app.services.escritura_reglas import evaluar_reglas
+from app.services.legal_rag import HashLegalEmbeddingProvider, seed_legal_embeddings
 from app.seeds.seed_corpus import seed_corpus
 
 
@@ -33,6 +37,21 @@ def _auth_user(user_id: int = 1, notary_id: int = 1, role_code: str = "protocoli
             )
         ],
     )
+
+
+def _valid_compraventa_state() -> dict:
+    return {
+        "fechaOtorg": "2026-08-14",
+        "matricula": "001-123456",
+        "linderos": "Norte con la calle 1; Sur con el lote 2.",
+        "inmdesc": "Apartamento destinado a vivienda urbana con area de 72 metros cuadrados.",
+        "declaracion_precio_real": "incluida",
+        "afect": "no",
+        "gravamen": "libre",
+        "total": 420000000,
+        "V": [{"tipo": "natural", "nombre": "VENDEDOR TEST"}],
+        "C": [{"tipo": "natural", "nombre": "COMPRADOR TEST"}],
+    }
 
 
 class EscrituraApiTests(unittest.TestCase):
@@ -129,6 +148,7 @@ class EscrituraApiTests(unittest.TestCase):
                 ]
             )
             seed_corpus(session)
+            seed_legal_embeddings(session, provider=HashLegalEmbeddingProvider())
             session.commit()
 
     def test_corpus_por_fecha_excluye_norma_inexequible(self):
@@ -160,6 +180,8 @@ class EscrituraApiTests(unittest.TestCase):
         self.assertEqual(loaded.json()["case"]["id"], 100)
 
     def test_post_documento_crea_version_docx(self):
+        saved = self.client.put("/api/v1/escritura/cases/100", json={"acto": "compraventa", "state": _valid_compraventa_state()})
+        self.assertEqual(saved.status_code, 200)
         html = """
         <div>
           <p><span class="clh">PRIMERO:</span> Texto de la escritura<span class="cite">Ley 1</span><span class="fill">-----</span></p>
@@ -189,19 +211,69 @@ class EscrituraApiTests(unittest.TestCase):
             self.assertEqual(session.query(CaseDocumentVersion).count(), 1)
 
     def test_post_documento_con_bloqueantes_responde_409_sin_version(self):
+        state = _valid_compraventa_state()
+        state["matricula"] = ""
+        saved = self.client.put("/api/v1/escritura/cases/100", json={"acto": "compraventa", "state": state})
+        self.assertEqual(saved.status_code, 200)
         response = self.client.post(
             "/api/v1/escritura/cases/100/documento",
             json={
                 "acto": "compraventa",
                 "html": "<p>Texto suficiente</p>",
-                "cumplimiento_bloqueantes": 1,
+                "cumplimiento_bloqueantes": 0,
             },
         )
 
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["detail"], "hay bloqueantes por resolver")
+        detail = response.json()["detail"]
+        self.assertEqual(detail["message"], "hay bloqueantes por resolver")
+        self.assertIn("compraventa_matricula_obligatoria", {item["codigo"] for item in detail["bloqueantes"]})
         with self.Session() as session:
             self.assertEqual(session.query(CaseDocumentVersion).count(), 0)
+
+    def test_buscar_corpus_filtra_por_vigencia(self):
+        response = self.client.get("/api/v1/escritura/corpus/buscar?q=afectacion vivienda familiar&acto=compraventa&fecha=2026-08-14&top_k=20")
+
+        self.assertEqual(response.status_code, 200)
+        refs = {item["source_ref"] for item in response.json()["hits"]}
+        self.assertIn("ley-258-1996-art-3", refs)
+
+        old_response = self.client.get("/api/v1/escritura/corpus/buscar?q=decreto 0732 sexo variables&acto=compraventa&fecha=2025-12-31&top_k=20")
+        self.assertEqual(old_response.status_code, 200)
+        old_refs = {item["source_ref"] for item in old_response.json()["hits"]}
+        self.assertNotIn("decreto-0732-2026", old_refs)
+
+        with self.Session() as session:
+            before = session.query(LegalEmbedding).count()
+            seed_legal_embeddings(session, provider=HashLegalEmbeddingProvider())
+            after = session.query(LegalEmbedding).count()
+            self.assertEqual(before, after)
+
+    def test_biblioteca_endpoint_devuelve_clausulas_vigentes(self):
+        response = self.client.get("/api/v1/escritura/biblioteca?acto=compraventa&fecha=2026-08-14")
+
+        self.assertEqual(response.status_code, 200)
+        titles = {item["titulo"] for item in response.json()}
+        self.assertIn("Nota - REDAM", titles)
+
+    def test_evaluador_reglas_corpus_interpreta_condiciones_del_state(self):
+        with self.Session() as session:
+            state = _valid_compraventa_state()
+            state.update(
+                {
+                    "gravamen": "embargo",
+                    "activo": "casa_o_apartamento_habitacion",
+                    "exencion_uvt": "5000",
+                    "requiere_cuenta_afc": True,
+                    "destino_admitido": "otra_vivienda",
+                    "tope_valor_catastral_eliminado": True,
+                }
+            )
+            hallazgos = evaluar_reglas(session, "compraventa", date(2026, 8, 14), state)
+
+        codigos = {item.codigo for item in hallazgos}
+        self.assertIn("compraventa_medida_cautelar_embargo", codigos)
+        self.assertIn("compraventa_exencion_casa_habitacion_5000_uvt_afc", codigos)
 
     def test_case_inexistente_responde_404(self):
         response = self.client.get("/api/v1/escritura/cases/999")
