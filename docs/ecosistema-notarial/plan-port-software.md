@@ -143,6 +143,7 @@
 - ✅ **WP-0** — ADR (`adr-escritura-asistida.md`).
 - ✅ **WP-1** — Corpus jurídico (PR #133, `59fd981`).
 - ✅ **WP-2** — Motor-escritura TS + golden tests (PR #134, `9e52677`; 8/8 verde).
-- ⏳ **WP-3** — API backend de escritura. Prompt: `prompts/wp-3-api.md`. Reutiliza `legal_corpus`, `document_persistence`, `document_generation`/`gari_document_service`, y el patrón de auth de `cases/router.py`. Listo para Codex.
+- ✅ **WP-3** — API backend de escritura (PR #135, `2bdf55c`; 6 tests verde).
+- ⏳ **WP-4** — UI de Captura (formulario + preview en vivo). Prompt: `prompts/wp-4-ui-captura.md`. Solo Captura (el editor es WP-5). Listo para Codex.
 
-Siguiente: pegar `prompts/wp-3-api.md` en Codex → PR → revisión.
+Siguiente: pegar `prompts/wp-4-ui-captura.md` en Codex → PR → revisión.
