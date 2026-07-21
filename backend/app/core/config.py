@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     access_token_expire_minutes: int = 480
     openai_api_key: str = ""
+    gari_model: str = "gpt-4o-2024-08-06"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = ""
     celery_result_backend: str = ""

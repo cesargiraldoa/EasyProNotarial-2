@@ -14,6 +14,7 @@ import {
   Save,
   Strikethrough,
   Underline,
+  WandSparkles,
   X,
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
@@ -60,6 +61,8 @@ type Props = {
   onStatus?: (message: string) => void;
   bibliotecaItems?: BibliotecaRedaccionItem[] | null;
   bibliotecaError?: string | null;
+  onRedactarGari?: () => Promise<string | null>;
+  isGariBusy?: boolean;
 };
 
 type LinkedField = {
@@ -310,6 +313,8 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
     onStatus,
     bibliotecaItems,
     bibliotecaError,
+    onRedactarGari,
+    isGariBusy = false,
   },
   ref,
 ) {
@@ -813,6 +818,14 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
     await onExportWord(materializeFillLeaders(editorRef.current?.innerHTML ?? ""));
   }
 
+  async function redactarConGari() {
+    if (!onRedactarGari) return;
+    const html = await onRedactarGari();
+    if (!html) return;
+    insertBiblioteca(`<div class="gari-suggestion" data-ai-suggestion="true" data-ai-status="por-validar">${html}</div>`);
+    say("Sugerencia de Gari insertada para validar.");
+  }
+
   function exportPdf() {
     const html = materializeFillLeaders(editorRef.current?.innerHTML ?? "");
     const printWindow = window.open("", "_blank", "noopener,noreferrer");
@@ -892,6 +905,9 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
               </button>
             </div>
             <span className="mx-1 h-8 w-px bg-line-strong" aria-hidden="true" />
+            <ToolbarButton label="Redactar con Gari" onClick={redactarConGari} disabled={!onRedactarGari || isGariBusy}>
+              <WandSparkles className="h-4 w-4" aria-hidden="true" />
+            </ToolbarButton>
             <ToolbarButton label="Guardar borrador" onClick={saveDraft} disabled={isSaving}>
               <Save className="h-4 w-4" aria-hidden="true" />
             </ToolbarButton>

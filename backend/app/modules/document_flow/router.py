@@ -782,7 +782,7 @@ def generate_case_draft_with_gari(case_id: int, payload: GariGenerationRequest, 
         f"{case.internal_case_number or case.id}_gari.docx",
         current_user.id,
         case.template_id,
-        json.dumps({"source": "gari", "model": "gpt-4o"}, ensure_ascii=False),
+        json.dumps({"source": "gari", "model": settings.gari_model}, ensure_ascii=False),
     )
     version.storage_path = output_path
     db.flush()

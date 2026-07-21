@@ -3,6 +3,7 @@
 import json
 
 import io
+import logging
 import os
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from supabase import Client, create_client
 
 from app.core.config import get_settings
 from app.services.storage import SUPABASE_CASE_BUCKET
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT_GARI = """Eres Gari, motor de redacción notarial colombiano de EasyPro.
@@ -253,6 +256,7 @@ def generate_notarial_document(
     previous_draft: str | None = None,
 ) -> str:
     """Genera el documento notarial completo usando GPT-4o."""
+    settings = get_settings()
     client = get_openai_client()
     prompt = build_gari_prompt(
         act_type=act_type,
@@ -266,9 +270,11 @@ def generate_notarial_document(
         correction_note=correction_note,
         previous_draft=previous_draft,
     )
+    model = settings.gari_model
+    logger.info("Gari document prompt model=%s prompt=%s", model, prompt)
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model=model,
         messages=[
             {
                 "role": "system",
@@ -279,7 +285,7 @@ def generate_notarial_document(
                 "content": prompt,
             },
         ],
-        temperature=0.2,
+        temperature=0,
         max_tokens=max(max_tokens, 16000),
     )
 
