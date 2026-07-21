@@ -14,6 +14,11 @@ from app.models.case_workflow_event import CaseWorkflowEvent
 from app.models.document_template import DocumentTemplate
 from app.models.legal_entity import LegalEntity
 from app.models.legal_entity_representative import LegalEntityRepresentative
+from app.models.legal_clausula import LegalClausula
+from app.models.legal_jurisprudencia import LegalJurisprudencia
+from app.models.legal_norma import LegalNorma, LegalNormaRelacion
+from app.models.legal_regla import LegalRegla
+from app.models.legal_tarifa import LegalTarifa
 from app.models.notary import Notary
 from app.models.notary_commercial_activity import NotaryCommercialActivity
 from app.models.notary_crm_audit_log import NotaryCrmAuditLog

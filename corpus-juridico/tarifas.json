@@ -1,0 +1,132 @@
+[
+  {
+    "anio": 2026,
+    "concepto": "derechos_notariales_minimo_acto_con_cuantia",
+    "valor": 22500,
+    "formula": "si cuantia <= 189700 entonces 22500",
+    "unidad": "COP",
+    "norma_slug": "resolucion-snr-2026-000964-6",
+    "vigencia_desde": "2026-02-01",
+    "vigencia_hasta": "2027-01-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "derechos_notariales_umbral_minimo",
+    "valor": 189700,
+    "formula": "umbral de cuantía mínima para tarifa fija",
+    "unidad": "COP",
+    "norma_slug": "resolucion-snr-2026-000964-6",
+    "vigencia_desde": "2026-02-01",
+    "vigencia_hasta": "2027-01-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "derechos_notariales_por_mil",
+    "valor": 0.003,
+    "formula": "22500 + (cuantia - 189700) * 0.003",
+    "unidad": "ratio",
+    "norma_slug": "resolucion-snr-2026-000964-6",
+    "vigencia_desde": "2026-02-01",
+    "vigencia_hasta": "2027-01-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "ajuste_ipc_tarifas_notariales",
+    "valor": 0.051,
+    "formula": "IPC 5.10%",
+    "unidad": "ratio",
+    "norma_slug": "resolucion-snr-2026-000964-6",
+    "vigencia_desde": "2026-02-01",
+    "vigencia_hasta": "2027-01-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "descuento_vis_vip_derechos_notariales",
+    "valor": 0.5,
+    "formula": "derechos_notariales * (1 - 0.5)",
+    "unidad": "ratio",
+    "norma_slug": "resolucion-snr-2026-000964-6",
+    "vigencia_desde": "2026-02-01",
+    "vigencia_hasta": "2027-01-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "iva_sobre_derechos_notariales",
+    "valor": 0.19,
+    "formula": "derechos_notariales * 0.19",
+    "unidad": "ratio",
+    "norma_slug": "estatuto-tributario-art-468",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "anio": 2026,
+    "concepto": "impuesto_registro_antioquia_referencia",
+    "valor": 0.01,
+    "formula": "valor_documento * 0.01; ordenanza específica 2026 no confirmada",
+    "unidad": "ratio",
+    "norma_slug": "ley-223-1995-art-230",
+    "vigencia_desde": "2026-01-01",
+    "vigencia_hasta": "2026-12-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "retencion_fuente_vendedor_persona_natural",
+    "valor": 0.01,
+    "formula": "valor_enajenacion * 0.01 recaudado por notario",
+    "unidad": "ratio",
+    "norma_slug": "estatuto-tributario-art-398",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "anio": 2026,
+    "concepto": "retencion_fuente_vendedor_persona_juridica",
+    "valor": null,
+    "formula": "notario no retiene; comprador practica la retención y acredita pago previo; tarifa exacta por confirmar",
+    "unidad": "ratio",
+    "norma_slug": "estatuto-tributario-art-401",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "anio": 2026,
+    "concepto": "uvt",
+    "valor": 52374,
+    "formula": "UVT 2026 fijada por Res. DIAN 000238 de 2025",
+    "unidad": "COP",
+    "norma_slug": "resolucion-dian-000238-2025-uvt-2026",
+    "vigencia_desde": "2026-01-01",
+    "vigencia_hasta": "2026-12-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "smlmv",
+    "valor": 1750905,
+    "formula": "SMLMV 2026",
+    "unidad": "COP",
+    "norma_slug": "decreto-1469-2025-0159-2026-smlmv-2026",
+    "vigencia_desde": "2026-01-01",
+    "vigencia_hasta": "2026-12-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "auxilio_transporte",
+    "valor": 249095,
+    "formula": "auxilio de transporte 2026",
+    "unidad": "COP",
+    "norma_slug": "decreto-1469-2025-0159-2026-smlmv-2026",
+    "vigencia_desde": "2026-01-01",
+    "vigencia_hasta": "2026-12-31"
+  },
+  {
+    "anio": 2026,
+    "concepto": "descuento_credito_hipotecario_largo_plazo_no_confirmado",
+    "valor": 0.3,
+    "formula": "derechos_notariales * (1 - 0.3) antes de IVA; texto/artículo por confirmar",
+    "unidad": "ratio",
+    "norma_slug": "ley-2434-2024-descuento-credito-hipotecario",
+    "vigencia_desde": "2026-01-01",
+    "vigencia_hasta": "2026-12-31"
+  }
+]
