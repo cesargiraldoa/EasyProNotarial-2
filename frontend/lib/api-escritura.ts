@@ -94,6 +94,8 @@ export type EscrituraStateResponse = {
   case: EscrituraCaseMeta;
 };
 
+export type EscrituraStatePayload = CaseState | Record<string, unknown>;
+
 export type DocumentoPayload = {
   acto: ActoCode;
   html: string;
@@ -127,7 +129,7 @@ export function getEscrituraState(caseId: number) {
   return apiFetch<EscrituraStateResponse>(`/api/v1/escritura/cases/${caseId}`);
 }
 
-export function saveEscrituraState(caseId: number, acto: ActoCode, state: CaseState) {
+export function saveEscrituraState(caseId: number, acto: ActoCode, state: EscrituraStatePayload) {
   return apiFetch<EscrituraStateResponse>(`/api/v1/escritura/cases/${caseId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

@@ -150,6 +150,74 @@
   text-align: center;
 }
 
+.editorSheet {
+  min-height: 70vh;
+  outline: none;
+  overflow: visible;
+}
+
+.editorSheet:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line-strong));
+  box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.editorSheet :global(.campo) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.editorSheet :global(.campo.flash) {
+  animation: fieldPulse 420ms ease;
+}
+
+.editorSheet :global(.mark),
+.editorSheet :global(.hl) {
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 2px;
+}
+
+.editorSheet :global(.cmt) {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-bottom: 1.5px dotted var(--warn);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.editorSheet :global(.cmt.sel) {
+  outline: 2px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.editorSheet :global(ins.track) {
+  background: var(--ok-tint);
+  color: var(--ok);
+  text-decoration: underline;
+}
+
+.editorSheet :global(del.track) {
+  background: var(--crit-tint);
+  color: var(--crit);
+  text-decoration: line-through;
+}
+
+.editorSheet :global(.fill) {
+  display: none;
+}
+
+@keyframes fieldPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
 .liquidacionHtml {
   --paper: #fbfaf7;
   --ink: #1b1e23;

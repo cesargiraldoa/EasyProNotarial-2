@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowLeft, FileDown, Home, Landmark, Loader2, Save, ScrollText, ShieldCheck } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ArrowLeft, FileDown, Home, Landmark, Loader2, PencilLine, Save, ScrollText, ShieldCheck } from "lucide-react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
+import { EscrituraRedaccionEditor, type EscrituraEditorHandle, type RedaccionComment, type RedaccionDraft } from "@/components/escritura/escritura-editor";
 import { EscrituraForm } from "@/components/escritura/escritura-form";
 import { EscrituraPreview } from "@/components/escritura/escritura-preview";
 import { LiquidacionPanel } from "@/components/escritura/liquidacion-panel";
@@ -22,6 +23,10 @@ import { defaults, generar, type ActoCode, type CancelacionState, type CaseState
 type Props = {
   caseId: number;
 };
+
+type WorkspaceMode = "captura" | "redaccion";
+
+const REDACCION_KEY = "__redaccion";
 
 const actos: Array<{ code: ActoCode; title: string; description: string; includes: string; icon: typeof Home }> = [
   {
@@ -67,6 +72,39 @@ function hasSavedState(value: Record<string, unknown>) {
   return Object.keys(value).length > 0;
 }
 
+function isRedaccionComment(value: unknown): value is RedaccionComment {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.quote === "string" &&
+    typeof value.text === "string" &&
+    typeof value.resolved === "boolean"
+  );
+}
+
+function isRedaccionDraft(value: unknown): value is RedaccionDraft {
+  return (
+    isRecord(value) &&
+    (value.acto === "compraventa" || value.acto === "hipoteca" || value.acto === "cancelacion") &&
+    typeof value.html === "string" &&
+    Array.isArray(value.comments) &&
+    value.comments.every(isRedaccionComment) &&
+    typeof value.updated_at === "string"
+  );
+}
+
+function redaccionDraftFrom(state: Record<string, unknown>, acto: ActoCode) {
+  const draft = state[REDACCION_KEY];
+  return isRedaccionDraft(draft) && draft.acto === acto ? draft : null;
+}
+
+function stateWithDraft(state: CaseState, draft: RedaccionDraft | null) {
+  const payload: Record<string, unknown> = { ...(state as unknown as Record<string, unknown>) };
+  if (draft) payload[REDACCION_KEY] = draft;
+  else delete payload[REDACCION_KEY];
+  return payload;
+}
+
 function stateDate(acto: ActoCode, state: CaseState) {
   if (acto === "cancelacion" && isCancelacionState(state)) return state.cFechaOtorg;
   if (isCompraventaState(state)) return state.fechaOtorg;
@@ -107,14 +145,18 @@ function parseApiError(error: unknown) {
 }
 
 export function EscrituraWorkspace({ caseId }: Props) {
+  const editorRef = useRef<EscrituraEditorHandle | null>(null);
   const [acto, setActo] = useState<ActoCode | null>(null);
   const [state, setState] = useState<CaseState | null>(null);
+  const [mode, setMode] = useState<WorkspaceMode>("captura");
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [documento, setDocumento] = useState<DocumentoResponse | null>(null);
+  const [redaccionDraft, setRedaccionDraft] = useState<RedaccionDraft | null>(null);
+  const [redaccionDirty, setRedaccionDirty] = useState(false);
   const [isLoadingState, setIsLoadingState] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -125,8 +167,14 @@ export function EscrituraWorkspace({ caseId }: Props) {
   }, [acto, state]);
 
   async function selectActo(nextActo: ActoCode) {
+    if (mode === "redaccion" && redaccionDirty && !window.confirm("Al cambiar de acto se perderan las ediciones de Redaccion no guardadas. Continuar?")) {
+      return;
+    }
     setActo(nextActo);
     setState(null);
+    setMode("captura");
+    setRedaccionDraft(null);
+    setRedaccionDirty(false);
     setDocumento(null);
     setFeedback(null);
     setError(null);
@@ -137,6 +185,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
       const saved = await getEscrituraState(caseId);
       const nextState = stateForActo(nextActo, saved.state);
       setState(nextState);
+      setRedaccionDraft(redaccionDraftFrom(saved.state, nextActo));
       setCaseMeta(saved.case);
       try {
         const corpusResult = await getCorpus(nextActo, stateDate(nextActo, nextState));
@@ -155,11 +204,19 @@ export function EscrituraWorkspace({ caseId }: Props) {
 
   async function handleSave() {
     if (!acto || !state) return;
+    if (mode === "redaccion" && editorRef.current) {
+      try {
+        await handleSaveRedaccionDraft(editorRef.current.getDraft());
+      } catch {
+        return;
+      }
+      return;
+    }
     setIsSaving(true);
     setFeedback(null);
     setError(null);
     try {
-      const saved = await saveEscrituraState(caseId, acto, state);
+      const saved = await saveEscrituraState(caseId, acto, stateWithDraft(state, redaccionDraft));
       setCaseMeta(saved.case);
       setFeedback("Estado guardado.");
     } catch (issue) {
@@ -171,6 +228,12 @@ export function EscrituraWorkspace({ caseId }: Props) {
 
   async function handleGenerate() {
     if (!acto || !state || !resultado) return;
+    const html = mode === "redaccion" && editorRef.current ? editorRef.current.getHtmlForExport() : resultado.html;
+    await handleGenerateFromHtml(html, mode);
+  }
+
+  async function handleGenerateFromHtml(html: string, sourceMode: WorkspaceMode) {
+    if (!acto || !state || !resultado) return;
     setIsGenerating(true);
     setFeedback(null);
     setError(null);
@@ -178,9 +241,9 @@ export function EscrituraWorkspace({ caseId }: Props) {
     try {
       const generated = await generarDocumento(caseId, {
         acto,
-        html: resultado.html,
+        html,
         cumplimiento_bloqueantes: resultado.cumplimiento.tiles.bloqueante,
-        filename: `escritura_${caseId}_${acto}.docx`,
+        filename: `escritura_${caseId}_${acto}${sourceMode === "redaccion" ? "_redaccion" : ""}.docx`,
       });
       setDocumento(generated);
       setFeedback(`Documento generado en version ${generated.version_number}.`);
@@ -189,6 +252,38 @@ export function EscrituraWorkspace({ caseId }: Props) {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  async function handleSaveRedaccionDraft(draft: RedaccionDraft) {
+    if (!acto || !state) return;
+    setIsSaving(true);
+    setFeedback(null);
+    setError(null);
+    try {
+      const saved = await saveEscrituraState(caseId, acto, stateWithDraft(state, draft));
+      setCaseMeta(saved.case);
+      setRedaccionDraft(draft);
+      setRedaccionDirty(false);
+      editorRef.current?.markClean();
+      setFeedback("Borrador de redaccion guardado.");
+    } catch (issue) {
+      setError(parseApiError(issue));
+      throw issue;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function showCaptura() {
+    if (mode === "redaccion" && redaccionDirty && !window.confirm("Volver a Captura descarta las ediciones de Redaccion no guardadas. Continuar?")) {
+      return;
+    }
+    setMode("captura");
+  }
+
+  function showRedaccion() {
+    if (!acto || !state || !resultado) return;
+    setMode("redaccion");
   }
 
   const selectedTitle = acto ? humanActo(acto) : "Escritura asistida";
@@ -204,7 +299,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
           </Link>
           <h1 className="mt-3 font-serif text-3xl font-semibold text-primary">{selectedTitle}</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-secondary">
-            Captura deterministica con escritura, cumplimiento y liquidacion generados en vivo desde el motor.
+            Captura deterministica y redaccion manual sobre la escritura generada por el motor.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -215,7 +310,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
             className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
-            Guardar
+            {mode === "redaccion" ? "Guardar borrador" : "Guardar"}
           </button>
           <button
             type="button"
@@ -265,16 +360,72 @@ export function EscrituraWorkspace({ caseId }: Props) {
       {acto && state && resultado ? (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)_340px]">
           <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
-          <main className="min-w-0 space-y-4">
-            <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
-            <EscrituraPreview html={resultado.html} />
-          </main>
-          <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
-            <CumplimientoPanel cumplimiento={resultado.cumplimiento} />
-            <LiquidacionPanel html={resultado.liquidacionHtml} />
-          </aside>
+          {mode === "captura" ? (
+            <>
+              <main className="min-w-0 space-y-4">
+                <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
+                <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
+                <EscrituraPreview html={resultado.html} />
+              </main>
+              <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
+                <CumplimientoPanel cumplimiento={resultado.cumplimiento} />
+                <LiquidacionPanel html={resultado.liquidacionHtml} />
+              </aside>
+            </>
+          ) : (
+            <section className="min-w-0 space-y-4 xl:col-span-2">
+              <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
+              <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
+              <EscrituraRedaccionEditor
+                ref={editorRef}
+                acto={acto}
+                state={state}
+                sourceHtml={resultado.html}
+                cumplimiento={resultado.cumplimiento}
+                liquidacionHtml={resultado.liquidacionHtml}
+                draft={redaccionDraft}
+                bloqueantes={resultado.cumplimiento.tiles.bloqueante}
+                isSaving={isSaving}
+                isGenerating={isGenerating}
+                onSaveDraft={handleSaveRedaccionDraft}
+                onExportWord={(html) => handleGenerateFromHtml(html, "redaccion")}
+                onDirtyChange={setRedaccionDirty}
+              />
+            </section>
+          )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ModeSwitch({ mode, onCaptura, onRedaccion }: { mode: WorkspaceMode; onCaptura: () => void; onRedaccion: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line-strong bg-white p-3 shadow-sm">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-secondary">Modo</p>
+        <p className="text-sm font-semibold text-primary">{mode === "redaccion" ? "Redaccion manual" : "Captura estructurada"}</p>
+      </div>
+      <div className="inline-flex rounded-xl border border-line-strong bg-slate-50 p-1">
+        <button
+          type="button"
+          onClick={onCaptura}
+          aria-pressed={mode === "captura"}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${mode === "captura" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"}`}
+        >
+          <ScrollText className="h-4 w-4" aria-hidden="true" />
+          Captura
+        </button>
+        <button
+          type="button"
+          onClick={onRedaccion}
+          aria-pressed={mode === "redaccion"}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${mode === "redaccion" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"}`}
+        >
+          <PencilLine className="h-4 w-4" aria-hidden="true" />
+          Redaccion
+        </button>
+      </div>
     </div>
   );
 }
