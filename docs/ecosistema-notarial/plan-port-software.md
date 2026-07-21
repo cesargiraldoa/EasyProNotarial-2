@@ -72,7 +72,8 @@
 - **Aceptación:** `alembic upgrade head` ok; seed carga; consulta "normas/tarifas vigentes a fecha X para acto=compraventa" devuelve lo esperado; las 5 correcciones de `verificacion-fuentes` (C1–C5) quedan reflejadas en el dato.
 - **Pruebas:** test de consulta por fecha (vigencia) + test de una regla bloqueante.
 
-### WP-2 — Motor-escritura (TS) + golden tests
+### WP-2 — Motor-escritura (TS) + golden tests — ✅ HECHO (PR #134, merge `9e52677`)
+- Motor puro TS en `frontend/lib/motor-escritura/index.ts` (port 1:1 del HTML), golden tests en igualdad exacta contra los fixtures + unit tests (8/8 verde, verificado ejecutando). `TARIFAS`/citas como constantes portadas (cableado al corpus = follow-up).
 - **Objetivo:** portar las funciones puras del HTML a `frontend/lib/motor-escritura/` (TypeScript, tipado), recibiendo el **corpus como input** (no hardcode).
 - **Archivos:** `motor-escritura/{numeros,genero,render,evaluar,liquidar,leaders,index}.ts` + tipos.
 - **Aceptación:** **golden tests** — para compraventa, compraventa+hipoteca y cancelación, dado el mismo caso, la salida coincide con la del HTML congelado (fixtures capturados del HTML).
@@ -140,7 +141,8 @@
 ## 9. Estado
 
 - ✅ **WP-0** — ADR (`adr-escritura-asistida.md`).
-- ✅ **WP-1** — Corpus jurídico (PR #133 mergeado, `59fd981`).
-- ⏳ **WP-2** — Motor-escritura (TS) + golden tests. Prompt: `prompts/wp-2-motor.md`. **Golden fixtures ya generados por el asistente** desde el HTML congelado en `frontend/lib/motor-escritura/__fixtures__/` (compraventa/hipoteca/cancelación, con normalización determinista documentada). Listo para Codex.
+- ✅ **WP-1** — Corpus jurídico (PR #133, `59fd981`).
+- ✅ **WP-2** — Motor-escritura TS + golden tests (PR #134, `9e52677`; 8/8 verde).
+- ⏳ **WP-3** — API backend de escritura. Prompt: `prompts/wp-3-api.md`. Reutiliza `legal_corpus`, `document_persistence`, `document_generation`/`gari_document_service`, y el patrón de auth de `cases/router.py`. Listo para Codex.
 
-Siguiente: pegar `prompts/wp-2-motor.md` en Codex → PR → revisión.
+Siguiente: pegar `prompts/wp-3-api.md` en Codex → PR → revisión.
