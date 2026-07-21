@@ -60,12 +60,13 @@
 
 > Convención: cada WP produce **un PR** contra `claude/notaria16-escritura-asistida-fsro6n` (o rama hija), con **pruebas** y sin romper lo existente. El asistente revisa el PR antes de merge.
 
-### WP-0 — ADR + esqueleto (lo hace el asistente, no Codex)
+### WP-0 — ADR + esqueleto (lo hace el asistente, no Codex) — ✅ HECHO
 - **Objetivo:** decisión de arquitectura registrada (ADR) + esqueleto de carpetas (`frontend/lib/motor-escritura/`, `corpus-juridico/`, módulo backend `escritura`).
 - **Entregable:** `docs/ecosistema-notarial/adr-escritura-asistida.md` + carpetas vacías con README.
 - **Aceptación:** ADR aprobado por el usuario.
 
-### WP-1 — Corpus: esquema + siembra desde el HTML
+### WP-1 — Corpus: esquema + siembra desde el HTML — ✅ HECHO (PR #133, merge `59fd981`)
+- Tablas `legal_*` con vigencia temporal + doble estado, migración Alembic, corpus JSON en `corpus-juridico/`, seed idempotente, helper `normas_vigentes(acto, fecha)`. Revisado (C1–C5 correctas, tarifas 2026 exactas, jurisprudencia, 67 normas). Follow-up menor: sumar C-192/1998, C-107/2017, C-022/2021 y cerrar los 7 NO CONFIRMADO.
 - **Objetivo:** tablas del corpus (§4.2) + seed inicial extraído del HTML (`NORMAS`, `TARIFAS`, `BIBLIO`) y del `normograma`/`verificacion-fuentes` verificados.
 - **Archivos:** migración Alembic `backend/alembic/versions/xxx_corpus_juridico.py`; modelos `backend/app/models/legal_*.py`; datos `corpus-juridico/*.json`; seed `backend/app/seeds/seed_corpus.py`.
 - **Aceptación:** `alembic upgrade head` ok; seed carga; consulta "normas/tarifas vigentes a fecha X para acto=compraventa" devuelve lo esperado; las 5 correcciones de `verificacion-fuentes` (C1–C5) quedan reflejadas en el dato.
@@ -138,4 +139,8 @@
 
 ## 9. Estado
 
-Plan Fase 1 registrado. Siguiente acción del asistente: **WP-0** (ADR + esqueleto) y co-creación del prompt de **WP-1** (corpus: esquema + siembra desde el HTML).
+- ✅ **WP-0** — ADR (`adr-escritura-asistida.md`).
+- ✅ **WP-1** — Corpus jurídico (PR #133 mergeado, `59fd981`).
+- ⏳ **WP-2** — Motor-escritura (TS) + golden tests. Prompt: `prompts/wp-2-motor.md`. **Golden fixtures ya generados por el asistente** desde el HTML congelado en `frontend/lib/motor-escritura/__fixtures__/` (compraventa/hipoteca/cancelación, con normalización determinista documentada). Listo para Codex.
+
+Siguiente: pegar `prompts/wp-2-motor.md` en Codex → PR → revisión.
