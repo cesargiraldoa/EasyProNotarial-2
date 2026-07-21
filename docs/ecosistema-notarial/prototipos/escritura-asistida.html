@@ -144,6 +144,7 @@
   /* pantalla de arranque (elegir acto) */
   #launcher{position:fixed;inset:0;z-index:50;background:color-mix(in srgb,var(--chrome) 92%,#000);display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;}
   #launcher[hidden]{display:none;}
+  .cv-only[hidden],.canc-only[hidden]{display:none;}
   .lz-inner{max-width:820px;width:100%;text-align:center;color:#EDEFF4;}
   .lz-head{font-family:var(--serif);font-weight:600;font-size:clamp(22px,3.4vw,30px);margin-bottom:8px;}
   .lz-sub{color:#B9C1D4;font-size:14px;max-width:60ch;margin:0 auto 26px;line-height:1.6;}
@@ -219,6 +220,12 @@
         <div class="lz-d">Compra financiada con crédito, encadenada con la constitución de hipoteca a favor del banco o entidad.</div>
         <div class="lz-inc">Todo lo de compraventa + acto de hipoteca (12 cláusulas) + comparecencia y aceptación del acreedor + ratificación Ley 258.</div>
       </button>
+      <button type="button" class="lz-card" data-acto="cancelacion">
+        <div class="lz-ic">🔓</div>
+        <div class="lz-t">Cancelación de hipoteca</div>
+        <div class="lz-d">El banco acreedor libera el gravamen hipotecario una vez pagado el crédito.</div>
+        <div class="lz-inc">Comparecencia del apoderado del banco · identificación de la hipoteca · cancelación y liberación · acto sin cuantía (Ley 546) · notas 1–5 · firma fuera de sede.</div>
+      </button>
     </div>
     <div class="lz-foot">Notaría 16 de Medellín · versión BETA</div>
   </div>
@@ -226,7 +233,7 @@
 
 <div class="app">
   <form class="panel form" id="form" autocomplete="off">
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">0</span> Acto</legend>
       <div class="field"><label>Derecho que se transfiere</label><select id="derecho"><option value="dominio" selected>Pleno dominio</option><option value="nuda">Nuda propiedad (reserva de usufructo)</option><option value="usufructo">Usufructo</option><option value="cuota">Derechos y acciones (cuota proindiviso)</option><option value="uso">Uso y habitación</option></select></div>
       <label class="chk"><input type="checkbox" id="credito" checked> La parte compradora paga con crédito hipotecario</label>
@@ -238,7 +245,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">1</span> Parte vendedora</legend>
       <label class="chk"><input type="checkbox" id="apoderado"> Comparece por apoderado</label>
       <div class="sub-group" id="wrap-apod" hidden>
@@ -250,14 +257,14 @@
       <div class="field" id="wrap-afect"><label>¿El inmueble está afectado a vivienda familiar?</label><select id="afectada"><option value="no" selected>No (se declara)</option><option value="si">Sí</option><option value="nosabe">No se sabe</option></select><p class="hint">Aplica si algún vendedor natural es casado o en unión marital (Ley 258/1996).</p></div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">1b</span> Parte compradora</legend>
       <div id="comp-list"></div>
       <button type="button" class="addbtn" id="add-comp">+ Agregar comprador</button>
       <p class="hint">Con dos o más compradores, adquieren en común y proindiviso según su cuota (deben sumar 100%).</p>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">2</span> Inmueble</legend>
       <div class="field"><label>Descripción y área</label><textarea id="inmdesc">APARTAMENTO NRO. 1402 de la Torre 3 del Conjunto Residencial Miravalle — Propiedad Horizontal, situado en la Calle 30 Sur #27-45 del municipio de Envigado (Antioquia), destinado a vivienda, con un área privada aproximada de 68,40 m²</textarea></div>
       <div class="field"><label>Linderos <button type="button" id="btnVoz" class="voz-btn" title="Dictar por voz">🎤 Dictar</button></label><textarea id="linderos">Su área y linderos están determinados por el perímetro comprendido entre los puntos 1 al 28 y 1, punto de partida, de la planta del piso 14 de la Torre 3, plano RPH-19</textarea><div id="vozhint" style="font-size:10.5px;color:var(--ink-faint);margin-top:2px"></div></div>
@@ -268,7 +275,7 @@
       <div class="field"><label>¿Vivienda de interés social (VIS)?</label><select id="vis"><option value="no" selected>No</option><option value="sfve">Sí — subsidio 100% en especie</option><option value="otra">Sí — otra modalidad</option></select></div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">3</span> Título y estado jurídico</legend>
       <div class="row2"><div class="field"><label>Título — Nro. escritura</label><input type="text" id="tituloNum" value="2.410"></div><div class="field"><label>Título — fecha</label><input type="date" id="tituloFecha" value="2019-06-18"></div></div>
       <div class="field"><label>Título — notaría de origen</label><input type="text" id="tituloNotaria" value="Notaría 12 de Medellín"></div>
@@ -276,7 +283,7 @@
       <div class="field"><label>Gravámenes / limitaciones</label><select id="gravamen"><option value="libre" selected>Libre de gravámenes</option><option value="hipoteca_previa">Hipoteca previa (se cancela)</option><option value="patrimonio">Patrimonio de familia constituido</option><option value="usufructo">Usufructo vigente</option><option value="servidumbre">Servidumbre</option><option value="leasing">Leasing habitacional</option><option value="embargo">Embargo / demanda</option></select></div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">5</span> Acto avanzado</legend>
       <div class="field"><label>Tipo de negocio</label><select id="tipoNegocio">
         <option value="compraventa" selected>Compraventa</option>
@@ -305,14 +312,14 @@
       <label class="chk"><input type="checkbox" id="cuentaTercero"> Alguna parte actúa por cuenta de un tercero (beneficiario final)</label>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">4</span> Precio</legend>
       <div class="field"><label>Precio total ($)</label><input type="text" inputmode="decimal" class="money" id="total" value="420000000"></div>
       <div class="row2"><div class="field"><label>Cuota inicial ($)</label><input type="text" inputmode="decimal" class="money" id="inicial" value="120000000"></div><div class="field"><label>Saldo con crédito ($)</label><input type="text" inputmode="decimal" class="money" id="saldo" value="300000000"></div></div>
       <p class="hint" id="cuadre"></p>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">7</span> Anexos aportados</legend>
       <div class="anexos">
         <label class="chk"><input type="checkbox" id="ax_tradicion"> Cert. tradición</label>
@@ -322,7 +329,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="cv-only">
       <legend><span class="bn">6</span> Otorgamiento y firmas</legend>
       <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="numEscritura" value="2.847"></div><div class="field"><label>Hoja de papel notarial (Nro. inicial)</label><input type="text" id="hojaInicial" value="Aa-112942941"></div></div>
       <div class="field"><label>Fecha de otorgamiento</label><input type="date" id="fechaOtorg" value="2026-08-14"><p class="hint" id="fechahint"></p></div>
@@ -333,6 +340,60 @@
         <p class="hint">Los testigos instrumentales firman y se identifican en el pliego de firmas.</p>
       </div>
       <p class="hint">Cierre del instrumento: lectura, protocolización, constancias fiscales, firmas y autorización notarial — las cuatro fases del art. 13 del Decreto 960/1970.</p>
+    </fieldset>
+
+    <!-- ===================== CANCELACIÓN DE HIPOTECA ===================== -->
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">1</span> Acreedor (banco)</legend>
+      <div class="field"><label>Banco acreedor / NIT</label><div class="row2"><input type="text" id="cBanco" value="BANCOLOMBIA S.A."><input type="text" id="cBancoNit" value="890.903.938-8"></div></div>
+      <div class="field"><label>Domicilio principal</label><input type="text" id="cBancoDom" value="Medellín"></div>
+      <div class="field"><label>¿Cómo se acredita la representación?</label><select id="cRepTipo"><option value="apoderado" selected>Apoderado(a) especial (poder por escritura)</option><option value="replegal">Representante legal (certificado de Cámara)</option></select></div>
+      <div class="field"><label>Cargo con que obra</label><input type="text" id="cRepCargo" value="Apoderada Especial"></div>
+      <div id="wrap-cpoder">
+        <div class="row2"><div class="field"><label>Poder — E.P. número</label><input type="text" id="cPoderEP" value="2.604"></div><div class="field"><label>Poder — fecha</label><input type="text" id="cPoderFecha" value="26 de Septiembre de 2018"></div></div>
+        <div class="field"><label>Poder — notaría</label><input type="text" id="cPoderNotaria" value="Notaría Veintinueve (29) del Círculo Notarial de Medellín"></div>
+      </div>
+    </fieldset>
+
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">2</span> Otorgante que firma por el banco</legend>
+      <div class="field"><label>Nombre</label><input type="text" id="cApoNombre" value="PAULINA ANDREA BELTRÁN AGUDELO"></div>
+      <div class="row2"><div class="field"><label>Cédula de ciudadanía</label><input type="text" id="cApoCC" value="43.993.129"></div><div class="field"><label>Género — sexo (Dcto 0732/2026)</label><select id="cApoGenero"></select></div></div>
+    </fieldset>
+
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">3</span> Propietario / deudor (no comparece)</legend>
+      <div class="field"><label>Nombre(s) del (los) deudor(es)</label><input type="text" id="cDeudor" value="ANGÉLICA MARÍA ROMÁN RUIZ"></div>
+      <p class="hint">El deudor/propietario no firma: el banco, como acreedor, es quien libera el gravamen que se constituyó a su favor.</p>
+    </fieldset>
+
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">4</span> Hipoteca que se cancela</legend>
+      <div class="row2"><div class="field"><label>E.P. de constitución — número</label><input type="text" id="cHipEP" value="1.858"></div><div class="field"><label>E.P. — fecha</label><input type="text" id="cHipFecha" value="18 de Mayo de 2017"></div></div>
+      <div class="field"><label>Notaría de constitución</label><input type="text" id="cHipNotaria" value="Notaría Sexta (6ª) de Medellín"></div>
+      <div class="row2"><div class="field"><label>Fecha de registro</label><input type="text" id="cHipRegFecha" value="11 de Julio de 2017"></div><div class="field"><label>Monto inicial ($)</label><input type="text" inputmode="decimal" class="money" id="cHipMonto" value="69714000"></div></div>
+      <div class="field"><label>Oficina de Registro (ORIP)</label><input type="text" id="cOrip" value="Medellín - Zona Norte"></div>
+    </fieldset>
+
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">5</span> Inmueble liberado</legend>
+      <div class="field"><label>Descripción y ubicación</label><textarea id="cInmdesc">APARTAMENTO NRO. 106 — ETAPA 2 — TORRE 1 — CERRO AZUL CONJUNTO RESIDENCIAL — PROPIEDAD HORIZONTAL — Avenida 31 Nro. 66-29 del municipio de Bello (Antioquia)</textarea></div>
+      <div class="row2"><div class="field"><label>Folio de matrícula</label><input type="text" id="cMatricula" value="01N-5428500"></div><div class="field"><label>Código catastral</label><input type="text" id="cCatastral" value="050880100080500170014903010024"></div></div>
+      <div class="field"><label>NUPRE</label><input type="text" id="cNupre" value="AAX0018YUHA"></div>
+    </fieldset>
+
+    <fieldset class="canc-only" hidden>
+      <legend><span class="bn">6</span> Escritura, notario y opciones</legend>
+      <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="cNum" value="1.206"></div><div class="field"><label>Fecha de otorgamiento</label><input type="date" id="cFechaOtorg" value="2026-03-06"></div></div>
+      <div class="field"><label>Notario(a) que autoriza</label><input type="text" id="cNotario" value="JULIANA OLIVA ZULUAGA ARISMENDY"></div>
+      <div class="row2"><div class="field"><label>Género del notario</label><select id="cNotarioGenero"></select></div><div class="field"><label>Calidad</label><input type="text" id="cCalidad" value="Interina"></div></div>
+      <div class="field"><label>Acto administrativo (nombramiento)</label><input type="text" id="cActoAdmin" value="Decreto Nro. 1419 del 29 de Julio de 2022"></div>
+      <div class="row2"><div class="field"><label>Hojas de papel notarial</label><input type="text" id="cHojas" value="Aa-118420033"></div><div class="field"><label>Recaudo Superintendencia y Fondo ($)</label><input type="text" inputmode="decimal" class="money" id="cRecaudo" value="19300"></div></div>
+      <div class="field"><label>Correo para notificaciones electrónicas</label><input type="text" id="cCorreoNotif" value="escriturasrelusuario@gmail.com"></div>
+      <label class="chk"><input type="checkbox" id="cSinCuantia" checked> Acto sin cuantía — crédito de vivienda (Ley 546/1999)</label>
+      <label class="chk"><input type="checkbox" id="cNoPazSalvo"> Incluir cláusula de "no paz y salvo" del deudor</label>
+      <label class="chk"><input type="checkbox" id="cSarlaft" checked> Incluir NOTA de SARLAFT / tratamiento de datos + STRADATA</label>
+      <label class="chk"><input type="checkbox" id="cNotiElec" checked> Autoriza notificaciones electrónicas</label>
     </fieldset>
   </form>
 
@@ -564,7 +625,11 @@
     'art. 39 · Dcto 960/70':{norma:'Decreto-Ley 960 de 1970',estado:'Vigente',art:'Artículo 39 — Firma a ruego',texto:'Cuando el otorgante no sepa o no pueda firmar, lo hará por él otra persona a su ruego, en presencia de dos testigos que también firmarán; se tomará la impresión de la huella dactilar del otorgante.',fuente:'Dcto 960/1970'},
     'Ley 2195/2022 · SIPLAFT':{norma:'Ley 2195/2022 + SIPLAFT notarial',estado:'Vigente',art:'Prevención de lavado (LA/FT)',texto:'La Ley 2195 de 2022 refuerza la prevención de lavado de activos y el registro de beneficiarios finales. En notarías rige el SIPLAFT (Circular SNR 1536/2013 e Instrucciones 17/2016 y 08/2017): debida diligencia, conocimiento del cliente, declaración de origen lícito de fondos y reporte de operaciones sospechosas a la UIAF.',fuente:'Gestor i=175606; UIAF/SNR'},
     'Ley 2195/2022':{norma:'Ley 2195/2022 + SIPLAFT notarial',estado:'Vigente',art:'Prevención de lavado (LA/FT)',texto:'La Ley 2195 de 2022 refuerza la prevención de lavado de activos y el registro de beneficiarios finales. En notarías rige el SIPLAFT: debida diligencia, conocimiento del cliente, declaración de origen lícito de fondos y reporte de operaciones sospechosas a la UIAF.',fuente:'Gestor i=175606; UIAF/SNR'},
-    'RES-2026-000964-6':{norma:'Superintendencia de Notariado y Registro',estado:'Vigente 2026',art:'Resolución RES-2026-000964-6 — Tarifas notariales 2026',texto:'Fija las tarifas por el ejercicio de la función notarial para 2026 (vigentes desde el 1 de febrero de 2026; ajuste IPC 5,10%). Actos con cuantía igual o inferior a $189.700: $22.500; sobre el excedente, tarifa única del tres por mil (3‰). Las VIS/VIP tienen 50% de descuento en derechos notariales.',fuente:'Supernotariado; asuntoslegales.co'}
+    'RES-2026-000964-6':{norma:'Superintendencia de Notariado y Registro',estado:'Vigente 2026',art:'Resolución RES-2026-000964-6 — Tarifas notariales 2026',texto:'Fija las tarifas por el ejercicio de la función notarial para 2026 (vigentes desde el 1 de febrero de 2026; ajuste IPC 5,10%). Actos con cuantía igual o inferior a $189.700: $22.500; sobre el excedente, tarifa única del tres por mil (3‰). Las VIS/VIP tienen 50% de descuento en derechos notariales.',fuente:'Supernotariado; asuntoslegales.co'},
+    'art. 2457 C.C.':{norma:'Código Civil',estado:'Vigente',art:'Artículo 2457 — Extinción de la hipoteca',texto:'La hipoteca se extingue junto con la obligación principal, y por la cancelación que el acreedor otorgue por escritura pública, de la cual se tome razón al margen de la inscripción respectiva. Cancelado el gravamen, el inmueble queda libre para el propietario.',fuente:'Código Civil'},
+    'art. 23 · Ley 546/1999':{norma:'Ley 546 de 1999 — Financiación de vivienda',estado:'Vigente',art:'Artículo 23 — Cancelación de gravámenes',texto:'La cancelación de los gravámenes hipotecarios constituidos en garantía de créditos para la financiación de vivienda individual a largo plazo se considera un acto sin cuantía para efectos de los derechos notariales y de registro.',fuente:'Gestor Normativo; Ley 546/1999'},
+    'art. 12 · Dcto 2148/1983':{norma:'Decreto 2148 de 1983 (compilado en Dcto 1069/2015)',estado:'Vigente',art:'Artículo 12 — Otorgamiento fuera del despacho',texto:'El notario podrá autorizar que un compareciente suscriba el instrumento fuera de las instalaciones de la notaría, en el sitio donde se encuentre, dejando constancia de la circunstancia en el propio instrumento.',fuente:'Dcto 2148/1983; Dcto 1069/2015'},
+    'Circular SNR 1536/2013 · Ley 1581/2012':{norma:'Circular SNR 1536 de 2013 + Ley 1581 de 2012',estado:'Vigente',art:'Tratamiento de datos y consulta STRADATA',texto:'La Ley 1581 de 2012 exige la autorización previa, expresa e informada del titular para el tratamiento de datos personales. La Circular 1536 de 2013 de la S.N.R. dispone la consulta de los intervinientes en el sistema STRADATA como control de prevención de lavado de activos y financiación del terrorismo.',fuente:'S.N.R.; Ley 1581/2012'}
   };
 
   /* ---------- TARIFAS DEL AÑO (se reemplaza cada año) ---------- */
@@ -929,6 +994,7 @@
   var _leaderRT; window.addEventListener('resize',function(){ clearTimeout(_leaderRT); _leaderRT=setTimeout(fillLeaders,120); });
 
   function renderOutput(){
+    if(ACTO==='cancelacion'){ renderOutputCanc(); return; }
     var s=G();
     g('wrap-banco').hidden=!s.credito; g('wrap-apod').hidden=!s.apod; g('wrap-ph').hidden=!s.ph; g('wrap-subsidio').hidden=!s.subsidio; g('wrap-afect').hidden=!casadoOUnion(s.V);
     g('wrap-testigos').hidden=!(s.testigosOn||s.firmaRuego); g('wrap-ruego').hidden=!s.firmaRuego;
@@ -974,13 +1040,16 @@
 
   /* ---------- handoff al editor del protocolista ---------- */
   function editorLabels(){
+    if(ACTO==='cancelacion'){
+      return {cBanco:'Banco acreedor',cBancoNit:'NIT del banco',cBancoDom:'Domicilio del banco',cRepCargo:'Cargo del compareciente',cApoNombre:'Otorgante (firma por el banco)',cApoCC:'Cédula del otorgante',cPoderEP:'Poder — E.P.',cPoderFecha:'Poder — fecha',cPoderNotaria:'Poder — notaría',cDeudor:'Propietario / deudor',cHipEP:'Hipoteca — E.P.',cHipFecha:'Hipoteca — fecha',cHipNotaria:'Hipoteca — notaría',cHipRegFecha:'Hipoteca — fecha de registro',cOrip:'Oficina de Registro',cHipMonto:'Monto inicial de la hipoteca',cInmdesc:'Descripción del inmueble',cMatricula:'Folio de matrícula',cCatastral:'Código catastral',cNupre:'NUPRE',cNum:'Número de escritura',cFechaOtorg:'Fecha de otorgamiento',cNotario:'Notario que autoriza',cCalidad:'Calidad del notario',cActoAdmin:'Acto administrativo',cHojas:'Hojas de papel notarial',cRecaudo:'Recaudo Superintendencia',cCorreoNotif:'Correo de notificación'};
+    }
     var m={matricula:'Matrícula inmobiliaria',total:'Precio total',inicial:'Cuota inicial',saldo:'Saldo / monto hipoteca',banco:'Banco acreedor',bancoNit:'NIT del banco',plazoAnios:'Plazo (años)',numCuotas:'N.º de cuotas',apoderadoBanco:'Apoderado(a) del banco',poderBancoEP:'Poder del banco (E.P.)',poderBancoNot:'Notaría del poder',avaluoCatastral:'Avalúo catastral',nupre:'NUPRE',inmdesc:'Descripción del inmueble',linderos:'Linderos',catastral:'Cédula catastral',tituloNum:'Título — E.P. número',tituloFecha:'Título — fecha',tituloNotaria:'Título — notaría',fechaOtorg:'Fecha de otorgamiento',hojaInicial:'Hoja de papel notarial',phReg:'Reglamento PH',numEscritura:'Número de escritura'};
     data.vendedores.forEach(function(p,i){ var n='Vendedor '+(i+1); m['v'+i+'nombre']=n+' — nombre'; m['v'+i+'id']=n+' — documento'; m['v'+i+'ciudad']=n+' — domicilio'; m['v'+i+'tipoDoc']=n+' — tipo de documento'; m['v'+i+'estado']=n+' — estado civil'; m['v'+i+'repr']=n+' — representante legal'; });
     data.compradores.forEach(function(p,i){ var n='Comprador '+(i+1); m['c'+i+'nombre']=n+' — nombre'; m['c'+i+'id']=n+' — documento'; m['c'+i+'ciudad']=n+' — domicilio'; m['c'+i+'cuota']=n+' — cuota'; m['c'+i+'tipoDoc']=n+' — tipo de documento'; m['c'+i+'estado']=n+' — estado civil'; });
     return m;
   }
   function buildHandoff(){
-    var html=renderEscritura(G());
+    var html=(ACTO==='cancelacion')?renderCancelacion(Gc()):renderEscritura(G());
     html=html.replace(/<span class="ins" data-f="([^"]+)">/g,'<span class="campo" data-field="$1">')
              .replace(/<span class="rulec">/g,'<span>')
              .replace(/<span class="cite">[\s\S]*?<\/span>/g,'')
@@ -995,15 +1064,164 @@
   window.EA.render = function(){ renderOutput(); };
   window.EA.fill = function(force){ fillLeaders(force); };
   /* valores de todos los campos calculados desde los datos actuales (clave data-field → texto mostrado) */
-  window.EA.fieldValues = function(){ var tmp=document.createElement('div'); tmp.innerHTML=renderEscritura(G()); var map={}; var sp=tmp.querySelectorAll('[data-f]'); for(var i=0;i<sp.length;i++){ var k=sp[i].getAttribute('data-f'); if(!(k in map)) map[k]=sp[i].textContent; } return map; };
+  window.EA.fieldValues = function(){ var tmp=document.createElement('div'); tmp.innerHTML=(ACTO==='cancelacion')?renderCancelacion(Gc()):renderEscritura(G()); var map={}; var sp=tmp.querySelectorAll('[data-f]'); for(var i=0;i<sp.length;i++){ var k=sp[i].getAttribute('data-f'); if(!(k in map)) map[k]=sp[i].textContent; } return map; };
+
+  /* ================= ACTO 3 — CANCELACIÓN DE HIPOTECA ================= */
+  var ACTO='compraventa';
+  function Gc(){
+    return {
+      cNum:g('cNum').value, cFechaOtorg:g('cFechaOtorg').value,
+      cNotario:g('cNotario').value, cNotarioGenero:g('cNotarioGenero').value, cCalidad:g('cCalidad').value, cActoAdmin:g('cActoAdmin').value,
+      cBanco:g('cBanco').value, cBancoNit:g('cBancoNit').value, cBancoDom:g('cBancoDom').value,
+      cRepTipo:g('cRepTipo').value, cRepCargo:g('cRepCargo').value,
+      cApoNombre:g('cApoNombre').value, cApoGenero:g('cApoGenero').value, cApoCC:g('cApoCC').value,
+      cPoderEP:g('cPoderEP').value, cPoderFecha:g('cPoderFecha').value, cPoderNotaria:g('cPoderNotaria').value,
+      cDeudor:g('cDeudor').value,
+      cHipEP:g('cHipEP').value, cHipFecha:g('cHipFecha').value, cHipNotaria:g('cHipNotaria').value, cHipRegFecha:g('cHipRegFecha').value, cOrip:g('cOrip').value, cHipMonto:parseMoney(g('cHipMonto').value),
+      cInmdesc:g('cInmdesc').value, cMatricula:g('cMatricula').value, cCatastral:g('cCatastral').value, cNupre:g('cNupre').value,
+      cHojas:g('cHojas').value, cRecaudo:parseMoney(g('cRecaudo').value), cCorreoNotif:g('cCorreoNotif').value,
+      cSinCuantia:g('cSinCuantia').checked, cNoPazSalvo:g('cNoPazSalvo').checked, cSarlaft:g('cSarlaft').checked, cNotiElec:g('cNotiElec').checked
+    };
+  }
+
+  function renderCancelacion(s){
+    var gA=genEnding(s.cApoGenero);                     // o / a / e
+    var artA=s.cApoGenero==='F'?'la':(s.cApoGenero==='NB'||s.cApoGenero==='T')?'le':'el';
+    var sr=s.cApoGenero==='F'?'señora':(s.cApoGenero==='NB'||s.cApoGenero==='T')?'señore':'señor';
+    var doc=s.cApoGenero==='F'?'doctora':(s.cApoGenero==='NB'||s.cApoGenero==='T')?'doctore':'doctor';
+    var nf=s.cNotarioGenero==='F', notArt=nf?'la':(s.cNotarioGenero==='NB'||s.cNotarioGenero==='T')?'le':'el', notDoc=nf?'doctora':(s.cNotarioGenero==='NB'||s.cNotarioGenero==='T')?'doctore':'doctor', notEnd=nf?'a':(s.cNotarioGenero==='NB'||s.cNotarioGenero==='T')?'e':'o';
+    var banco=s.cBanco||'____', mat=s.cMatricula||'________', deudor=s.cDeudor||'____';
+    var h='';
+
+    /* carátula / calificación */
+    h+='<div class="calif"><h4>Superintendencia de Notariado y Registro · Formato de Calificación · Art. 8 Par. 4 Ley 1579/2012</h4><div class="r">'
+      +'<span class="k">Folio matrícula</span><span>'+IF('cMatricula',mat)+'</span>'
+      +'<span class="k">Cód. catastral</span><span>'+IF('cCatastral',s.cCatastral||'—')+'</span>'
+      +'<span class="k">NUPRE</span><span>'+IF('cNupre',s.cNupre||'—')+'</span>'
+      +'<span class="k">Ubicación</span><span>'+IF('cInmdesc',(s.cInmdesc||'—').slice(0,90)+((s.cInmdesc||'').length>90?'…':''))+'</span></div>'
+      +'<table><tr><td>CÓD. 0775 — CANCELACIÓN DE HIPOTECA</td><td>'+(s.cSinCuantia?'ACTO SIN CUANTÍA':IF('cHipMonto','$'+pts(s.cHipMonto)))+'</td></tr></table>'
+      +'<div class="r" style="margin-top:6px"><span class="k">DE</span><span>'+IF('cBanco',banco)+'</span><span class="k">A</span><span>'+IF('cDeudor',deudor)+'</span></div></div>';
+
+    /* comparecencia / apertura notarial */
+    h+='<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los '+IF('cFechaOtorg',fechaText(s.cFechaOtorg))+', al despacho de la NOTARÍA DIECISÉIS DEL CÍRCULO NOTARIAL DE MEDELLÍN, cuy'+notEnd+' Notari'+notEnd+' '+IF('cCalidad',s.cCalidad||'—')+' es '+notArt+' '+notDoc+' '+IF('cNotario',s.cNotario)+' (según '+IF('cActoAdmin',s.cActoAdmin)+').<span class="fill"></span></p>';
+    h+='<p class="cl">Se presentó '+artA+' '+sr+' '+IF('cApoNombre',s.cApoNombre)+', quien dijo ser mayor de edad, domiciliad'+gA+' en la ciudad de Medellín, identificad'+gA+' con la cédula de ciudadanía número '+IF('cApoCC',s.cApoCC)+' y manifestó:<span class="fill"></span></p>';
+
+    /* PRIMERO — representación del acreedor */
+    var repText;
+    if(s.cRepTipo==='apoderado'){
+      repText='según Poder Especial otorgado mediante la Escritura Pública número '+IF('cPoderEP',s.cPoderEP)+' de fecha '+IF('cPoderFecha',s.cPoderFecha)+' de la '+IF('cPoderNotaria',s.cPoderNotaria)+', copia del cual se adjunta para su protocolización con el presente instrumento';
+    } else {
+      repText='circunstancias que se acreditan con el correspondiente certificado de existencia y representación legal expedido por la Cámara de Comercio de Medellín para Antioquia; copia del cual se adjunta para su protocolización con el presente instrumento';
+    }
+    h+='<p class="cl" data-sec="primero"><span class="clh">PRIMERO:</span> '+R('Que comparece al otorgamiento del presente instrumento, obrando en nombre y representación de '+IF('cBanco',banco)+', establecimiento bancario, con domicilio principal en la ciudad de '+IF('cBancoDom',s.cBancoDom||'Medellín')+', representación que ejerce en su carácter de '+IF('cRepCargo',s.cRepCargo)+', '+repText+'.','C. Comercio')+'<span class="fill"></span></p>';
+
+    /* SEGUNDO — identificación de la hipoteca a cancelar */
+    h+='<p class="cl" data-sec="segundo"><span class="clh">SEGUNDO:</span> '+R('Que por medio de la Escritura Pública número '+IF('cHipEP',s.cHipEP)+' del '+IF('cHipFecha',s.cHipFecha)+' de la '+IF('cHipNotaria',s.cHipNotaria)+', debidamente registrada el '+IF('cHipRegFecha',s.cHipRegFecha)+' en la Oficina de Registro de Instrumentos Públicos de '+IF('cOrip',s.cOrip)+', bajo el (los) FOLIO (S) DE MATRÍCULA INMOBILIARIA NÚMERO (S) '+IF('cMatricula',mat)+' el (la, los) señor (a, es) '+IF('cDeudor',deudor)+', constituyó (eron) en favor de '+IF('cBanco',banco)+', Hipoteca Global o Abierta de Primer Grado y sin límite en la cuantía, por la cantidad inicial de '+IF('cHipMonto',money(s.cHipMonto))+', sobre el siguiente bien inmueble: '+IF('cInmdesc',s.cInmdesc)+'. FOLIO (S) DE MATRÍCULA INMOBILIARIA NRO (S): '+IF('cMatricula',mat)+'. Inmueble que se determina por los linderos y demás especificaciones consignados en la mencionada escritura pública que se cancela.','Ley 1579/2012')+'<span class="fill"></span></p>';
+
+    /* TERCERO — cancelación y liberación */
+    h+='<p class="cl" data-sec="tercero"><span class="clh">TERCERO:</span> '+R('Que obrando en el carácter expresado CANCELA la Hipoteca constituida mediante la Escritura Pública número '+IF('cHipEP',s.cHipEP)+' del '+IF('cHipFecha',s.cHipFecha)+' de la '+IF('cHipNotaria',s.cHipNotaria)+', debidamente registrada el '+IF('cHipRegFecha',s.cHipRegFecha)+' en la Oficina de Registro de Instrumentos Públicos de '+IF('cOrip',s.cOrip)+', bajo el (los) FOLIO (S) DE MATRÍCULA INMOBILIARIA NÚMERO (S) '+IF('cMatricula',mat)+' antes mencionada, y en consecuencia, queda (n) libre (s) del gravamen el (los) inmueble (s) descrito (s) en la cláusula segunda de esta escritura.','art. 2457 C.C.')+'<span class="fill"></span></p>';
+
+    if(s.cNoPazSalvo) h+='<p class="cl"><span class="clh">CUARTO:</span> La cancelación de esta hipoteca no implica paz y salvo a favor del Deudor, ya que este acto solo conlleva la cancelación del gravamen hipotecario identificado en la cláusula anterior, sin que se refiera a un paz y salvo o exoneración total de las obligaciones que por otros conceptos pudiere tener el Deudor, ya sea como deudor principal, avalista o deudor solidario.<span class="fill"></span></p>';
+
+    if(s.cSinCuantia) h+='<p class="cl" data-sec="sincuantia">'+R('EL PRESENTE INSTRUMENTO SE CONSIDERA COMO ACTO SIN CUANTÍA DE CONFORMIDAD CON LA LEY 546 DE 1999.','art. 23 · Ley 546/1999')+'<span class="fill"></span></p>';
+
+    /* constancias + liquidación integrada */
+    var artAcap=artA.charAt(0).toUpperCase()+artA.slice(1);   // El / La / Le
+    h+='<p class="cl">'+artAcap+' exponente leyó personalmente el presente instrumento, lo aprobó y en constancia lo firma.<span class="fill"></span></p>';
+    h+='<p class="cl">Se advirtió el registro dentro del término legal para ello.<span class="fill"></span></p>';
+    var L=liquidarCanc(s);
+    h+='<p class="cl" data-sec="liquidacion"><span class="clh">DERECHOS, RECAUDOS Y VALORES A PAGAR.</span> Conforme a las tarifas vigentes ('+esc(TARIFAS.resNotarial)+'), por tratarse de '+(s.cSinCuantia?'un acto sin cuantía (Ley 546/1999)':'un acto de cancelación')+', los valores causados son: derechos notariales '+I(fmt(L.derNot))+' más IVA de '+I(fmt(L.iva))+'; RECAUDO SUPERINTENDENCIA Y FONDO: '+IF('cRecaudo','$'+pts(L.recaudo))+'.<span class="fill"></span></p>';
+    h+='<p class="cl"><span class="clh">HOJAS DE PAPEL NOTARIAL.</span> Se extendió en las hojas de papel notarial números '+IF('cHojas',s.cHojas)+' y siguientes.<span class="fill"></span></p>';
+
+    /* NOTAS 1–5 (estándar Notaría 16) */
+    var sech='text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:24px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)';
+    h+='<div class="sech" data-sec="notas" style="'+sech+'">NOTAS Y CONSTANCIAS FINALES</div>';
+    var nn=0, nota=function(t){ nn++; return '<p class="para"><span class="clh">NOTA '+nn+'.</span> '+t+'</p>'; };
+    h+=nota(R((s.cApoGenero==='F'?'La doctora ':'El doctor ')+esc(s.cApoNombre)+', identificad'+gA+' con la cédula de ciudadanía número '+esc(s.cApoCC)+', actuando en su condición de '+esc(s.cRepCargo)+' de '+esc(banco)+', por autorización de la suscrita notaria, suscribe la presente escritura pública fuera de las instalaciones de la Notaría Dieciséis de Medellín, en su despacho.','art. 12 · Dcto 2148/1983'));
+    h+=nota(R('A los otorgantes se les hizo la advertencia que deben presentar esta escritura para registro, en la Oficina correspondiente, dentro del término perentorio de dos (2) meses contados a partir de la fecha de otorgamiento, cuyo incumplimiento causará intereses moratorios por mes o fracción de mes de retardo.','Ley 1579/2012'));
+    h+=nota('El (los) compareciente(s) hace(n) constar que ha(n) verificado cuidadosamente su nombre completo, el número de documento de identidad, y declara(n) que toda la información consignada es correcta, asumiendo la responsabilidad por cualquier inexactitud.');
+    if(s.cNotiElec) h+=nota('NOTIFICACIONES ELECTRÓNICAS.- El (los) compareciente(s) manifiesta(n) que SÍ da(n) su consentimiento, que se entiende concedido con la firma de la presente escritura, para ser notificado por medio electrónico sobre el estado del trámite ante la Oficina de Instrumentos Públicos, a través del correo electrónico: '+IF('cCorreoNotif',s.cCorreoNotif)+'.');
+    if(s.cSarlaft) h+=nota(R('SARLAFT — AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES: la Notaría, como responsable que almacena y recolecta datos personales, requiere y obtiene la autorización del compareciente para recaudar, almacenar y usar los datos suministrados. STRADATA SEARCH: en cumplimiento de la Circular 1536 del 17 de septiembre de 2013 de la S.N.R. y del Artículo 17 de la Ley 282 de 1996, se consultó la información del (los) otorgante(s) en el programa STRADATA.','Circular SNR 1536/2013 · Ley 1581/2012'));
+
+    /* firmas */
+    var blank='<span style="color:var(--line-strong)">____________________</span>';
+    h+='<div data-sec="firmas" style="margin-top:26px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+IF('cHojas',s.cHojas)+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.cNum)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
+      +'<div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firma del otorgante</div>'
+      +'<div style="margin-top:18px"><div style="border-top:1px solid var(--ink);width:60%;margin-bottom:4px"></div>'
+      +'<div style="font-family:var(--serif);font-weight:600;font-size:12.5px">'+esc(s.cApoNombre||'____________________________')+'</div>'
+      +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink)">C.C. '+esc(s.cApoCC||'____________')+' · '+esc(s.cRepCargo)+' de '+esc(banco)+' — NIT '+esc(s.cBancoNit)+'</div>'
+      +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:2px">Firma fuera de la sede (art. 12 Dcto 2148/1983) · Biometría: <span style="color:var(--line-strong)">___________</span></div></div>'
+      +'<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">'+esc(s.cNotario||'____________________')+'</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Notari'+notEnd+' Dieciséis '+esc(s.cCalidad||'')+' de Medellín · Autoriza — Escritura Nro. '+esc(s.cNum)+'</div></div></div>';
+    return h;
+  }
+
+  function liquidarCanc(s){
+    var derNot=TARIFAS.derNotarialBase;                 // acto sin cuantía → derecho fijo
+    var iva=Math.round(derNot*TARIFAS.iva);
+    var recaudo=s.cRecaudo||19300;
+    return { derNot:derNot, iva:iva, recaudo:recaudo, total:derNot+iva+recaudo };
+  }
+  function renderLiquidacionCanc(s){
+    var L=liquidarCanc(s);
+    var h='<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas '+TARIFAS.anio+' · Notarial '+esc(TARIFAS.resNotarial)+'<br>'+(s.cSinCuantia?'Acto sin cuantía (Ley 546/1999) — sin impuesto de registro con cuantía':'Cancelación de hipoteca')+'</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
+    h+='<tr><td>Derechos notariales <span class="cite">RES-2026-000964-6</span></td><td class="who">Acto sin cuantía</td><td class="n">'+fmt(L.derNot)+'</td><td class="who">Interesado</td></tr>';
+    h+='<tr><td>IVA</td><td class="who">19% sobre derechos</td><td class="n">'+fmt(L.iva)+'</td><td class="who">Interesado</td></tr>';
+    h+='<tr><td>Recaudo Superintendencia y Fondo</td><td class="who">Tarifa fija S.N.R.</td><td class="n">'+fmt(L.recaudo)+'</td><td class="who">Interesado</td></tr>';
+    h+='<tr class="tot"><td colspan="2">Total a pagar</td><td class="n">'+fmt(L.total)+'</td><td></td></tr></tbody></table></div>';
+    h+='<div class="note">La cancelación de hipoteca de vivienda es acto sin cuantía (art. 23 Ley 546/1999): no causa impuesto de registro con cuantía ni derechos notariales proporcionales. Validar contra la resolución oficial del año.</div>';
+    return h;
+  }
+
+  function evaluarCanc(s){
+    var it=[];
+    if(!s.cMatricula.trim()) it.push({t:'crit',h:'Inmueble sin folio de matrícula',p:'Sin la matrícula inmobiliaria el registro no puede tomar razón de la cancelación.',n:'art. 8 · Ley 1579/2012'});
+    if(!s.cHipEP.trim()||!s.cHipFecha.trim()||!s.cHipNotaria.trim()||!s.cHipRegFecha.trim()) it.push({t:'crit',h:'Hipoteca a cancelar no identificada',p:'Falta la E.P. de constitución, su notaría o la fecha de registro: sin el tracto registral el registro devuelve el título.',n:'Ley 1579/2012'});
+    if(!s.cApoCC.trim()) it.push({t:'crit',h:'Compareciente sin identificar',p:'Falta el documento de identidad del apoderado/representante que firma por el banco.',n:'Dcto 960/1970'});
+    if(s.cRepTipo==='apoderado'){
+      if(!s.cPoderEP.trim()) it.push({t:'warn',h:'Poder del apoderado sin identificar',p:'Indicar la E.P. del poder especial que se protocoliza.',n:'Dcto 1069/2015'});
+      else it.push({t:'obl',h:'Personería del acreedor (apoderado)',p:'Poder especial identificado y protocolizado.',n:'Dcto 1069/2015'});
+    } else {
+      it.push({t:'obl',h:'Personería del acreedor (rep. legal)',p:'Se protocoliza el certificado de existencia y representación legal.',n:'C. Comercio'});
+    }
+    it.push({t:'obl',h:'Declaración expresa de cancelación',p:'El acreedor, titular del crédito, cancela el gravamen (cláusula tercera).',n:'art. 2457 C.C.'});
+    it.push({t:'obl',h:'Advertencia de registro (2 meses)',p:'NOTA 2 incluida — término perentorio e intereses moratorios.',n:'Ley 1579/2012'});
+    if(s.cNotiElec) it.push({t:'ok',h:'Notificaciones electrónicas',p:'NOTA 4 con consentimiento y correo de notificación.',n:'Dcto 1069/2015'});
+    if(s.cSarlaft) it.push({t:'obl',h:'SARLAFT / tratamiento de datos',p:'NOTA 5 con autorización de datos y consulta STRADATA.',n:'Circular SNR 1536/2013 · Ley 1581/2012'});
+    else it.push({t:'warn',h:'Falta la NOTA de SARLAFT',p:'El tratamiento de datos y la consulta STRADATA son mínimos exigibles; conviene incluirla.',n:'Circular SNR 1536/2013 · Ley 1581/2012'});
+    if(s.cSinCuantia) it.push({t:'ok',h:'Acto sin cuantía (vivienda)',p:'Cancelación de crédito de vivienda: acto sin cuantía (Ley 546/1999).',n:'art. 23 · Ley 546/1999'});
+    else it.push({t:'warn',h:'Acto con cuantía',p:'No marcado como vivienda: se liquidará con cuantía. Verificar la naturaleza del crédito.',n:'art. 23 · Ley 546/1999'});
+    it.push({t:'ok',h:'Firma fuera de la sede',p:'NOTA 1 — el apoderado del banco suscribe en su despacho (art. 12 Dcto 2148/1983).',n:'art. 12 · Dcto 2148/1983'});
+    it.push({t:'obl',h:'Autorización notarial',p:'Constancia de autorización de la Escritura Nro. '+esc(s.cNum)+' e imposición de la fe pública.',n:'Dcto 960/1970'});
+    if(!s.cNum.trim()) it.push({t:'warn',h:'Falta el número de escritura',p:'La autorización y las copias requieren el número de instrumento del protocolo.',n:'Dcto 960/1970'});
+    return it;
+  }
+
+  function renderOutputCanc(){
+    var s=Gc();
+    g('wrap-cpoder').hidden = (s.cRepTipo!=='apoderado');
+    if(window.EA && window.EA.editMode) return;          /* en redacción manda el documento editado */
+    g('escritura').innerHTML=renderCancelacion(s); applyHL(); fillLeaders();
+    var items=evaluarCanc(s), c=renderCumplimiento(items);
+    var words=g('escritura').textContent.trim().split(/\s+/).length;
+    g('cumplimiento').innerHTML=c.html+'<div class="metrics">Cancelación de hipoteca ~'+words+' palabras · '+items.length+' verificaciones · Notaría 16</div>';
+    g('liquidacion').innerHTML=renderLiquidacionCanc(s); markTips();
+    var e=g('estado');
+    if(c.crit>0){ e.className='estado bloq'; e.innerHTML='<span class="ic">×</span> No se puede otorgar aún — '+c.crit+' bloqueante'+(c.crit>1?'s':'')+' por resolver.'; }
+    else { e.className='estado ok'; e.innerHTML='<span class="ic">✓</span> Lista para revisión y firma del notario. Sin bloqueantes.'; }
+  }
 
   /* ----- pantalla de arranque: elegir acto → cargar plantilla ----- */
   function selectActo(acto){
+    ACTO = acto;
+    var isCanc = (acto==='cancelacion');
+    Array.prototype.forEach.call(document.querySelectorAll('.cv-only'),function(el){ el.hidden = isCanc; });
+    Array.prototype.forEach.call(document.querySelectorAll('.canc-only'),function(el){ el.hidden = !isCanc; });
     g('credito').checked = (acto==='hipoteca');
-    g('topTitle').textContent = (acto==='hipoteca') ? 'Escritura asistida — Compraventa + Hipoteca' : 'Escritura asistida — Compraventa';
+    g('topTitle').textContent = isCanc ? 'Escritura asistida — Cancelación de hipoteca' : (acto==='hipoteca') ? 'Escritura asistida — Compraventa + Hipoteca' : 'Escritura asistida — Compraventa';
     g('launcher').hidden = true;
     g('btnCambiarActo').style.display = '';
     if(window.EA && window.EA.editMode && window.EA.setMode) window.EA.setMode('captura');
+    if(window.EA && window.EA.setActo) window.EA.setActo(acto);
     renderOutput();
   }
   Array.prototype.forEach.call(document.querySelectorAll('#launcher .lz-card'),function(c){
@@ -1011,6 +1229,7 @@
   });
   g('btnCambiarActo').addEventListener('click',function(){ g('launcher').hidden=false; });
 
+  g('cApoGenero').innerHTML=generoOpts('F'); g('cNotarioGenero').innerHTML=generoOpts('F');
   initMoney(); renderParties(); renderFirmantes(); renderOutput();
 })();
 
@@ -1089,11 +1308,22 @@
     {t:'Origen de fondos / SARLAFT', d:'Ley 2195/2022', html:'<p class="para"><span class="clh">ORIGEN DE LOS INGRESOS.</span> <span class="campo" data-field="comprador">EL COMPRADOR</span> declara que los recursos con que adquiere provienen de actividades lícitas y que no se encuentra en listados de prevención de lavado de activos (OFAC u otros).</p>'},
     {t:'Servidumbre', d:'A favor de predio vecino', html:'<p class="cl"><span class="clh">SERVIDUMBRE.</span> El inmueble se transfiere con la servidumbre de <span class="campo" data-field="servidumbre">tránsito</span> a favor del predio vecino, que la parte compradora declara conocer y aceptar.</p>'}
   ];
-  function renderBiblio(){ q('#biblioteca').innerHTML=BIBLIO.map(function(it,i){ return '<button type="button" class="bib-btn" data-bib="'+i+'">'+esc(it.t)+'<small>'+esc(it.d)+'</small></button>'; }).join(''); }
+  /* biblioteca propia del acto de cancelación de hipoteca (Notaría 16) */
+  var BIBLIO_CANC=[
+    {t:'Acto sin cuantía (Ley 546/1999)', d:'Cancelación de crédito de vivienda', html:'<p class="cl"><span class="clh">PARÁGRAFO — ACTO SIN CUANTÍA.</span> De acuerdo con el artículo 23 de la Ley 546 de 1999, que regula la cancelación de gravámenes hipotecarios de créditos para vivienda, la presente cancelación se considera un acto sin cuantía.</p>'},
+    {t:'No paz y salvo del deudor', d:'Solo se libera el gravamen', html:'<p class="cl"><span class="clh">NO PAZ Y SALVO.</span> La cancelación de esta hipoteca no implica paz y salvo a favor del Deudor, ya que este acto solo conlleva la cancelación del gravamen hipotecario identificado, sin exoneración de las obligaciones que por otros conceptos pudiere tener el Deudor como deudor principal, avalista o deudor solidario.</p>'},
+    {t:'Valor asignado para liquidación', d:'Contrato de hipoteca', html:'<p class="cl"><span class="clh">VALOR PARA LIQUIDACIÓN.</span> Para efectos de la liquidación de derechos notariales y de registro, se asignó al contrato de hipoteca un valor de <span class="campo" data-field="cHipMonto">$0</span>.</p>'},
+    {t:'NOTA — Firma fuera de la sede', d:'Art. 12 Dcto 2148/1983', html:'<p class="para"><span class="clh">NOTA — FIRMA FUERA DE LA SEDE.</span> <span class="campo" data-field="cApoNombre">El apoderado</span>, actuando como <span class="campo" data-field="cRepCargo">Apoderado(a) Especial</span> de <span class="campo" data-field="cBanco">el banco</span>, por autorización de la suscrita notaria, suscribe la presente escritura fuera de las instalaciones de la Notaría Dieciséis de Medellín, en su despacho, conforme al artículo 12 del Decreto 2148 de 1983.</p>'},
+    {t:'NOTA — SARLAFT / STRADATA', d:'Ley 1581/2012 · Circular 1536/2013', html:'<p class="para"><span class="clh">NOTA — SARLAFT.</span> AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES. STRADATA SEARCH: en cumplimiento de la Circular 1536 del 17 de septiembre de 2013 de la S.N.R. y del artículo 17 de la Ley 282 de 1996, se consultó la información del otorgante en el programa STRADATA.</p>'},
+    {t:'NOTA — Notificaciones electrónicas', d:'Art. 15 Dcto 1579/2012', html:'<p class="para"><span class="clh">NOTA — NOTIFICACIONES ELECTRÓNICAS.</span> El compareciente manifiesta que SÍ da su consentimiento, concedido con la firma de esta escritura, para ser notificado por medio electrónico sobre el estado del trámite ante la Oficina de Instrumentos Públicos, al correo: <span class="campo" data-field="cCorreoNotif">correo@dominio.com</span>.</p>'}
+  ];
+  var ACTO2='compraventa';
+  function curBiblio(){ return ACTO2==='cancelacion'?BIBLIO_CANC:BIBLIO; }
+  function renderBiblio(){ var L=curBiblio(); q('#biblioteca').innerHTML=L.map(function(it,i){ return '<button type="button" class="bib-btn" data-bib="'+i+'">'+esc(it.t)+'<small>'+esc(it.d)+'</small></button>'; }).join(''); }
   function topBlock(){ var sel=window.getSelection(); if(!sel.rangeCount) return null; var n=sel.anchorNode; n=n&&n.nodeType===3?n.parentElement:n; if(!n||!editor.contains(n)) return null; while(n.parentNode!==editor) n=n.parentNode; return n; }
   function insertBiblio(i){
     if(!window.EA||!window.EA.editMode){ setMode('edicion'); }
-    var item=BIBLIO[i]; var frag=document.createRange().createContextualFragment(item.html);
+    var item=curBiblio()[i]; var frag=document.createRange().createContextualFragment(item.html);
     var newBlock=frag.firstChild; var ref=topBlock();
     if(ref&&ref.nextSibling) editor.insertBefore(frag,ref.nextSibling); else editor.appendChild(frag);
     snapshot(); rebuildVinc(); fillNow();
@@ -1203,6 +1433,7 @@
   q('#mode-captura').addEventListener('click',function(){ if(window.EA.editMode){ setMode('captura'); } });
   q('#mode-edicion').addEventListener('click',function(){ if(!window.EA.editMode){ setMode('edicion'); } });
   window.EA.setMode=setMode;
+  window.EA.setActo=function(a){ ACTO2=a; renderBiblio(); };
   /* sincroniza valores del formulario al documento editado (posicional: cada aparición recibe su propio valor),
      preservando el texto escrito a mano; luego salta al lugar del cambio. */
   window.EA.syncFromForm=function(freshHTML,focusKey){
