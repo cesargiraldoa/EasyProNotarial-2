@@ -144,7 +144,13 @@
 - ✅ **WP-1** — Corpus jurídico (PR #133, `59fd981`).
 - ✅ **WP-2** — Motor-escritura TS + golden tests (PR #134, `9e52677`; 8/8 verde).
 - ✅ **WP-3** — API backend de escritura (PR #135, `2bdf55c`; 6 tests verde).
-- ✅ **WP-4** — UI de Captura (PR #136, `bd8bf38`; 9 tests verde, preview en vivo end-to-end).
-- ⏳ **WP-5** — Editor propio (modo Redacción). Prompt: `prompts/wp-5-editor.md`. Extiende el workspace de WP-4; reutiliza WP-3 para exportar. Listo para Codex.
+- ✅ **WP-4** — UI de Captura (PR #136, `bd8bf38`).
+- ✅ **WP-5** — Editor propio / Redacción (PR #137, `1c573d2`; 12 tests verde). Escritura asistida completa (captura+redacción) para los 3 actos.
 
-Siguiente: pegar `prompts/wp-5-editor.md` en Codex → PR → revisión.
+### Trabajo restante — agrupado en bloques
+- ⏳ **Bloque A** — Corpus vivo + RAG + gobernanza + biblioteca API (agrupa WP-7a + WP-8 + biblioteca). Prompt: `prompts/wp-A-corpus-vivo-gobernanza.md`. Listo para Codex.
+- ⏳ **Bloque B** — Gari (capa IA: extracción, prosa libre, clasificación, QA). Prompt pendiente.
+- ⏳ **Bloque C/D** — Compraventa de TODO TIPO por lotes (varios inmuebles+folio+encadenamientos; extranjero/divisas+rural+capacidad). Prompts pendientes.
+- Follow-up de datos: aplicar el JSON de GPT (enlaces/confianza) al corpus.
+
+Siguiente: pegar `prompts/wp-A-corpus-vivo-gobernanza.md` en Codex → PR → revisión.
