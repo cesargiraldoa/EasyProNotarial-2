@@ -1,0 +1,634 @@
+"use client";
+
+import { Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  casadoOUnion,
+  fechaText,
+  parseMoney,
+  pts,
+  sumaCuotas,
+  type ActoCode,
+  type AuxParty,
+  type CancelacionState,
+  type CaseState,
+  type CompraventaState,
+  type EstadoCivil,
+  type GeneroCode,
+  type Party,
+  type TipoDoc,
+  type TipoPersona,
+} from "@/lib/motor-escritura";
+
+type Props = {
+  acto: ActoCode;
+  state: CaseState;
+  onChange: (state: CaseState) => void;
+};
+
+type FieldProps = {
+  id: string;
+  label: string;
+  hint?: string;
+  children: ReactNode;
+};
+
+const inputClass = "w-full rounded-lg border border-line-strong bg-white px-3 py-2 text-sm text-primary shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-secondary";
+const labelClass = "mb-1 block text-xs font-semibold uppercase tracking-[0.04em] text-secondary";
+const fieldsetClass = "border-t border-line py-4 first:border-t-0";
+const row2Class = "grid gap-3 sm:grid-cols-2";
+const checkClass = "flex items-start gap-2 text-sm text-primary";
+
+const generoOptions: Array<[GeneroCode, string]> = [
+  ["M", "Masculino"],
+  ["F", "Femenino"],
+  ["NB", "No binario"],
+  ["T", "Transgenero"],
+];
+
+const estadoOptions: Array<[EstadoCivil, string]> = [
+  ["soltero", "Soltero(a)"],
+  ["casado_sc", "Casado(a) con sociedad conyugal"],
+  ["union", "Union marital"],
+  ["divorciado", "Divorciado(a)"],
+  ["viudo", "Viudo(a)"],
+];
+
+const tipoDocOptions: Array<[TipoDoc, string]> = [
+  ["CC", "Cedula de ciudadania"],
+  ["CE", "Cedula de extranjeria"],
+  ["PA", "Pasaporte"],
+  ["TI", "Tarjeta de identidad"],
+  ["RC", "Registro civil"],
+  ["PPT", "PPT / Permiso"],
+  ["NIT", "NIT"],
+];
+
+const emptyParty: Party = {
+  tipo: "natural",
+  genero: "M",
+  tipoDoc: "CC",
+  nombre: "",
+  id: "",
+  ciudad: "Medellin",
+  estado: "soltero",
+  repr: "",
+  cuota: 0,
+  direccion: "",
+  telefono: "",
+  correo: "",
+  ocupacion: "",
+  notiElec: true,
+  pep: false,
+};
+
+function Field({ id, label, hint, children }: FieldProps) {
+  return (
+    <div className="mt-3">
+      <label className={labelClass} htmlFor={id}>{label}</label>
+      {children}
+      {hint ? <p className="mt-1 text-xs leading-5 text-secondary">{hint}</p> : null}
+    </div>
+  );
+}
+
+function Fieldset({ marker, title, children }: { marker: string; title: string; children: ReactNode }) {
+  return (
+    <fieldset className={fieldsetClass}>
+      <legend className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-primary">
+        <span className="grid h-5 w-5 place-items-center rounded-md bg-primary text-[10px] text-white">{marker}</span>
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function Checkbox({ id, checked, label, disabled, onChange }: { id: string; checked: boolean; label: string; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className={`${checkClass} mt-3 ${disabled ? "text-secondary" : ""}`} htmlFor={id}>
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-line-strong text-primary accent-[rgb(var(--primary))]"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function TextField({ id, label, value, hint, onChange, type = "text" }: { id: string; label: string; value: string; hint?: string; type?: "text" | "date"; onChange: (value: string) => void }) {
+  return (
+    <Field id={id} label={label} hint={hint}>
+      <input id={id} type={type} value={value} onChange={(event) => onChange(event.currentTarget.value)} className={inputClass} />
+    </Field>
+  );
+}
+
+function TextAreaField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <Field id={id} label={label}>
+      <textarea id={id} value={value} onChange={(event) => onChange(event.currentTarget.value)} className={`${inputClass} min-h-20 resize-y leading-5`} />
+    </Field>
+  );
+}
+
+function NumberField({ id, label, value, onChange }: { id: string; label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <Field id={id} label={label}>
+      <input id={id} type="number" value={Number.isFinite(value) ? value : 0} onChange={(event) => onChange(Number(event.currentTarget.value) || 0)} className={inputClass} />
+    </Field>
+  );
+}
+
+function MoneyField({ id, label, value, onChange }: { id: string; label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <Field id={id} label={label}>
+      <input
+        id={id}
+        inputMode="decimal"
+        value={Number.isFinite(value) && value > 0 ? pts(value) : ""}
+        onChange={(event) => onChange(parseMoney(event.currentTarget.value))}
+        className={inputClass}
+      />
+    </Field>
+  );
+}
+
+function SelectField<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: Array<[T, string]>; onChange: (value: T) => void }) {
+  return (
+    <Field id={id} label={label}>
+      <select id={id} value={value} onChange={(event) => onChange(event.currentTarget.value as T)} className={inputClass}>
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>{optionLabel}</option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+function equalizeCuotas(list: Party[]) {
+  if (list.length === 0) return list;
+  const base = Math.floor(100 / list.length);
+  return list.map((party, index) => ({ ...party, cuota: index === list.length - 1 ? 100 - base * (list.length - 1) : base }));
+}
+
+function isCancelacionState(state: CaseState): state is CancelacionState {
+  return "cNum" in state;
+}
+
+export function EscrituraForm({ acto, state, onChange }: Props) {
+  if (acto === "cancelacion") {
+    if (!isCancelacionState(state)) return null;
+    return <CancelacionForm state={state} onChange={onChange} />;
+  }
+  if (isCancelacionState(state)) return null;
+  return <CompraventaForm acto={acto} state={state} onChange={onChange} />;
+}
+
+function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "cancelacion">; state: CompraventaState; onChange: (state: CaseState) => void }) {
+  const effectiveCredito = acto === "hipoteca" || state.credito;
+  const showAfectacion = casadoOUnion(state.V);
+  const pagosCuadran = state.inicial + state.saldo === state.total;
+  const compradorCuotas = sumaCuotas(state.C);
+  const vendedorCuotas = sumaCuotas(state.V);
+
+  function setField<K extends keyof CompraventaState>(key: K, value: CompraventaState[K]) {
+    onChange({ ...state, [key]: value });
+  }
+
+  function setAx<K extends keyof CompraventaState["ax"]>(key: K, value: boolean) {
+    onChange({ ...state, ax: { ...state.ax, [key]: value } });
+  }
+
+  function setParty(side: "V" | "C", index: number, patch: Partial<Party>) {
+    const next = state[side].map((party, itemIndex) => {
+      if (itemIndex !== index) return party;
+      const updated = { ...party, ...patch };
+      if (patch.tipo === "juridica") {
+        updated.tipoDoc = "NIT";
+        updated.genero = "F";
+        updated.estado = "soltero";
+      }
+      if (patch.tipo === "natural" && updated.tipoDoc === "NIT") {
+        updated.tipoDoc = "CC";
+      }
+      return updated;
+    });
+    onChange({ ...state, [side]: next } as CompraventaState);
+  }
+
+  function addParty(side: "V" | "C") {
+    const next = equalizeCuotas([...state[side], { ...emptyParty }]);
+    onChange({ ...state, [side]: next } as CompraventaState);
+  }
+
+  function removeParty(side: "V" | "C", index: number) {
+    const current = state[side];
+    if (current.length <= 1) return;
+    const next = equalizeCuotas(current.filter((_party, itemIndex) => itemIndex !== index));
+    onChange({ ...state, [side]: next } as CompraventaState);
+  }
+
+  function setAuxList(index: number, patch: Partial<AuxParty>) {
+    const next = state.testigos.map((party, itemIndex) => itemIndex === index ? { ...party, ...patch } : party);
+    setField("testigos", next);
+  }
+
+  function setRuego(patch: Partial<AuxParty>) {
+    setField("ruego", { ...state.ruego, ...patch });
+  }
+
+  return (
+    <form className="ep-card max-h-none overflow-auto rounded-[1.25rem] p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]" autoComplete="off">
+      <Fieldset marker="0" title="Acto">
+        <SelectField
+          id="derecho"
+          label="Derecho que se transfiere"
+          value={state.derecho}
+          onChange={(value) => setField("derecho", value)}
+          options={[
+            ["dominio", "Pleno dominio"],
+            ["nuda", "Nuda propiedad"],
+            ["usufructo", "Usufructo"],
+            ["cuota", "Derechos y acciones"],
+            ["uso", "Uso y habitacion"],
+          ]}
+        />
+        <Checkbox
+          id="credito"
+          checked={effectiveCredito}
+          disabled={acto === "hipoteca"}
+          label="La parte compradora paga con credito hipotecario"
+          onChange={(checked) => setField("credito", checked)}
+        />
+        {effectiveCredito ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <div className={row2Class}>
+              <TextField id="banco" label="Banco acreedor" value={state.banco} onChange={(value) => setField("banco", value)} />
+              <TextField id="bancoNit" label="NIT del banco" value={state.bancoNit} onChange={(value) => setField("bancoNit", value)} />
+            </div>
+            <div className={row2Class}>
+              <NumberField id="plazoAnios" label="Plazo en anos" value={state.plazoAnios} onChange={(value) => setField("plazoAnios", value)} />
+              <NumberField id="numCuotas" label="Numero de cuotas" value={state.numCuotas} onChange={(value) => setField("numCuotas", value)} />
+            </div>
+            <TextField id="apoderadoBanco" label="Apoderado(a) del banco" value={state.apoderadoBanco} onChange={(value) => setField("apoderadoBanco", value)} />
+            <div className={row2Class}>
+              <TextField id="poderBancoEP" label="Poder del banco - E.P." value={state.poderBancoEP} onChange={(value) => setField("poderBancoEP", value)} />
+              <TextField id="poderBancoNot" label="Notaria del poder" value={state.poderBancoNot} onChange={(value) => setField("poderBancoNot", value)} />
+            </div>
+          </div>
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="1" title="Parte vendedora">
+        <Checkbox id="apoderado" checked={state.apod} label="Comparece por apoderado" onChange={(checked) => setField("apod", checked)} />
+        {state.apod ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <TextField id="apodNombre" label="Apoderado - nombre" value={state.apodN} onChange={(value) => setField("apodN", value)} />
+            <TextField id="apodPoder" label="Poder" value={state.apodP} onChange={(value) => setField("apodP", value)} />
+          </div>
+        ) : null}
+        <PartyList title="Vendedor" side="V" parties={state.V} onPatch={setParty} onAdd={() => addParty("V")} onRemove={(index) => removeParty("V", index)} />
+        <p className={`mt-2 text-xs ${vendedorCuotas === 100 ? "text-emerald-700" : "text-amber-700"}`}>Cuotas vendedoras: {vendedorCuotas}%.</p>
+        {showAfectacion ? (
+          <SelectField
+            id="afectada"
+            label="El inmueble esta afectado a vivienda familiar"
+            value={state.afect}
+            onChange={(value) => setField("afect", value)}
+            options={[
+              ["no", "No, se declara"],
+              ["si", "Si"],
+              ["nosabe", "No se sabe"],
+            ]}
+          />
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="1b" title="Parte compradora">
+        <PartyList title="Comprador" side="C" parties={state.C} onPatch={setParty} onAdd={() => addParty("C")} onRemove={(index) => removeParty("C", index)} />
+        <p className={`mt-2 text-xs ${compradorCuotas === 100 ? "text-emerald-700" : "text-red-700"}`}>Cuotas compradoras: {compradorCuotas}%.</p>
+      </Fieldset>
+
+      <Fieldset marker="2" title="Inmueble">
+        <TextAreaField id="inmdesc" label="Descripcion y area" value={state.inmdesc} onChange={(value) => setField("inmdesc", value)} />
+        <TextAreaField id="linderos" label="Linderos" value={state.linderos} onChange={(value) => setField("linderos", value)} />
+        <div className={row2Class}>
+          <TextField id="matricula" label="Matricula inmobiliaria" value={state.matricula} onChange={(value) => setField("matricula", value)} />
+          <TextField id="catastral" label="Cedula catastral" value={state.catastral} onChange={(value) => setField("catastral", value)} />
+        </div>
+        <div className={row2Class}>
+          <MoneyField id="avaluoCatastral" label="Avaluo catastral" value={state.avaluoCatastral} onChange={(value) => setField("avaluoCatastral", value)} />
+          <TextField id="nupre" label="NUPRE" value={state.nupre} onChange={(value) => setField("nupre", value)} />
+        </div>
+        <Checkbox id="ph" checked={state.ph} label="Sometido a propiedad horizontal" onChange={(checked) => setField("ph", checked)} />
+        {state.ph ? <TextField id="phReg" label="Reglamento de P.H." value={state.phReg} onChange={(value) => setField("phReg", value)} /> : null}
+        <SelectField
+          id="vis"
+          label="Vivienda de interes social"
+          value={state.vis}
+          onChange={(value) => setField("vis", value)}
+          options={[
+            ["no", "No"],
+            ["sfve", "Si - subsidio 100% en especie"],
+            ["otra", "Si - otra modalidad"],
+          ]}
+        />
+      </Fieldset>
+
+      <Fieldset marker="3" title="Titulo y estado juridico">
+        <div className={row2Class}>
+          <TextField id="tituloNum" label="Titulo - numero de escritura" value={state.tituloNum} onChange={(value) => setField("tituloNum", value)} />
+          <TextField id="tituloFecha" label="Titulo - fecha" type="date" value={state.tituloFecha} onChange={(value) => setField("tituloFecha", value)} />
+        </div>
+        <TextField id="tituloNotaria" label="Titulo - notaria de origen" value={state.tituloNotaria} onChange={(value) => setField("tituloNotaria", value)} />
+        <SelectField
+          id="gravamen"
+          label="Gravamenes o limitaciones"
+          value={state.gravamen}
+          onChange={(value) => setField("gravamen", value)}
+          options={[
+            ["libre", "Libre de gravamenes"],
+            ["hipoteca_previa", "Hipoteca previa"],
+            ["patrimonio", "Patrimonio de familia"],
+            ["usufructo", "Usufructo vigente"],
+            ["servidumbre", "Servidumbre"],
+            ["leasing", "Leasing habitacional"],
+            ["embargo", "Embargo / demanda"],
+          ]}
+        />
+      </Fieldset>
+
+      <Fieldset marker="4" title="Precio">
+        <MoneyField id="total" label="Precio total" value={state.total} onChange={(value) => setField("total", value)} />
+        <div className={row2Class}>
+          <MoneyField id="inicial" label="Cuota inicial" value={state.inicial} onChange={(value) => setField("inicial", value)} />
+          <MoneyField id="saldo" label="Saldo con credito" value={state.saldo} onChange={(value) => setField("saldo", value)} />
+        </div>
+        <p className={`mt-2 text-xs ${pagosCuadran ? "text-emerald-700" : "text-red-700"}`}>
+          {pagosCuadran ? "Los pagos cuadran con el total." : `Inicial + saldo = ${pts(state.inicial + state.saldo)} y total = ${pts(state.total)}.`}
+        </p>
+      </Fieldset>
+
+      <Fieldset marker="5" title="Acto avanzado">
+        <SelectField
+          id="tipoNegocio"
+          label="Tipo de negocio"
+          value={state.tipoNegocio}
+          onChange={(value) => setField("tipoNegocio", value)}
+          options={[
+            ["compraventa", "Compraventa"],
+            ["permuta", "Permuta"],
+            ["dacion", "Dacion en pago"],
+            ["retroventa", "Compraventa con pacto de retroventa"],
+            ["reserva", "Compraventa con reserva de dominio"],
+          ]}
+        />
+        <SelectField
+          id="tituloTipo"
+          label="Titulo de adquisicion del vendedor"
+          value={state.tituloTipo}
+          onChange={(value) => setField("tituloTipo", value)}
+          options={[
+            ["compraventa", "Compraventa anterior"],
+            ["sucesion", "Sucesion / adjudicacion"],
+            ["donacion", "Donacion"],
+            ["remate", "Adjudicacion en remate"],
+            ["prescripcion", "Prescripcion"],
+          ]}
+        />
+        <Checkbox id="subsidio" checked={state.subsidio} label="Pago con subsidio de vivienda" onChange={(checked) => setField("subsidio", checked)} />
+        {state.subsidio ? <TextField id="subsidioEnt" label="Entidad del subsidio" value={state.subsidioEnt} onChange={(value) => setField("subsidioEnt", value)} /> : null}
+        <Checkbox id="posesion2" checked={state.posesion2} label="El vendedor poseyo el inmueble 2 anos o mas" onChange={(checked) => setField("posesion2", checked)} />
+        <Checkbox id="firmaRuego" checked={state.firmaRuego} label="Un otorgante firma a ruego" onChange={(checked) => setField("firmaRuego", checked)} />
+        {state.firmaRuego ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <AuxPartyFields title="Firmante a ruego" scope="ruego" party={state.ruego} onPatch={setRuego} />
+          </div>
+        ) : null}
+        <Checkbox id="interprete" checked={state.interprete} label="Requiere interprete / traductor" onChange={(checked) => setField("interprete", checked)} />
+        <Checkbox id="pep" checked={state.pep} label="Alguna parte es PEP" onChange={(checked) => setField("pep", checked)} />
+        <Checkbox id="cuentaTercero" checked={state.cuentaTercero} label="Alguna parte actua por cuenta de tercero" onChange={(checked) => setField("cuentaTercero", checked)} />
+      </Fieldset>
+
+      <Fieldset marker="6" title="Otorgamiento y firmas">
+        <div className={row2Class}>
+          <TextField id="numEscritura" label="Numero de escritura" value={state.numEscritura} onChange={(value) => setField("numEscritura", value)} />
+          <TextField id="hojaInicial" label="Hoja de papel notarial" value={state.hojaInicial} onChange={(value) => setField("hojaInicial", value)} />
+        </div>
+        <TextField
+          id="fechaOtorg"
+          label="Fecha de otorgamiento"
+          type="date"
+          value={state.fechaOtorg}
+          hint={state.fechaOtorg ? `En la escritura: a los ${fechaText(state.fechaOtorg)}.` : "Seleccione la fecha de otorgamiento."}
+          onChange={(value) => setField("fechaOtorg", value)}
+        />
+        <Checkbox id="huella" checked={state.huella} label="Se toma impresion dactilar de los otorgantes" onChange={(checked) => setField("huella", checked)} />
+        <Checkbox id="testigos" checked={state.testigosOn} label="Concurren testigos instrumentales" onChange={(checked) => setField("testigosOn", checked)} />
+        {state.testigosOn || state.firmaRuego ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            {state.testigos.map((party, index) => (
+              <AuxPartyFields key={index} title={`Testigo ${index + 1}`} scope={`testigo-${index}`} party={party} onPatch={(patch) => setAuxList(index, patch)} />
+            ))}
+          </div>
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="7" title="Anexos aportados">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Checkbox id="ax_tradicion" checked={state.ax.tradicion} label="Certificado de tradicion" onChange={(checked) => setAx("tradicion", checked)} />
+          <Checkbox id="ax_predial" checked={state.ax.predial} label="Paz y salvo predial" onChange={(checked) => setAx("predial", checked)} />
+          <Checkbox id="ax_admin" checked={state.ax.admin} label="Paz y salvo administracion" onChange={(checked) => setAx("admin", checked)} />
+          <Checkbox id="ax_cedulas" checked={state.ax.cedulas} label="Cedulas" onChange={(checked) => setAx("cedulas", checked)} />
+        </div>
+      </Fieldset>
+    </form>
+  );
+}
+
+function PartyList({ title, side, parties, onPatch, onAdd, onRemove }: { title: "Vendedor" | "Comprador"; side: "V" | "C"; parties: Party[]; onPatch: (side: "V" | "C", index: number, patch: Partial<Party>) => void; onAdd: () => void; onRemove: (index: number) => void }) {
+  return (
+    <div className="mt-3 space-y-3">
+      {parties.map((party, index) => (
+        <div key={index} className="rounded-lg border border-line bg-white p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-primary">{title} {index + 1}</h3>
+            {parties.length > 1 ? (
+              <button type="button" onClick={() => onRemove(index)} className="inline-flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs font-semibold text-secondary hover:border-red-300 hover:text-red-700">
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Quitar
+              </button>
+            ) : null}
+          </div>
+          <SelectField<TipoPersona>
+            id={`${side}-${index}-tipo`}
+            label="Naturaleza"
+            value={party.tipo}
+            onChange={(value) => onPatch(side, index, { tipo: value })}
+            options={[
+              ["natural", "Persona natural"],
+              ["juridica", "Persona juridica"],
+            ]}
+          />
+          <TextField id={`${side}-${index}-nombre`} label={`Nombre ${title.toLowerCase()} ${index + 1}`} value={party.nombre} onChange={(value) => onPatch(side, index, { nombre: value })} />
+          {party.tipo === "juridica" ? (
+            <>
+              <div className={row2Class}>
+                <TextField id={`${side}-${index}-id`} label="NIT" value={party.id} onChange={(value) => onPatch(side, index, { id: value })} />
+                <NumberField id={`${side}-${index}-cuota`} label="Cuota %" value={party.cuota} onChange={(value) => onPatch(side, index, { cuota: value })} />
+              </div>
+              <TextField id={`${side}-${index}-ciudad`} label="Domicilio" value={party.ciudad} onChange={(value) => onPatch(side, index, { ciudad: value })} />
+              <TextField id={`${side}-${index}-repr`} label="Representante legal" value={party.repr} onChange={(value) => onPatch(side, index, { repr: value })} />
+            </>
+          ) : (
+            <>
+              <SelectField<TipoDoc> id={`${side}-${index}-tipoDoc`} label="Tipo de documento" value={party.tipoDoc} onChange={(value) => onPatch(side, index, { tipoDoc: value })} options={tipoDocOptions.filter(([code]) => code !== "NIT")} />
+              <div className={row2Class}>
+                <TextField id={`${side}-${index}-id`} label="Numero de documento" value={party.id} onChange={(value) => onPatch(side, index, { id: value })} />
+                <NumberField id={`${side}-${index}-cuota`} label="Cuota %" value={party.cuota} onChange={(value) => onPatch(side, index, { cuota: value })} />
+              </div>
+              <div className={row2Class}>
+                <TextField id={`${side}-${index}-ciudad`} label="Domicilio" value={party.ciudad} onChange={(value) => onPatch(side, index, { ciudad: value })} />
+                <SelectField<GeneroCode> id={`${side}-${index}-genero`} label="Genero / sexo" value={party.genero} onChange={(value) => onPatch(side, index, { genero: value })} options={generoOptions} />
+              </div>
+              <SelectField<EstadoCivil> id={`${side}-${index}-estado`} label="Estado civil" value={party.estado} onChange={(value) => onPatch(side, index, { estado: value })} options={estadoOptions} />
+            </>
+          )}
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-primary">Datos para firma</p>
+            <TextField id={`${side}-${index}-direccion`} label="Direccion" value={party.direccion} onChange={(value) => onPatch(side, index, { direccion: value })} />
+            <div className={row2Class}>
+              <TextField id={`${side}-${index}-telefono`} label="Telefono" value={party.telefono} onChange={(value) => onPatch(side, index, { telefono: value })} />
+              <TextField id={`${side}-${index}-ocupacion`} label={party.tipo === "juridica" ? "Actividad economica" : "Profesion u ocupacion"} value={party.ocupacion} onChange={(value) => onPatch(side, index, { ocupacion: value })} />
+            </div>
+            <TextField id={`${side}-${index}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch(side, index, { correo: value })} />
+            <Checkbox id={`${side}-${index}-notiElec`} checked={party.notiElec} label="Autoriza notificaciones electronicas" onChange={(checked) => onPatch(side, index, { notiElec: checked })} />
+            <Checkbox id={`${side}-${index}-pep`} checked={party.pep} label="Persona Expuesta Politicamente" onChange={(checked) => onPatch(side, index, { pep: checked })} />
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={onAdd} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/8 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/12">
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        Agregar {title.toLowerCase()}
+      </button>
+    </div>
+  );
+}
+
+function AuxPartyFields({ title, scope, party, onPatch }: { title: string; scope: string; party: AuxParty; onPatch: (patch: Partial<AuxParty>) => void }) {
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-white p-3">
+      <h3 className="text-sm font-bold text-primary">{title}</h3>
+      <TextField id={`${scope}-nombre`} label="Nombre" value={party.nombre} onChange={(value) => onPatch({ nombre: value })} />
+      <SelectField<TipoDoc> id={`${scope}-tipoDoc`} label="Tipo de documento" value={party.tipoDoc} onChange={(value) => onPatch({ tipoDoc: value })} options={tipoDocOptions.filter(([code]) => code !== "NIT")} />
+      <div className={row2Class}>
+        <TextField id={`${scope}-id`} label="Numero de documento" value={party.id} onChange={(value) => onPatch({ id: value })} />
+        <TextField id={`${scope}-ciudad`} label="Municipio" value={party.ciudad} onChange={(value) => onPatch({ ciudad: value })} />
+      </div>
+      <TextField id={`${scope}-direccion`} label="Direccion" value={party.direccion} onChange={(value) => onPatch({ direccion: value })} />
+      <div className={row2Class}>
+        <TextField id={`${scope}-telefono`} label="Telefono" value={party.telefono} onChange={(value) => onPatch({ telefono: value })} />
+        <TextField id={`${scope}-ocupacion`} label="Profesion u ocupacion" value={party.ocupacion} onChange={(value) => onPatch({ ocupacion: value })} />
+      </div>
+      <TextField id={`${scope}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch({ correo: value })} />
+    </div>
+  );
+}
+
+function CancelacionForm({ state, onChange }: { state: CancelacionState; onChange: (state: CaseState) => void }) {
+  function setField<K extends keyof CancelacionState>(key: K, value: CancelacionState[K]) {
+    onChange({ ...state, [key]: value });
+  }
+
+  return (
+    <form className="ep-card max-h-none overflow-auto rounded-[1.25rem] p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]" autoComplete="off">
+      <Fieldset marker="1" title="Acreedor">
+        <div className={row2Class}>
+          <TextField id="cBanco" label="Banco acreedor" value={state.cBanco} onChange={(value) => setField("cBanco", value)} />
+          <TextField id="cBancoNit" label="NIT" value={state.cBancoNit} onChange={(value) => setField("cBancoNit", value)} />
+        </div>
+        <TextField id="cBancoDom" label="Domicilio principal" value={state.cBancoDom} onChange={(value) => setField("cBancoDom", value)} />
+        <SelectField
+          id="cRepTipo"
+          label="Como se acredita la representacion"
+          value={state.cRepTipo}
+          onChange={(value) => setField("cRepTipo", value)}
+          options={[
+            ["apoderado", "Apoderado(a) especial"],
+            ["replegal", "Representante legal"],
+          ]}
+        />
+        <TextField id="cRepCargo" label="Cargo con que obra" value={state.cRepCargo} onChange={(value) => setField("cRepCargo", value)} />
+        {state.cRepTipo === "apoderado" ? (
+          <div className={row2Class}>
+            <TextField id="cPoderEP" label="Poder - E.P. numero" value={state.cPoderEP} onChange={(value) => setField("cPoderEP", value)} />
+            <TextField id="cPoderFecha" label="Poder - fecha" value={state.cPoderFecha} onChange={(value) => setField("cPoderFecha", value)} />
+          </div>
+        ) : null}
+        {state.cRepTipo === "apoderado" ? <TextField id="cPoderNotaria" label="Poder - notaria" value={state.cPoderNotaria} onChange={(value) => setField("cPoderNotaria", value)} /> : null}
+      </Fieldset>
+
+      <Fieldset marker="2" title="Otorgante del banco">
+        <TextField id="cApoNombre" label="Nombre" value={state.cApoNombre} onChange={(value) => setField("cApoNombre", value)} />
+        <div className={row2Class}>
+          <TextField id="cApoCC" label="Cedula de ciudadania" value={state.cApoCC} onChange={(value) => setField("cApoCC", value)} />
+          <SelectField<GeneroCode> id="cApoGenero" label="Genero / sexo" value={state.cApoGenero} onChange={(value) => setField("cApoGenero", value)} options={generoOptions} />
+        </div>
+      </Fieldset>
+
+      <Fieldset marker="3" title="Propietario / deudor">
+        <TextField id="cDeudor" label="Nombre(s) del deudor" value={state.cDeudor} onChange={(value) => setField("cDeudor", value)} />
+        <p className="mt-2 text-xs leading-5 text-secondary">El deudor no firma: el acreedor libera el gravamen constituido a su favor.</p>
+      </Fieldset>
+
+      <Fieldset marker="4" title="Hipoteca que se cancela">
+        <div className={row2Class}>
+          <TextField id="cHipEP" label="E.P. de constitucion - numero" value={state.cHipEP} onChange={(value) => setField("cHipEP", value)} />
+          <TextField id="cHipFecha" label="E.P. - fecha" value={state.cHipFecha} onChange={(value) => setField("cHipFecha", value)} />
+        </div>
+        <TextField id="cHipNotaria" label="Notaria de constitucion" value={state.cHipNotaria} onChange={(value) => setField("cHipNotaria", value)} />
+        <div className={row2Class}>
+          <TextField id="cHipRegFecha" label="Fecha de registro" value={state.cHipRegFecha} onChange={(value) => setField("cHipRegFecha", value)} />
+          <MoneyField id="cHipMonto" label="Monto inicial" value={state.cHipMonto} onChange={(value) => setField("cHipMonto", value)} />
+        </div>
+        <TextField id="cOrip" label="Oficina de Registro" value={state.cOrip} onChange={(value) => setField("cOrip", value)} />
+      </Fieldset>
+
+      <Fieldset marker="5" title="Inmueble liberado">
+        <TextAreaField id="cInmdesc" label="Descripcion y ubicacion" value={state.cInmdesc} onChange={(value) => setField("cInmdesc", value)} />
+        <div className={row2Class}>
+          <TextField id="cMatricula" label="Folio de matricula" value={state.cMatricula} onChange={(value) => setField("cMatricula", value)} />
+          <TextField id="cCatastral" label="Codigo catastral" value={state.cCatastral} onChange={(value) => setField("cCatastral", value)} />
+        </div>
+        <TextField id="cNupre" label="NUPRE" value={state.cNupre} onChange={(value) => setField("cNupre", value)} />
+      </Fieldset>
+
+      <Fieldset marker="6" title="Escritura, notario y opciones">
+        <div className={row2Class}>
+          <TextField id="cNum" label="Numero de escritura" value={state.cNum} onChange={(value) => setField("cNum", value)} />
+          <TextField id="cFechaOtorg" label="Fecha de otorgamiento" type="date" value={state.cFechaOtorg} onChange={(value) => setField("cFechaOtorg", value)} />
+        </div>
+        <TextField id="cNotario" label="Notario(a) que autoriza" value={state.cNotario} onChange={(value) => setField("cNotario", value)} />
+        <div className={row2Class}>
+          <SelectField<GeneroCode> id="cNotarioGenero" label="Genero del notario" value={state.cNotarioGenero} onChange={(value) => setField("cNotarioGenero", value)} options={generoOptions} />
+          <TextField id="cCalidad" label="Calidad" value={state.cCalidad} onChange={(value) => setField("cCalidad", value)} />
+        </div>
+        <TextField id="cActoAdmin" label="Acto administrativo" value={state.cActoAdmin} onChange={(value) => setField("cActoAdmin", value)} />
+        <div className={row2Class}>
+          <TextField id="cHojas" label="Hojas de papel notarial" value={state.cHojas} onChange={(value) => setField("cHojas", value)} />
+          <MoneyField id="cRecaudo" label="Recaudo Superintendencia y Fondo" value={state.cRecaudo} onChange={(value) => setField("cRecaudo", value)} />
+        </div>
+        <TextField id="cCorreoNotif" label="Correo para notificaciones electronicas" value={state.cCorreoNotif} onChange={(value) => setField("cCorreoNotif", value)} />
+        <Checkbox id="cSinCuantia" checked={state.cSinCuantia} label="Acto sin cuantia - credito de vivienda" onChange={(checked) => setField("cSinCuantia", checked)} />
+        <Checkbox id="cNoPazSalvo" checked={state.cNoPazSalvo} label="Incluir clausula de no paz y salvo" onChange={(checked) => setField("cNoPazSalvo", checked)} />
+        <Checkbox id="cSarlaft" checked={state.cSarlaft} label="Incluir nota SARLAFT / tratamiento de datos" onChange={(checked) => setField("cSarlaft", checked)} />
+        <Checkbox id="cNotiElec" checked={state.cNotiElec} label="Autoriza notificaciones electronicas" onChange={(checked) => setField("cNotiElec", checked)} />
+      </Fieldset>
+    </form>
+  );
+}
