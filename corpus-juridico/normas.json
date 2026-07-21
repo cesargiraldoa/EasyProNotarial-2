@@ -1271,5 +1271,24 @@
     "texto": "ARTÍCULO 7o. El cónyuge que haya iniciado el trámite de divorcio por la causal 10, podrá acudir al trámite notarial, siempre que, por mutuo acuerdo, decidan tramitarlo bajo la causal 9, por lo que se podrá continuar y terminar el trámite ante notario.",
     "notas": "Fuente: verificación. | [GPT 2026-07-21] La causal unilateral se inicia judicialmente; la vía notarial solo procede si sobreviene mutuo acuerdo.",
     "slug": "ley-2442-2024"
+  },
+  {
+    "tipo": "Ley",
+    "numero": "1561",
+    "anio": 2012,
+    "articulo": null,
+    "materia": "saneamiento; falsa tradición; compraventa; inmueble",
+    "autoridad": "Congreso de la República",
+    "estado": "vigente",
+    "vigencia_formal": "vigente",
+    "aplicabilidad_operativa": "vigente",
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "url_oficial": null,
+    "confianza": "baja",
+    "fecha_verificacion": null,
+    "texto": "Norma de saneamiento de la falsa tradición mencionada por el normograma de compraventa como pendiente de incorporar/verificar.",
+    "notas": "Agregada desde docs/ecosistema-notarial/normograma-compraventa.md y mapa-situaciones.md (dimensión 10). No aparece en la verificación oficial del corpus; requiere revisión jurídica y URL oficial.",
+    "slug": "ley-1561-2012"
   }
 ]

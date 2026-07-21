@@ -331,5 +331,96 @@
     "norma_slug": "decreto-0732-2026",
     "vigencia_desde": "2026-07-01",
     "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_varios_inmuebles_identificacion_individual",
+    "condicion_json": {
+      "inmuebles_con_identificacion_incompleta": true
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Cada inmueble del instrumento debe tener matrícula inmobiliaria y linderos propios.",
+    "norma_slug": "ley-1579-2012-art-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_varios_inmuebles_clausula_enumera_folios",
+    "condicion_json": {
+      "varios_inmuebles": true
+    },
+    "efecto": "insertar_clausula_varios_inmuebles",
+    "severidad": "REVIEW",
+    "mensaje": "El objeto debe enumerar cada inmueble con folio, linderos, cédula catastral y NUPRE.",
+    "norma_slug": "ley-1579-2012-art-8",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_estado_folio_especial_advertencia_1579",
+    "condicion_json": {
+      "folio_estado_especial": true
+    },
+    "efecto": "insertar_advertencia_estado_folio",
+    "severidad": "WARN",
+    "mensaje": "El estado especial del folio exige revisar tracto, cabida, linderos y antecedentes registrales.",
+    "norma_slug": "ley-1579-2012-art-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_falsa_tradicion_advertencia_saneamiento",
+    "condicion_json": {
+      "folio_falsa_tradicion": true
+    },
+    "efecto": "insertar_advertencia_falsa_tradicion",
+    "severidad": "WARN",
+    "mensaje": "El folio con falsa tradición requiere revisar saneamiento; la compraventa no sanea por sí sola el dominio.",
+    "norma_slug": "ley-1561-2012",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_cancelacion_hipoteca_previa",
+    "condicion_json": {
+      "encadenamiento_cancelacion_hipoteca_previa": true
+    },
+    "efecto": "insertar_acto_previo_cancelacion_hipoteca",
+    "severidad": "REVIEW",
+    "mensaje": "La cancelación de hipoteca previa debe redactarse como acto previo e identificar el gravamen a cancelar.",
+    "norma_slug": "ley-1579-2012-art-4",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_cancelacion_patrimonio_familia",
+    "condicion_json": {
+      "encadenamiento_cancelacion_patrimonio_familia": true
+    },
+    "efecto": "insertar_acto_previo_cancelacion_patrimonio",
+    "severidad": "REVIEW",
+    "mensaje": "La cancelación de patrimonio de familia se redacta antes de la transferencia y exige validar comparecientes/autorización aplicable.",
+    "norma_slug": "ley-70-1931-ley-495-1999-patrimonio-familia",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_afectacion_vivienda_familiar",
+    "condicion_json": {
+      "encadenamiento_afectacion_vivienda_familiar": true
+    },
+    "efecto": "insertar_acto_posterior_afectacion_vivienda",
+    "severidad": "REVIEW",
+    "mensaje": "La afectación a vivienda familiar se redacta como acto posterior a la compraventa y queda sujeta a validación humana.",
+    "norma_slug": "ley-258-1996-art-6",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
   }
 ]

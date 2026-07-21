@@ -596,5 +596,83 @@
     "vigencia_desde": null,
     "vigencia_hasta": null,
     "notas": "Nota fija esperada por el motor aunque algunas extracciones no la traen."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 240,
+    "titulo": "Parágrafo - Varios inmuebles",
+    "texto": "Cuando el instrumento comprenda varios inmuebles, cada uno se enumera con descripción, linderos, matrícula inmobiliaria, cédula catastral y NUPRE propios. La transferencia comprende únicamente los folios individualizados en este instrumento.",
+    "capa": "por_ley",
+    "norma_slug": "ley-1579-2012-art-8",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensión 10: varios inmuebles. Complementa la cláusula de objeto sin reemplazarla."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 250,
+    "titulo": "Parágrafo - Estado del folio segregado/englobe/desenglobe/mayor extensión",
+    "texto": "Se advierte que el estado especial del folio ({estado_folio}) exige revisar la continuidad del tracto, la individualización registral, la cabida, los linderos y los antecedentes de origen antes de radicar el título.",
+    "capa": "por_ley",
+    "norma_slug": "ley-1579-2012-art-16",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensión 10: segregado, englobe, desenglobe y mayor extensión."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 260,
+    "titulo": "Parágrafo - Falsa tradición",
+    "texto": "El folio registra antecedente de falsa tradición; se advierte que la compraventa no sanea por sí sola el dominio y que debe verificarse el trámite de saneamiento aplicable antes del registro.",
+    "capa": "por_ley",
+    "norma_slug": "ley-1561-2012",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Ley 1561/2012 fue incorporada desde el normograma como pendiente de verificación; confianza baja en normas.json."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 270,
+    "titulo": "Acto previo - Cancelación de hipoteca previa",
+    "texto": "El acreedor hipotecario comparece y cancela la hipoteca previa identificada por escritura, notaría, fecha de registro, ORIP y folio(s), para que la compraventa continúe con el inmueble libre de dicho gravamen.",
+    "capa": "por_ley",
+    "norma_slug": "ley-1579-2012-art-4",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensiones 17 y 21; reutiliza el acto existente de cancelación de hipoteca."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 280,
+    "titulo": "Acto previo - Cancelación de patrimonio de familia",
+    "texto": "Los interesados cancelan el patrimonio de familia vigente por escritura pública para que el inmueble pueda transferirse libre de dicha limitación, sin perjuicio de revisar autorización judicial cuando existan menores.",
+    "capa": "por_ley",
+    "norma_slug": "ley-70-1931-ley-495-1999-patrimonio-familia",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensión 21: compra + patrimonio/cancelación."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 290,
+    "titulo": "Acto posterior - Afectación a vivienda familiar",
+    "texto": "La parte compradora puede constituir afectación a vivienda familiar en el mismo instrumento, dejando la manifestación expresa y la advertencia notarial correspondiente.",
+    "capa": "por_ley",
+    "norma_slug": "ley-258-1996-art-6",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensiones 3, 12 y 21: compra + afectación."
   }
 ]

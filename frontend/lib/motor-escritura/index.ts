@@ -34,6 +34,42 @@ export interface AuxParty {
   ocupacion: string;
 }
 
+export type FolioEstado = "matriz" | "segregado" | "englobe" | "desenglobe" | "mayor_extension" | "falsa_tradicion";
+
+export interface CompraventaInmueble {
+  descripcion: string;
+  linderos: string;
+  matricula: string;
+  catastral: string;
+  nupre: string;
+  avaluoCatastral?: number;
+}
+
+export interface EncadenamientosCompraventa {
+  cancelacionHipotecaPrevia?: boolean;
+  cancelacionPatrimonioFamilia?: boolean;
+  afectacionViviendaFamiliar?: boolean;
+  hipotecaPrevia?: {
+    acreedor?: string;
+    nit?: string;
+    escritura?: string;
+    fecha?: string;
+    notaria?: string;
+    registroFecha?: string;
+    orip?: string;
+    monto?: number;
+  };
+  patrimonioFamilia?: {
+    escritura?: string;
+    fecha?: string;
+    notaria?: string;
+    beneficiarios?: string;
+  };
+  afectacion?: {
+    beneficiarios?: string;
+  };
+}
+
 export interface CompraventaState {
   derecho: "dominio" | "nuda" | "usufructo" | "cuota" | "uso";
   credito: boolean;
@@ -46,6 +82,9 @@ export interface CompraventaState {
   poderBancoNot: string;
   avaluoCatastral: number;
   nupre: string;
+  inmuebles?: CompraventaInmueble[];
+  folioEstado?: FolioEstado;
+  encadenamientos?: EncadenamientosCompraventa;
   apod: boolean;
   apodN: string;
   apodP: string;
@@ -586,6 +625,112 @@ export const defaults: Record<ActoCode, CaseState> = {
   cancelacion: { ...defaultCancelacion },
 };
 
+function legacyInmueble(s: CompraventaState): CompraventaInmueble {
+  return {
+    descripcion: s.inmdesc,
+    linderos: s.linderos,
+    matricula: s.matricula,
+    catastral: s.catastral,
+    nupre: s.nupre,
+    avaluoCatastral: s.avaluoCatastral,
+  };
+}
+
+export function inmueblesCompraventa(s: CompraventaState): CompraventaInmueble[] {
+  const list = Array.isArray(s.inmuebles) ? s.inmuebles.filter(Boolean) : [];
+  return list.length ? list.map((inmueble) => ({
+    descripcion: inmueble.descripcion || "",
+    linderos: inmueble.linderos || "",
+    matricula: inmueble.matricula || "",
+    catastral: inmueble.catastral || "",
+    nupre: inmueble.nupre || "",
+    avaluoCatastral: Number.isFinite(inmueble.avaluoCatastral) ? inmueble.avaluoCatastral : 0,
+  })) : [legacyInmueble(s)];
+}
+
+function usaInmueblesExplicitos(s: CompraventaState): boolean {
+  return Array.isArray(s.inmuebles) && s.inmuebles.length > 0;
+}
+
+function inmuebleField(s: CompraventaState, index: number, key: keyof CompraventaInmueble): string {
+  if (!usaInmueblesExplicitos(s) && index === 0) {
+    if (key === "descripcion") return "inmdesc";
+    if (key === "avaluoCatastral") return "avaluoCatastral";
+    return key;
+  }
+  return "inmuebles." + index + "." + key;
+}
+
+function descripcionInmueble(s: CompraventaState, inmueble: CompraventaInmueble, index: number): string {
+  return IF(inmuebleField(s, index, "descripcion"), inmueble.descripcion)
+    + ". FOLIO DE MATRÍCULA INMOBILIARIA NRO. " + IF(inmuebleField(s, index, "matricula"), inmueble.matricula || "________")
+    + ". CÉDULA CATASTRAL: " + IF(inmuebleField(s, index, "catastral"), inmueble.catastral || "________")
+    + ". NUPRE: " + IF(inmuebleField(s, index, "nupre"), inmueble.nupre || "________")
+    + ". Cuyos linderos generales son: " + IF(inmuebleField(s, index, "linderos"), inmueble.linderos);
+}
+
+function folioEstadosActivos(s: CompraventaState): boolean {
+  return Boolean(s.folioEstado && s.folioEstado !== "matriz");
+}
+
+function folioEstadoLabel(estado: FolioEstado): string {
+  const labels: Record<FolioEstado, string> = {
+    matriz: "Matriz",
+    segregado: "Segregado",
+    englobe: "Englobe",
+    desenglobe: "Desenglobe",
+    mayor_extension: "Mayor extensión",
+    falsa_tradicion: "Falsa tradición",
+  };
+  return labels[estado];
+}
+
+function folioEstadoCita(estado: FolioEstado): string {
+  return estado === "falsa_tradicion" ? "Ley 1561/2012" : "Ley 1579/2012";
+}
+
+function folioEstadoTexto(estado: FolioEstado): string {
+  const textos: Record<FolioEstado, string> = {
+    matriz: "",
+    segregado: "El folio corresponde a un inmueble segregado; las partes declaran que la segregación y su antecedente registral fueron revisados en el certificado de tradición y libertad.",
+    englobe: "El folio refleja un englobe; las partes declaran que el nuevo folio integra los predios de origen y que se verificó la continuidad del tracto registral.",
+    desenglobe: "El folio proviene de un desenglobe; las partes declaran que el predio transferido quedó individualizado con matrícula, cabida y linderos propios.",
+    mayor_extension: "El inmueble se desprende de uno de mayor extensión; se advierte que deben coincidir el antecedente, el área remanente y la individualización registral del predio objeto de transferencia.",
+    falsa_tradicion: "El folio registra antecedente de falsa tradición; se advierte que esta escritura no sanea por sí sola el dominio y que debe verificarse el trámite de saneamiento aplicable antes del registro.",
+  };
+  return textos[estado];
+}
+
+function encadenamientosActivos(s: CompraventaState): EncadenamientosCompraventa {
+  return s.encadenamientos || {};
+}
+
+function anyEncadenamiento(s: CompraventaState): boolean {
+  const enc = encadenamientosActivos(s);
+  return Boolean(enc.cancelacionHipotecaPrevia || enc.cancelacionPatrimonioFamilia || enc.afectacionViviendaFamiliar);
+}
+
+function renderEncadenamientos(s: CompraventaState, compradorLabel: string): string {
+  const enc = encadenamientosActivos(s);
+  let h = "";
+  if (enc.cancelacionHipotecaPrevia) {
+    const hip = enc.hipotecaPrevia || {};
+    h += '<div class="sech" data-sec="enc-cancelacion-hipoteca" style="text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:22px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)">ACTO PREVIO: CANCELACIÓN DE HIPOTECA</div>';
+    h += '<p class="cl"><span class="clh">PRIMERO: CANCELACIÓN DE HIPOTECA PREVIA.</span> ' + R("Comparece el acreedor hipotecario " + IF("encadenamientos.hipotecaPrevia.acreedor", hip.acreedor || "________") + (hip.nit ? ", identificado con NIT " + IF("encadenamientos.hipotecaPrevia.nit", hip.nit) : "") + ", y manifiesta que cancela en su totalidad la hipoteca constituida mediante Escritura Pública número " + IF("encadenamientos.hipotecaPrevia.escritura", hip.escritura || "________") + " del " + IF("encadenamientos.hipotecaPrevia.fecha", hip.fecha ? fechaCorta(hip.fecha) : "________") + " de la " + IF("encadenamientos.hipotecaPrevia.notaria", hip.notaria || "________") + ", registrada el " + IF("encadenamientos.hipotecaPrevia.registroFecha", hip.registroFecha || "________") + " en la Oficina de Registro de Instrumentos Públicos de " + IF("encadenamientos.hipotecaPrevia.orip", hip.orip || "________") + ".", "art. 2457 C.C. · Ley 1579/2012") + '<span class="fill"></span></p>';
+  }
+  if (enc.cancelacionPatrimonioFamilia) {
+    const pat = enc.patrimonioFamilia || {};
+    h += '<div class="sech" data-sec="enc-cancelacion-patrimonio" style="text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:22px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)">ACTO PREVIO: CANCELACIÓN DE PATRIMONIO DE FAMILIA</div>';
+    h += '<p class="cl"><span class="clh">PRIMERO: CANCELACIÓN DE PATRIMONIO DE FAMILIA.</span> ' + R("Los interesados manifiestan que cancelan el patrimonio de familia constituido mediante Escritura Pública número " + IF("encadenamientos.patrimonioFamilia.escritura", pat.escritura || "________") + " del " + IF("encadenamientos.patrimonioFamilia.fecha", pat.fecha ? fechaCorta(pat.fecha) : "________") + " de la " + IF("encadenamientos.patrimonioFamilia.notaria", pat.notaria || "________") + (pat.beneficiarios ? ", respecto de " + IF("encadenamientos.patrimonioFamilia.beneficiarios", pat.beneficiarios) : "") + ", para que el inmueble pueda transferirse libre de dicha limitación.", "Ley 70/1931 · Ley 495/1999") + '<span class="fill"></span></p>';
+  }
+  if (enc.afectacionViviendaFamiliar) {
+    const afect = enc.afectacion || {};
+    h += '<div class="sech" data-sec="enc-afectacion-vivienda" style="text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:22px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)">ACTO POSTERIOR: AFECTACIÓN A VIVIENDA FAMILIAR</div>';
+    h += '<p class="cl"><span class="clh">PRIMERO: AFECTACIÓN A VIVIENDA FAMILIAR.</span> ' + R("Compareciendo nuevamente " + compradorLabel + ", manifiesta que el inmueble adquirido por este instrumento queda afectado a vivienda familiar en favor de su núcleo familiar" + (afect.beneficiarios ? ", integrado por " + IF("encadenamientos.afectacion.beneficiarios", afect.beneficiarios) : "") + ".", "art. 6 · Ley 258/1996") + '<span class="fill"></span></p>';
+  }
+  return h;
+}
+
 export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): string {
   const V = s.V;
   const C = s.C;
@@ -602,7 +747,13 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
   const HIP = cpl ? "LOS HIPOTECANTES" : "LA HIPOTECANTE";
   const hN = cpl ? "n" : "";
   const natBuyer = anyNatural(C);
-  const mat = s.matricula || "________";
+  const inmuebles = inmueblesCompraventa(s);
+  const multiInmuebles = usaInmueblesExplicitos(s) && inmuebles.length > 1;
+  const firstInmueble = inmuebles[0] || legacyInmueble(s);
+  const mat = firstInmueble.matricula || "________";
+  const folios = inmuebles.map((inmueble, index) => IF(inmuebleField(s, index, "matricula"), inmueble.matricula || "________")).join(", ");
+  const catastrales = inmuebles.map((inmueble, index) => IF(inmuebleField(s, index, "catastral"), inmueble.catastral || "—")).join(", ");
+  const ubicacion = multiInmuebles ? inmuebles.map((inmueble, index) => IF(inmuebleField(s, index, "descripcion"), inmueble.descripcion.slice(0, 55) + (inmueble.descripcion.length > 55 ? "…" : ""))).join(" · ") : s.inmdesc.slice(0, 80) + (s.inmdesc.length > 80 ? "…" : "");
   const NEG: Record<CompraventaState["tipoNegocio"], string> = { compraventa: "compraventa", permuta: "permuta", dacion: "dación en pago", retroventa: "compraventa con pacto de retroventa", reserva: "compraventa con reserva de dominio" };
   const negTit = NEG[s.tipoNegocio] || "compraventa";
   const negCod = ({ compraventa: "0125 — COMPRAVENTA", permuta: "0126 — PERMUTA", dacion: "0157 — DACIÓN EN PAGO", retroventa: "0125 — COMPRAVENTA (RETROVENTA)", reserva: "0125 — COMPRAVENTA (RESERVA DE DOMINIO)" } as Record<CompraventaState["tipoNegocio"], string>)[s.tipoNegocio] || "0125 — COMPRAVENTA";
@@ -611,9 +762,9 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
   let h = "";
 
   h += '<div class="calif"><h4>Superintendencia de Notariado y Registro · Formato de Calificación</h4><div class="r">'
-    + '<span class="k">Folio matrícula</span><span>' + IF("matricula", s.matricula || "—") + "</span>"
-    + '<span class="k">Cód. catastral</span><span>' + IF("catastral", s.catastral || "—") + "</span>"
-    + '<span class="k">Ubicación</span><span>' + IF("inmdesc", s.inmdesc.slice(0, 80) + (s.inmdesc.length > 80 ? "…" : "")) + "</span></div>"
+    + '<span class="k">' + (multiInmuebles ? "Folios matrícula" : "Folio matrícula") + "</span><span>" + (multiInmuebles ? folios : IF("matricula", s.matricula || "—")) + "</span>"
+    + '<span class="k">Cód. catastral</span><span>' + (multiInmuebles ? catastrales : IF("catastral", s.catastral || "—")) + "</span>"
+    + '<span class="k">Ubicación</span><span>' + (multiInmuebles ? ubicacion : IF("inmdesc", ubicacion)) + "</span></div>"
     + '<table><tr><td>CÓD. ' + negCod + (({ nuda: " (NUDA PROPIEDAD)", usufructo: " (USUFRUCTO)", cuota: " (DERECHOS Y ACCIONES)", uso: " (USO Y HABITACIÓN)" } as Partial<Record<CompraventaState["derecho"], string>>)[s.derecho] || "") + "</td><td>" + IF("total", "$" + pts(s.total)) + "</td></tr>"
     + (s.credito ? '<tr><td>CÓD. 0219 — HIPOTECA ABIERTA SIN LÍMITE</td><td>' + IF("saldo", "$" + pts(s.saldo)) + "</td></tr>" : "") + "</table></div>";
 
@@ -627,24 +778,35 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
 
   const DER: Record<CompraventaState["derecho"], string> = { dominio: "el derecho de dominio y la posesión", nuda: "la nuda propiedad, reservándose el usufructo vitalicio,", usufructo: "el derecho de usufructo", cuota: "los derechos y acciones (cuota proindiviso) que le corresponden", uso: "el derecho de uso y habitación" };
   const derechoTxt = DER[s.derecho] || DER.dominio;
-  h += '<p class="cl" data-sec="objeto"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE.</span> Por medio del presente instrumento transfiere' + tf + " a título de " + negTit + " en favor de " + buyersFavor(C) + " " + derechoTxt + " sobre el siguiente bien inmueble: " + IF("inmdesc", s.inmdesc) + ". FOLIO DE MATRÍCULA INMOBILIARIA NRO. " + IF("matricula", mat) + ". Cuyos linderos generales son: " + IF("linderos", s.linderos) + '.<span class="fill"></span></p>';
-  h += '<p class="para"><span class="clh">Parágrafo primero.</span> No obstante la mención de la cabida, área y linderos, el inmueble se transfiere como cuerpo cierto.</p>';
+  if (multiInmuebles) {
+    h += '<p class="cl" data-sec="objeto"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DE LOS BIENES INMUEBLES.</span> Por medio del presente instrumento transfiere' + tf + " a título de " + negTit + " en favor de " + buyersFavor(C) + " " + derechoTxt + " sobre los siguientes bienes inmuebles: " + inmuebles.map((inmueble, index) => (index + 1) + ") " + descripcionInmueble(s, inmueble, index)).join("; ") + '.<span class="fill"></span></p>';
+    h += '<p class="para"><span class="clh">Parágrafo primero.</span> No obstante la mención de la cabida, área y linderos, los inmuebles se transfieren como cuerpos ciertos.</p>';
+  } else {
+    h += '<p class="cl" data-sec="objeto"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE.</span> Por medio del presente instrumento transfiere' + tf + " a título de " + negTit + " en favor de " + buyersFavor(C) + " " + derechoTxt + " sobre el siguiente bien inmueble: " + IF("inmdesc", s.inmdesc) + ". FOLIO DE MATRÍCULA INMOBILIARIA NRO. " + IF("matricula", mat) + ". Cuyos linderos generales son: " + IF("linderos", s.linderos) + '.<span class="fill"></span></p>';
+    h += '<p class="para"><span class="clh">Parágrafo primero.</span> No obstante la mención de la cabida, área y linderos, el inmueble se transfiere como cuerpo cierto.</p>';
+  }
   if (s.ph) {
     h += '<p class="para" data-sec="ph"><span class="clh">Parágrafo segundo — Régimen de propiedad horizontal.</span> ' + R("El inmueble hace parte integrante del conjunto sometido al régimen de propiedad horizontal, cuyo reglamento fue elevado a " + IF("phReg", s.phReg) + ", debidamente inscrito en el respectivo folio de matrícula.", "Ley 675/2001") + "</p>";
     h += '<p class="para"><span class="clh">Parágrafo tercero.</span> ' + R("La transferencia comprende además el derecho de copropiedad en el coeficiente señalado para el inmueble en el respectivo reglamento.", "arts. 25–26 · Ley 675/2001") + "</p>";
   }
+  if (folioEstadosActivos(s)) {
+    const estado = s.folioEstado as FolioEstado;
+    h += '<p class="para" data-sec="estado-folio"><span class="clh">Parágrafo — Estado del folio: ' + esc(folioEstadoLabel(estado)) + ".</span> " + R(folioEstadoTexto(estado), folioEstadoCita(estado)) + "</p>";
+  }
 
-  h += '<p class="cl" data-sec="titulo"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Que ' + vend + " adquiri" + (vpl ? "eron" : "ó") + " el inmueble por " + tmodo + "la Escritura Pública número " + IF("tituloNum", s.tituloNum) + " del " + IF("tituloFecha", fechaCorta(s.tituloFecha)) + " de la " + IF("tituloNotaria", s.tituloNotaria) + ", registrada bajo el folio de matrícula inmobiliaria número " + IF("matricula", mat) + '.<span class="fill"></span></p>';
+  h += '<p class="cl" data-sec="titulo"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Que ' + vend + " adquiri" + (vpl ? "eron" : "ó") + (multiInmuebles ? " los inmuebles por " : " el inmueble por ") + tmodo + "la Escritura Pública número " + IF("tituloNum", s.tituloNum) + " del " + IF("tituloFecha", fechaCorta(s.tituloFecha)) + " de la " + IF("tituloNotaria", s.tituloNotaria) + (multiInmuebles ? ", registrada bajo los folios de matrícula inmobiliaria números " + folios : ", registrada bajo el folio de matrícula inmobiliaria número " + IF("matricula", mat)) + '.<span class="fill"></span></p>';
   if (s.tipoNegocio === "retroventa") h += '<p class="para"><span class="clh">Parágrafo — Pacto de retroventa.</span> ' + R("El vendedor se reserva la facultad de recobrar el inmueble reembolsando el precio, dentro del término máximo de cuatro (4) años; se inscribe para su oponibilidad.", "art. 1939 C.C.") + "</p>";
   if (s.tipoNegocio === "reserva") h += '<p class="para"><span class="clh">Parágrafo — Reserva de dominio.</span> ' + R("El vendedor se reserva el dominio hasta el pago total del precio (nota: en inmuebles su eficacia se asimila a condición resolutoria por incumplimiento).", "art. 1935 C.C.") + "</p>";
   if (s.tipoNegocio === "dacion") h += '<p class="para"><span class="clh">Parágrafo — Dación en pago.</span> La transferencia se hace para extinguir la obligación preexistente que se identifica en este instrumento.</p>';
 
-  h += '<p class="cl" data-sec="saneamiento"><span class="clh">TERCERO: SANEAMIENTO Y LIMITACIONES AL DOMINIO.</span> Garantiza' + tf + " " + vend + " la absoluta propiedad del inmueble, que se encuentra libre de gravámenes y limitaciones tales como hipoteca, embargo, demanda civil, condiciones resolutorias, uso o usufructo y medidas cautelares, obligándose al saneamiento por evicción o vicios redhibitorios " + D("arts. 1893, 1914 C.C.") + '.<span class="fill"></span></p>';
-  if (s.gravamen === "hipoteca_previa") h += '<p class="para"><span class="clh">Parágrafo primero.</span> En cuanto a hipotecas, el inmueble soporta una hipoteca previa constituida por ' + vend + ", que se pagará con parte del crédito y se cancelará con posterioridad al registro.</p>";
+  h += '<p class="cl" data-sec="saneamiento"><span class="clh">TERCERO: SANEAMIENTO Y LIMITACIONES AL DOMINIO.</span> Garantiza' + tf + " " + vend + (multiInmuebles ? " la absoluta propiedad de los inmuebles, que se encuentran libres" : " la absoluta propiedad del inmueble, que se encuentra libre") + " de gravámenes y limitaciones tales como hipoteca, embargo, demanda civil, condiciones resolutorias, uso o usufructo y medidas cautelares, obligándose al saneamiento por evicción o vicios redhibitorios " + D("arts. 1893, 1914 C.C.") + '.<span class="fill"></span></p>';
+  if (s.gravamen === "hipoteca_previa") h += '<p class="para"><span class="clh">Parágrafo primero.</span> En cuanto a hipotecas, ' + (multiInmuebles ? "los inmuebles soportan" : "el inmueble soporta") + " una hipoteca previa constituida por " + vend + (encadenamientosActivos(s).cancelacionHipotecaPrevia ? ", que se cancela en acto previo de este mismo instrumento." : ", que se pagará con parte del crédito y se cancelará con posterioridad al registro.") + "</p>";
+  if (s.gravamen === "patrimonio" && encadenamientosActivos(s).cancelacionPatrimonioFamilia) h += '<p class="para"><span class="clh">Parágrafo — Patrimonio de familia.</span> El patrimonio de familia vigente se cancela en acto previo de este mismo instrumento.</p>';
   if (casadoOUnion(V)) {
     const decl = s.afect === "si" ? "que el inmueble SÍ se encuentra afectado a vivienda familiar" : s.afect === "nosabe" ? "que no precisan si el inmueble está afectado a vivienda familiar" : "que el inmueble que ahora enajena" + (vpl ? "n" : "") + " no está afectado a vivienda familiar";
     h += '<p class="para" data-sec="ley258"><span class="clh">Parágrafo — Efectos de la Ley 258 de 1996.</span> ' + R("Advertido" + (vpl ? "s" : "") + " del Artículo 6.º de la Ley 258 de 1996, modificada por la Ley 854 de 2003, e indagado" + (vpl ? "s" : "") + " expresamente, " + vend + " manifest" + adq + " bajo juramento " + decl + ".", "art. 6 · Ley 258/1996") + "</p>";
   }
+  if (anyEncadenamiento(s)) h += renderEncadenamientos(s, COMPRA);
 
   h += '<p class="cl" data-sec="precio"><span class="clh">CUARTO: PRECIO DE VENTA.</span> El precio de la compraventa lo constituye la suma de ' + IF("total", money(s.total)) + ", que " + COMPRA + ' cancelará así:<span class="fill"></span></p>';
   h += '<p class="para"><span class="clh">a)</span> La suma de ' + IF("inicial", money(s.inicial)) + ", con recursos propios, que " + vend + " declara" + tf + " recibida a satisfacción.</p>";
@@ -670,8 +832,8 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
     const ACR = "EL ACREEDOR";
     const monto = money(s.saldo);
     h += '<p class="cl">Compareci' + (cpl ? "eron" : "ó") + " " + hipNames + ", de las condiciones civiles indicadas, quien" + (cpl ? "es" : "") + " obra" + hN + " en su propio nombre y en adelante se denominará" + hN + " " + HIP + ", y " + (cpl ? "manifestaron" : "manifestó") + ':<span class="fill"></span></p>';
-    h += '<p class="cl"><span class="clh">PRIMERO: OBJETO — CONSTITUCIÓN DE HIPOTECA.</span> Que ' + HIP + " constituye" + hN + " HIPOTECA ABIERTA, DE PRIMER GRADO Y SIN LÍMITE DE CUANTÍA a favor del " + IF("banco", s.banco) + ", establecimiento de crédito con domicilio en Medellín, con NIT " + IF("bancoNit", s.bancoNit) + ", quien en adelante se denominará " + ACR + ", sobre el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. " + IF("matricula", mat) + ", anteriormente descrito y alinderado, " + R("conforme con los artículos 2432 y siguientes del Código Civil.", "arts. 2432 ss · C.C.") + '<span class="fill"></span></p>';
-    h += '<p class="para"><span class="clh">Parágrafo.</span> La hipoteca se extiende al inmueble con todas sus mejoras, anexidades y construcciones presentes o futuras, frutos pendientes, rentas y cánones, y a las indemnizaciones de seguros y de expropiación ' + D("arts. 2445–2446 C.C.") + ".</p>";
+    h += '<p class="cl"><span class="clh">PRIMERO: OBJETO — CONSTITUCIÓN DE HIPOTECA.</span> Que ' + HIP + " constituye" + hN + " HIPOTECA ABIERTA, DE PRIMER GRADO Y SIN LÍMITE DE CUANTÍA a favor del " + IF("banco", s.banco) + ", establecimiento de crédito con domicilio en Medellín, con NIT " + IF("bancoNit", s.bancoNit) + ", quien en adelante se denominará " + ACR + (multiInmuebles ? ", sobre los inmuebles con FOLIOS DE MATRÍCULA INMOBILIARIA NROS. " + folios + ", anteriormente descritos y alinderados, " : ", sobre el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. " + IF("matricula", mat) + ", anteriormente descrito y alinderado, ") + R("conforme con los artículos 2432 y siguientes del Código Civil.", "arts. 2432 ss · C.C.") + '<span class="fill"></span></p>';
+    h += '<p class="para"><span class="clh">Parágrafo.</span> La hipoteca se extiende ' + (multiInmuebles ? "a los inmuebles con todas sus mejoras, anexidades y construcciones presentes o futuras" : "al inmueble con todas sus mejoras, anexidades y construcciones presentes o futuras") + ", frutos pendientes, rentas y cánones, y a las indemnizaciones de seguros y de expropiación " + D("arts. 2445–2446 C.C.") + ".</p>";
     if (cpl) h += '<p class="cl"><span class="clh">SEGUNDO: SOLIDARIDAD.</span> ' + HIP + ", en su condición de constituyentes del gravamen, se obligan solidariamente frente a " + ACR + ' respecto de la totalidad de las obligaciones garantizadas.<span class="fill"></span></p>';
     const nT = cpl ? "TERCERO" : "SEGUNDO";
     const nO = cpl ? "CUARTO" : "TERCERO";
@@ -713,6 +875,8 @@ export function otorgamiento(s: CompraventaState, tarifas: TarifaConfig = TARIFA
   const iva = L.items[1].v;
   const impReg = L.items[2].v;
   const ret = L.items[3].v;
+  const inmuebles = inmueblesCompraventa(s);
+  const multiInmuebles = usaInmueblesExplicitos(s) && inmuebles.length > 1;
   const sech = "text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:24px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)";
   let h = '<div class="sech" data-sec="otorgamiento" style="' + sech + '">OTORGAMIENTO Y AUTORIZACIÓN</div>';
   h += '<p class="cl"><span class="clh">LECTURA Y OTORGAMIENTO.</span> ' + R("Leído el presente instrumento por los comparecientes, advertidos del derecho a revisarlo y de la responsabilidad penal por faltar a la verdad, y enterados de su contenido, alcance y efectos legales, lo aprobaron y firman en un mismo acto ante el Notario que autoriza, con lo cual queda perfeccionado el otorgamiento.", "Dcto 960/1970") + '<span class="fill"></span></p>';
@@ -752,7 +916,11 @@ export function otorgamiento(s: CompraventaState, tarifas: TarifaConfig = TARIFA
   if (s.ax.predial) anx.push("paz y salvo del impuesto predial y de valorización");
   if (s.ph && s.ax.admin) anx.push("paz y salvo de expensas comunes");
   if (anx.length) h += '<p class="para"><span class="clh">ANEXOS.</span> Se presentaron y se agregan: ' + anx.join("; ") + ".</p>";
-  h += '<p class="para"><span class="clh">AVALÚO CATASTRAL DEL INMUEBLE.</span> ' + IF("avaluoCatastral", money(s.avaluoCatastral)) + ". NUPRE: " + IF("nupre", s.nupre) + ".</p>";
+  if (multiInmuebles) {
+    h += '<p class="para"><span class="clh">AVALÚOS CATASTRALES DE LOS INMUEBLES.</span> ' + inmuebles.map((inmueble, index) => "Inmueble " + (index + 1) + ": " + IF(inmuebleField(s, index, "avaluoCatastral"), money(inmueble.avaluoCatastral || 0)) + ". NUPRE: " + IF(inmuebleField(s, index, "nupre"), inmueble.nupre || "—")).join(" — ") + ".</p>";
+  } else {
+    h += '<p class="para"><span class="clh">AVALÚO CATASTRAL DEL INMUEBLE.</span> ' + IF("avaluoCatastral", money(s.avaluoCatastral)) + ". NUPRE: " + IF("nupre", s.nupre) + ".</p>";
+  }
   h += '<p class="cl"><span class="clh">AUTORIZACIÓN.</span> ' + R("El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número " + esc(s.numEscritura) + "—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.", "Dcto 960/1970") + '<span class="fill"></span></p>';
 
   const blank = '<span style="color:var(--line-strong)">____________________</span>';
@@ -798,17 +966,31 @@ export function evaluar(s: CompraventaState): EvaluacionItem[] {
   const it: EvaluacionItem[] = [];
   const V = s.V;
   const C = s.C;
-  if (!s.matricula.trim()) it.push({ t: "crit", h: "Inmueble no plenamente identificado", p: "Falta la matrícula inmobiliaria: el registro devolvería el título.", n: "art. 16 · Ley 1579/2012" });
-  if (!s.linderos.trim()) it.push({ t: "crit", h: "Faltan los linderos", p: "Sin linderos, cabida y área el inmueble no queda individualizado para el registro.", n: "art. 8 · Ley 1579/2012" });
+  const inmuebles = inmueblesCompraventa(s);
+  const multiInmuebles = usaInmueblesExplicitos(s) && inmuebles.length > 1;
+  inmuebles.forEach((inmueble, index) => {
+    const label = multiInmuebles ? "Inmueble " + (index + 1) : "Inmueble";
+    if (!inmueble.matricula.trim()) it.push({ t: "crit", h: label + " no plenamente identificado", p: "Falta la matrícula inmobiliaria: el registro devolvería el título.", n: "art. 16 · Ley 1579/2012" });
+    if (!inmueble.linderos.trim()) it.push({ t: "crit", h: multiInmuebles ? "Faltan los linderos del inmueble " + (index + 1) : "Faltan los linderos", p: "Sin linderos, cabida y área el inmueble no queda individualizado para el registro.", n: "art. 8 · Ley 1579/2012" });
+  });
   if (s.inicial + s.saldo !== s.total) it.push({ t: "crit", h: "Descuadre en el precio", p: "La suma de los pagos (" + pts(s.inicial + s.saldo) + ") no coincide con el total (" + pts(s.total) + ").", n: "art. 90 E.T." });
   const sc = sumaCuotas(C);
   if (C.length > 1 && sc !== 100) it.push({ t: "crit", h: "Las cuotas de los compradores no suman 100%", p: "Suman " + sc + "%. El proindiviso debe cubrir el 100% del derecho transferido.", n: "" });
   const sv = sumaCuotas(V);
   if (V.length > 1 && sv !== 100) it.push({ t: "warn", h: "Las cuotas de los vendedores no suman 100%", p: "Suman " + sv + "%. Verificar las participaciones que cada vendedor transfiere.", n: "" });
-  if (s.gravamen === "patrimonio") it.push({ t: "crit", h: "Patrimonio de familia sin cancelar", p: "Debe cancelarse antes de vender (escritura con ambos cónyuges; con menores, autorización judicial).", n: "Ley 70/1931 · 495/1999" });
+  const enc = encadenamientosActivos(s);
+  if (s.gravamen === "patrimonio" && !enc.cancelacionPatrimonioFamilia) it.push({ t: "crit", h: "Patrimonio de familia sin cancelar", p: "Debe cancelarse antes de vender (escritura con ambos cónyuges; con menores, autorización judicial).", n: "Ley 70/1931 · 495/1999" });
   if (s.gravamen === "embargo") it.push({ t: "crit", h: "Medida cautelar vigente", p: "El embargo o la demanda debe levantarse para poder transferir.", n: "art. 16 · Ley 1579/2012" });
   if (casadoOUnion(V) && s.afect === "si") it.push({ t: "crit", h: "Requiere consentimiento del cónyuge", p: "Bien afectado a vivienda familiar: exige firma de ambos cónyuges/compañeros so pena de nulidad.", n: "art. 3 · Ley 258/1996" });
   if (s.apod) it.push({ t: "warn", h: "Vigencia del poder", p: "La parte vendedora comparece por apoderado: verificar poder vigente con facultades expresas para enajenar.", n: "Dcto 1069/2015" });
+  if (multiInmuebles) it.push({ t: "obl", h: "Varios inmuebles en un instrumento", p: "La cláusula de objeto enumera " + inmuebles.length + " inmuebles con folio, linderos y datos catastrales propios.", n: "arts. 8 y 16 · Ley 1579/2012" });
+  if (folioEstadosActivos(s)) {
+    const estado = s.folioEstado as FolioEstado;
+    it.push({ t: "warn", h: "Estado del folio: " + folioEstadoLabel(estado), p: folioEstadoTexto(estado), n: folioEstadoCita(estado) });
+  }
+  if (enc.cancelacionHipotecaPrevia) it.push({ t: "obl", h: "Cancelación de hipoteca previa encadenada", p: "El instrumento incluye acto previo de cancelación de hipoteca antes de la transferencia.", n: "art. 2457 C.C. · Ley 1579/2012" });
+  if (enc.cancelacionPatrimonioFamilia) it.push({ t: "obl", h: "Cancelación de patrimonio de familia encadenada", p: "El instrumento cancela el patrimonio de familia antes de transferir el dominio.", n: "Ley 70/1931 · Ley 495/1999" });
+  if (enc.afectacionViviendaFamiliar) it.push({ t: "obl", h: "Afectación a vivienda familiar encadenada", p: "El instrumento constituye la afectación a vivienda familiar después de la compra.", n: "art. 6 · Ley 258/1996" });
   it.push({ t: "obl", h: "Declaración de valor real", p: "Declaración juramentada incluida — evita la base de 4×.", n: "art. 90 E.T." });
   it.push({ t: "obl", h: "Declaración de origen de fondos", p: "Cláusula SIPLAFT presente para la parte compradora.", n: "Ley 2195/2022" });
   it.push({ t: "obl", h: "Retención en la fuente del 1%", p: "Constancia de recaudo por el Notario incluida.", n: "art. 398 E.T." });

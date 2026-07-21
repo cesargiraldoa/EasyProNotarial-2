@@ -90,10 +90,25 @@ function inputByLabel(container: HTMLElement, text: string) {
   return input;
 }
 
+function controlByLabel(container: HTMLElement, text: string) {
+  const label = Array.from(container.querySelectorAll("label")).find((item) => item.textContent?.trim() === text);
+  if (!label?.htmlFor) throw new Error(`No label found for ${text}`);
+  const control = container.ownerDocument.getElementById(label.htmlFor) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+  if (!control) throw new Error(`No control found for ${text}`);
+  return control;
+}
+
 function setInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function setControlValue(control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+  const proto = control instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : control instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  setter?.call(control, value);
+  control.dispatchEvent(new Event(control instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
 }
 
 function editorNode(container: HTMLElement) {
@@ -237,6 +252,34 @@ describe("EscrituraWorkspace", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain("ANA MARIA TEST");
+    });
+  });
+
+  it("agrega un segundo inmueble y lo refleja en el preview", async () => {
+    await act(async () => {
+      buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Inmueble 1");
+    });
+
+    await act(async () => {
+      buttonByText(container, "Agregar inmueble").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      setControlValue(controlByLabel(container, "Descripcion inmueble 2"), "PARQUEADERO 12 SOTANO");
+      setControlValue(controlByLabel(container, "Matricula inmueble 2"), "001-222222");
+      setControlValue(controlByLabel(container, "Linderos inmueble 2"), "Norte con zona comun.");
+      setControlValue(controlByLabel(container, "NUPRE inmueble 2"), "NUPRE-002");
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("DESCRIPCIÓN DE LOS BIENES INMUEBLES");
+      expect(container.textContent).toContain("PARQUEADERO 12 SOTANO");
+      expect(container.textContent).toContain("001-222222");
+      expect(container.textContent).toContain("NUPRE-002");
     });
   });
 
