@@ -148,9 +148,10 @@
 - ✅ **WP-5** — Editor propio / Redacción (PR #137, `1c573d2`; 12 tests verde). Escritura asistida completa (captura+redacción) para los 3 actos.
 
 ### Trabajo restante — agrupado en bloques
-- ⏳ **Bloque A** — Corpus vivo + RAG + gobernanza + biblioteca API (agrupa WP-7a + WP-8 + biblioteca). Prompt: `prompts/wp-A-corpus-vivo-gobernanza.md`. Listo para Codex.
-- ⏳ **Bloque B** — Gari (capa IA: extracción, prosa libre, clasificación, QA). Prompt pendiente.
-- ⏳ **Bloque C/D** — Compraventa de TODO TIPO por lotes (varios inmuebles+folio+encadenamientos; extranjero/divisas+rural+capacidad). Prompts pendientes.
-- Follow-up de datos: aplicar el JSON de GPT (enlaces/confianza) al corpus.
+- ✅ **Bloque A** — Corpus vivo + RAG + gobernanza + biblioteca API (PR #138, `473b1cc`; backend 22/22 + frontend 13/13). El corpus es la fuente de verdad viva: 409 server-side, RAG con vigencia, gobernanza por fecha.
+- ⏳ **Bloque B** — Gari (capa IA: extracción/prellenado, prosa libre, clasificación, revisor QA). Prompt: `prompts/wp-B-gari.md`. Listo para Codex.
+- ⏳ **Bloque C (Lote 1)** — Todo tipo: varios inmuebles + estado del folio + encadenamientos. Prompt: `prompts/wp-C-todotipo-lote1.md`.
+- ⏳ **Bloque D (Lote 2)** — Todo tipo: extranjero/divisas + rural/UAF + capacidad/apoyos. Prompt: `prompts/wp-D-todotipo-lote2.md`.
+- Follow-up de datos: aplicar el JSON de GPT (enlaces/confianza) al corpus cuando llegue.
 
-Siguiente: pegar `prompts/wp-A-corpus-vivo-gobernanza.md` en Codex → PR → revisión.
+Siguiente: pegar `prompts/wp-B-gari.md` en Codex → PR → revisión.
