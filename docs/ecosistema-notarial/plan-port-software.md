@@ -149,8 +149,8 @@
 
 ### Trabajo restante — agrupado en bloques
 - ✅ **Bloque A** — Corpus vivo + RAG + gobernanza + biblioteca API (PR #138, `473b1cc`; backend 22/22 + frontend 13/13). El corpus es la fuente de verdad viva: 409 server-side, RAG con vigencia, gobernanza por fecha.
-- ⏳ **Bloque B** — Gari (capa IA: extracción/prellenado, prosa libre, clasificación, revisor QA). Prompt: `prompts/wp-B-gari.md`. Listo para Codex.
-- ⏳ **Bloque C (Lote 1)** — Todo tipo: varios inmuebles + estado del folio + encadenamientos. Prompt: `prompts/wp-C-todotipo-lote1.md`.
+- ✅ **Bloque B** — Gari (capa IA) (PR #139, `5483e02`). Frontera probada: sugiere/valida, citas del corpus.
+- ✅ **Bloque C (Lote 1)** — Todo tipo: varios inmuebles + folio + encadenamientos (PR #140, `1b96f3c`). Golden base intactos.
 - ⏳ **Bloque D (Lote 2)** — Todo tipo: extranjero/divisas + rural/UAF + capacidad/apoyos. Prompt: `prompts/wp-D-todotipo-lote2.md`.
 - Follow-up de datos: aplicar el JSON de GPT (enlaces/confianza) al corpus cuando llegue.
 
