@@ -144,6 +144,7 @@
 - ✅ **WP-1** — Corpus jurídico (PR #133, `59fd981`).
 - ✅ **WP-2** — Motor-escritura TS + golden tests (PR #134, `9e52677`; 8/8 verde).
 - ✅ **WP-3** — API backend de escritura (PR #135, `2bdf55c`; 6 tests verde).
-- ⏳ **WP-4** — UI de Captura (formulario + preview en vivo). Prompt: `prompts/wp-4-ui-captura.md`. Solo Captura (el editor es WP-5). Listo para Codex.
+- ✅ **WP-4** — UI de Captura (PR #136, `bd8bf38`; 9 tests verde, preview en vivo end-to-end).
+- ⏳ **WP-5** — Editor propio (modo Redacción). Prompt: `prompts/wp-5-editor.md`. Extiende el workspace de WP-4; reutiliza WP-3 para exportar. Listo para Codex.
 
-Siguiente: pegar `prompts/wp-4-ui-captura.md` en Codex → PR → revisión.
+Siguiente: pegar `prompts/wp-5-editor.md` en Codex → PR → revisión.
