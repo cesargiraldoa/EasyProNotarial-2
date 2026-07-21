@@ -15,6 +15,7 @@ from app.models.document_template import DocumentTemplate
 from app.models.legal_entity import LegalEntity
 from app.models.legal_entity_representative import LegalEntityRepresentative
 from app.models.legal_clausula import LegalClausula
+from app.models.legal_embedding import LegalEmbedding
 from app.models.legal_jurisprudencia import LegalJurisprudencia
 from app.models.legal_norma import LegalNorma, LegalNormaRelacion
 from app.models.legal_regla import LegalRegla

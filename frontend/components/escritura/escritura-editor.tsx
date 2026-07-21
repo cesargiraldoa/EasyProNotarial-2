@@ -19,7 +19,7 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
 import { LiquidacionPanel } from "@/components/escritura/liquidacion-panel";
-import { bibliotecaRedaccionPorActo } from "@/lib/escritura-redaccion-biblioteca";
+import { bibliotecaRedaccionPorActo, type BibliotecaRedaccionItem } from "@/lib/escritura-redaccion-biblioteca";
 import type { ActoCode, CancelacionState, CaseState, CompraventaState, Resultado } from "@/lib/motor-escritura";
 import styles from "./escritura-preview.module.css";
 
@@ -58,6 +58,8 @@ type Props = {
   onExportWord: (html: string) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
   onStatus?: (message: string) => void;
+  bibliotecaItems?: BibliotecaRedaccionItem[] | null;
+  bibliotecaError?: string | null;
 };
 
 type LinkedField = {
@@ -306,6 +308,8 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
     onExportWord,
     onDirtyChange,
     onStatus,
+    bibliotecaItems,
+    bibliotecaError,
   },
   ref,
 ) {
@@ -324,7 +328,8 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
   const [dirty, setDirtyState] = useState(false);
   const [trackEnabled, setTrackEnabledState] = useState(false);
   const [localStatus, setLocalStatus] = useState("Editor listo.");
-  const biblioteca = useMemo(() => bibliotecaRedaccionPorActo(acto), [acto]);
+  const fallbackBiblioteca = useMemo(() => bibliotecaRedaccionPorActo(acto), [acto]);
+  const biblioteca = bibliotecaItems?.length ? bibliotecaItems : fallbackBiblioteca;
 
   const say = useCallback(
     (message: string) => {
@@ -920,6 +925,7 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
       <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
         <Panel title="Biblioteca">
           <div className="space-y-2" onMouseDown={(event) => event.preventDefault()}>
+            {bibliotecaError ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">Biblioteca local: {bibliotecaError}</p> : null}
             {biblioteca.map((item) => (
               <button
                 key={item.titulo}

@@ -211,6 +211,62 @@ export const TARIFAS = {
   visDesc: 0.5,
 } as const;
 
+type TarifaConfig = {
+  anio: number;
+  resNotarial: string;
+  resRegistral: string;
+  ipc: string;
+  cuantiaMin: number;
+  derNotarialBase: number;
+  derNotarialPorMil: number;
+  iva: number;
+  impuestoRegistro: number;
+  retencion: number;
+  visDesc: number;
+};
+
+export type MotorCorpusTarifa = {
+  anio?: number;
+  concepto: string;
+  valor?: string | number | null;
+  formula?: string | null;
+  unidad?: string | null;
+};
+
+export type MotorCorpus = {
+  tarifas?: MotorCorpusTarifa[] | null;
+};
+
+function numberTarifa(tarifas: MotorCorpusTarifa[] | undefined | null, concepto: string, fallback: number): number {
+  const item = tarifas?.find((tarifa) => tarifa.concepto === concepto);
+  if (item?.valor == null) return fallback;
+  const raw = typeof item.valor === "number" ? item.valor : String(item.valor).trim();
+  const value = typeof raw === "number" ? raw : Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function percentLabel(value: number): string {
+  return (value * 100).toFixed(2).replace(".", ",") + "%";
+}
+
+function tarifasConfig(corpus?: MotorCorpus): TarifaConfig {
+  const tarifas = corpus?.tarifas;
+  if (!tarifas?.length) return TARIFAS;
+  const ipc = numberTarifa(tarifas, "ajuste_ipc_tarifas_notariales", TARIFAS.ipc === "5,10%" ? 0.051 : 0);
+  return {
+    ...TARIFAS,
+    anio: tarifas.find((tarifa) => typeof tarifa.valor !== "undefined")?.anio ?? TARIFAS.anio,
+    ipc: percentLabel(ipc),
+    cuantiaMin: numberTarifa(tarifas, "derechos_notariales_umbral_minimo", TARIFAS.cuantiaMin),
+    derNotarialBase: numberTarifa(tarifas, "derechos_notariales_minimo_acto_con_cuantia", TARIFAS.derNotarialBase),
+    derNotarialPorMil: numberTarifa(tarifas, "derechos_notariales_por_mil", TARIFAS.derNotarialPorMil),
+    iva: numberTarifa(tarifas, "iva_sobre_derechos_notariales", TARIFAS.iva),
+    impuestoRegistro: numberTarifa(tarifas, "impuesto_registro_antioquia_referencia", TARIFAS.impuestoRegistro),
+    retencion: numberTarifa(tarifas, "retencion_fuente_vendedor_persona_natural", TARIFAS.retencion),
+    visDesc: numberTarifa(tarifas, "descuento_vis_vip_derechos_notariales", TARIFAS.visDesc),
+  };
+}
+
 export const GENEROS: [GeneroCode, string][] = [
   ["M", "Masculino"],
   ["F", "Femenino"],
@@ -530,7 +586,7 @@ export const defaults: Record<ActoCode, CaseState> = {
   cancelacion: { ...defaultCancelacion },
 };
 
-export function renderEscritura(s: CompraventaState): string {
+export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): string {
   const V = s.V;
   const C = s.C;
   const vpl = V.length > 1;
@@ -643,16 +699,16 @@ export function renderEscritura(s: CompraventaState): string {
   if (s.interprete) h += '<p class="cl">' + R("Comparece un intérprete que tradujo íntegramente el instrumento a el (los) otorgante(s) que no domina(n) el idioma; se deja constancia de su comprensión y aprobación.", "art. 38 · Dcto 960/70") + '<span class="fill"></span></p>';
   if (s.firmaRuego) h += '<p class="cl">' + R("Manifestando uno de los otorgantes no saber o no poder firmar, firma por él a su ruego un tercero, en presencia de dos testigos hábiles que también suscriben; se toma su impresión dactilar.", "art. 39 · Dcto 960/70") + '<span class="fill"></span></p>';
   if (s.pepAny || s.cuentaTercero) h += '<p class="para"><span class="clh">Parágrafo — Debida diligencia.</span> ' + R((s.cuentaTercero ? "Se identifica al beneficiario final por cuya cuenta se actúa. " : "") + (s.pepAny ? "Se deja constancia de la condición de Persona Expuesta Políticamente y de la debida diligencia reforzada aplicada." : ""), "Dcto 830/2021") + "</p>";
-  h += otorgamiento(s);
+  h += otorgamiento(s, tarifas);
   return h;
 }
 
-export function otorgamiento(s: CompraventaState): string {
+export function otorgamiento(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): string {
   const V = s.V;
   const C = s.C;
   const vpl = V.length > 1;
   const vend = vpl ? "los vendedores" : "el vendedor";
-  const L = liquidar(s);
+  const L = liquidar(s, tarifas);
   const derNot = L.items[0].v;
   const iva = L.items[1].v;
   const impReg = L.items[2].v;
@@ -669,7 +725,7 @@ export function otorgamiento(s: CompraventaState): string {
   if (s.subsidio) docs.push("el acto de asignación del subsidio de vivienda");
   if (docs.length) h += '<p class="cl" data-sec="protocolizacion"><span class="clh">DOCUMENTOS QUE SE PROTOCOLIZAN.</span> ' + R("Se agregan al protocolo, como parte integrante de esta escritura, los siguientes documentos habilitantes: " + docs.join("; ") + ".", "Dcto 1069/2015") + '<span class="fill"></span></p>';
   h += '<p class="cl" data-sec="fiscal"><span class="clh">CONSTANCIAS FISCALES.</span> El Notario deja constancia de que, actuando como agente retenedor, recaudó la retención en la fuente a cargo de ' + vend + " por " + I(fmt(ret)) + " " + D("art. 398 E.T.") + "; que los derechos notariales de esta escritura ascienden a " + I(fmt(derNot)) + " más IVA de " + I(fmt(iva)) + "; y que el impuesto de registro liquidado es de " + I(fmt(impReg)) + " " + D("RES-2026-000964-6") + '.<span class="fill"></span></p>';
-  h += '<p class="cl" data-sec="liquidacion"><span class="clh">DERECHOS, RECAUDOS Y VALORES A PAGAR.</span> Conforme a las tarifas vigentes (' + esc(TARIFAS.resNotarial) + '), los valores causados con este instrumento son los siguientes:<span class="fill"></span></p>';
+  h += '<p class="cl" data-sec="liquidacion"><span class="clh">DERECHOS, RECAUDOS Y VALORES A PAGAR.</span> Conforme a las tarifas vigentes (' + esc(tarifas.resNotarial) + '), los valores causados con este instrumento son los siguientes:<span class="fill"></span></p>';
   h += '<p class="para">a) Derechos notariales' + (s.vis !== "no" ? " (con descuento del 50% por VIS)" : "") + ": " + I(fmt(derNot)) + ". — b) Impuesto sobre las ventas (IVA 19%): " + I(fmt(iva)) + ". — c) Impuesto de registro (1%): " + I(fmt(impReg)) + ". — d) Retención en la fuente (1%), a cargo de " + vend + ", recaudada por el Notario: " + I(fmt(ret)) + '.<span class="fill"></span></p>';
   h += '<p class="para">Total de gastos e impuestos, sin incluir la retención: ' + I(fmt(L.totalGastos)) + ", que se cubre por las partes por iguales, correspondiendo " + I(fmt(L.comprador)) + " a la parte compradora y " + I(fmt(L.vendedor)) + ' a la parte vendedora (incluida la retención).<span class="fill"></span></p>';
   const cpl = C.length > 1;
@@ -794,24 +850,24 @@ export function evaluar(s: CompraventaState): EvaluacionItem[] {
   return it;
 }
 
-export function liquidar(s: CompraventaState): {
+export function liquidar(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): {
   items: { c: string; t: string; v: number; cargo: string; tip: string }[];
   totalGastos: number;
   comprador: number;
   vendedor: number;
 } {
   const v = s.total || 0;
-  let derNot = v <= TARIFAS.cuantiaMin ? TARIFAS.derNotarialBase : Math.round(TARIFAS.derNotarialBase + (v - TARIFAS.cuantiaMin) * TARIFAS.derNotarialPorMil);
+  let derNot = v <= tarifas.cuantiaMin ? tarifas.derNotarialBase : Math.round(tarifas.derNotarialBase + (v - tarifas.cuantiaMin) * tarifas.derNotarialPorMil);
   const vis = s.vis !== "no";
-  if (vis) derNot = Math.round(derNot * (1 - TARIFAS.visDesc));
-  const iva = Math.round(derNot * TARIFAS.iva);
-  const impReg = Math.round(v * TARIFAS.impuestoRegistro);
-  const ret = Math.round(v * TARIFAS.retencion);
+  if (vis) derNot = Math.round(derNot * (1 - tarifas.visDesc));
+  const iva = Math.round(derNot * tarifas.iva);
+  const impReg = Math.round(v * tarifas.impuestoRegistro);
+  const ret = Math.round(v * tarifas.retencion);
   const shared = derNot + iva + impReg;
   const comp = Math.round(shared / 2);
   return {
     items: [
-      { c: "Derechos notariales" + (vis ? " (−50% VIS)" : ""), t: "3‰ · mín. " + fmt(TARIFAS.derNotarialBase), v: derNot, cargo: "Partes iguales", tip: "RES-2026-000964-6" },
+      { c: "Derechos notariales" + (vis ? " (−50% VIS)" : ""), t: "3‰ · mín. " + fmt(tarifas.derNotarialBase), v: derNot, cargo: "Partes iguales", tip: tarifas.resNotarial },
       { c: "IVA", t: "19% sobre derechos notariales", v: iva, cargo: "Partes iguales", tip: "" },
       { c: "Impuesto de registro", t: "1% del valor (Antioquia)", v: impReg, cargo: "Partes iguales", tip: "art. 230 Ley 223/1995" },
       { c: "Retención en la fuente", t: "1% del valor", v: ret, cargo: "Vendedor", tip: "art. 398 E.T." },
@@ -822,19 +878,19 @@ export function liquidar(s: CompraventaState): {
   };
 }
 
-export function renderLiquidacion(s: CompraventaState): string {
-  const L = liquidar(s);
-  let h = '<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas ' + TARIFAS.anio + " · Notarial " + esc(TARIFAS.resNotarial) + " · Registral " + esc(TARIFAS.resRegistral) + "<br>Vigentes desde feb-" + TARIFAS.anio + " · ajuste IPC " + TARIFAS.ipc + '</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
+export function renderLiquidacion(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): string {
+  const L = liquidar(s, tarifas);
+  let h = '<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas ' + tarifas.anio + " · Notarial " + esc(tarifas.resNotarial) + " · Registral " + esc(tarifas.resRegistral) + "<br>Vigentes desde feb-" + tarifas.anio + " · ajuste IPC " + tarifas.ipc + '</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
   L.items.forEach((i) => {
     h += "<tr><td>" + esc(i.c) + (i.tip ? ' <span class="cite">' + esc(i.tip) + "</span>" : "") + '</td><td class="who">' + esc(i.t) + '</td><td class="n">' + fmt(i.v) + '</td><td class="who">' + esc(i.cargo) + "</td></tr>";
   });
   h += '<tr class="tot"><td colspan="2">Total gastos e impuestos (sin retención)</td><td class="n">' + fmt(L.totalGastos) + "</td><td></td></tr></tbody></table></div>";
   h += '<div class="split"><div class="box"><div class="l">A cargo de la parte compradora</div><div class="v">' + fmt(L.comprador) + '</div></div><div class="box"><div class="l">A cargo del vendedor <span class="who">(incl. retención)</span></div><div class="v">' + fmt(L.vendedor) + "</div></div></div>";
-  h += '<div class="note">Cifras con las resoluciones ' + TARIFAS.anio + ". Cada año se actualiza reemplazando un solo bloque de configuración. Derechos de registro nacionales (SNR) y tarifas de otros departamentos se parametrizan aparte. Validar contra la resolución oficial.</div>";
+  h += '<div class="note">Cifras con las resoluciones ' + tarifas.anio + ". Cada año se actualiza reemplazando un solo bloque de configuración. Derechos de registro nacionales (SNR) y tarifas de otros departamentos se parametrizan aparte. Validar contra la resolución oficial.</div>";
   return h;
 }
 
-export function renderCancelacion(s: CancelacionState): string {
+export function renderCancelacion(s: CancelacionState, tarifas: TarifaConfig = TARIFAS): string {
   const gA = genEnding(s.cApoGenero);
   const artA = s.cApoGenero === "F" ? "la" : s.cApoGenero === "NB" || s.cApoGenero === "T" ? "le" : "el";
   const sr = s.cApoGenero === "F" ? "señora" : s.cApoGenero === "NB" || s.cApoGenero === "T" ? "señore" : "señor";
@@ -865,8 +921,8 @@ export function renderCancelacion(s: CancelacionState): string {
   const artAcap = artA.charAt(0).toUpperCase() + artA.slice(1);
   h += '<p class="cl">' + artAcap + ' exponente leyó personalmente el presente instrumento, lo aprobó y en constancia lo firma.<span class="fill"></span></p>';
   h += '<p class="cl">Se advirtió el registro dentro del término legal para ello.<span class="fill"></span></p>';
-  const L = liquidarCanc(s);
-  h += '<p class="cl" data-sec="liquidacion"><span class="clh">DERECHOS, RECAUDOS Y VALORES A PAGAR.</span> Conforme a las tarifas vigentes (' + esc(TARIFAS.resNotarial) + "), por tratarse de " + (s.cSinCuantia ? "un acto sin cuantía (Ley 546/1999)" : "un acto de cancelación") + ", los valores causados son: derechos notariales " + I(fmt(L.derNot)) + " más IVA de " + I(fmt(L.iva)) + "; RECAUDO SUPERINTENDENCIA Y FONDO: " + IF("cRecaudo", "$" + pts(L.recaudo)) + '.<span class="fill"></span></p>';
+  const L = liquidarCanc(s, tarifas);
+  h += '<p class="cl" data-sec="liquidacion"><span class="clh">DERECHOS, RECAUDOS Y VALORES A PAGAR.</span> Conforme a las tarifas vigentes (' + esc(tarifas.resNotarial) + "), por tratarse de " + (s.cSinCuantia ? "un acto sin cuantía (Ley 546/1999)" : "un acto de cancelación") + ", los valores causados son: derechos notariales " + I(fmt(L.derNot)) + " más IVA de " + I(fmt(L.iva)) + "; RECAUDO SUPERINTENDENCIA Y FONDO: " + IF("cRecaudo", "$" + pts(L.recaudo)) + '.<span class="fill"></span></p>';
   h += '<p class="cl"><span class="clh">HOJAS DE PAPEL NOTARIAL.</span> Se extendió en las hojas de papel notarial números ' + IF("cHojas", s.cHojas) + ' y siguientes.<span class="fill"></span></p>';
   const sech = "text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:24px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)";
   h += '<div class="sech" data-sec="notas" style="' + sech + '">NOTAS Y CONSTANCIAS FINALES</div>';
@@ -890,17 +946,17 @@ export function renderCancelacion(s: CancelacionState): string {
   return h;
 }
 
-export function liquidarCanc(s: CancelacionState): { derNot: number; iva: number; recaudo: number; total: number } {
-  const derNot = TARIFAS.derNotarialBase;
-  const iva = Math.round(derNot * TARIFAS.iva);
+export function liquidarCanc(s: CancelacionState, tarifas: TarifaConfig = TARIFAS): { derNot: number; iva: number; recaudo: number; total: number } {
+  const derNot = tarifas.derNotarialBase;
+  const iva = Math.round(derNot * tarifas.iva);
   const recaudo = s.cRecaudo || 19300;
   return { derNot, iva, recaudo, total: derNot + iva + recaudo };
 }
 
-export function renderLiquidacionCanc(s: CancelacionState): string {
-  const L = liquidarCanc(s);
-  let h = '<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas ' + TARIFAS.anio + " · Notarial " + esc(TARIFAS.resNotarial) + "<br>" + (s.cSinCuantia ? "Acto sin cuantía (Ley 546/1999) — sin impuesto de registro con cuantía" : "Cancelación de hipoteca") + '</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
-  h += '<tr><td>Derechos notariales <span class="cite">RES-2026-000964-6</span></td><td class="who">Acto sin cuantía</td><td class="n">' + fmt(L.derNot) + '</td><td class="who">Interesado</td></tr>';
+export function renderLiquidacionCanc(s: CancelacionState, tarifas: TarifaConfig = TARIFAS): string {
+  const L = liquidarCanc(s, tarifas);
+  let h = '<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas ' + tarifas.anio + " · Notarial " + esc(tarifas.resNotarial) + "<br>" + (s.cSinCuantia ? "Acto sin cuantía (Ley 546/1999) — sin impuesto de registro con cuantía" : "Cancelación de hipoteca") + '</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
+  h += '<tr><td>Derechos notariales <span class="cite">' + esc(tarifas.resNotarial) + '</span></td><td class="who">Acto sin cuantía</td><td class="n">' + fmt(L.derNot) + '</td><td class="who">Interesado</td></tr>';
   h += '<tr><td>IVA</td><td class="who">19% sobre derechos</td><td class="n">' + fmt(L.iva) + '</td><td class="who">Interesado</td></tr>';
   h += '<tr><td>Recaudo Superintendencia y Fondo</td><td class="who">Tarifa fija S.N.R.</td><td class="n">' + fmt(L.recaudo) + '</td><td class="who">Interesado</td></tr>';
   h += '<tr class="tot"><td colspan="2">Total a pagar</td><td class="n">' + fmt(L.total) + "</td><td></td></tr></tbody></table></div>";
@@ -962,14 +1018,15 @@ function asCancelacionState(state: CaseState): CancelacionState {
   return state as CancelacionState;
 }
 
-export function generar(acto: ActoCode, state: CaseState): Resultado {
+export function generar(acto: ActoCode, state: CaseState, corpus?: MotorCorpus): Resultado {
+  const tarifas = tarifasConfig(corpus);
   if (acto === "cancelacion") {
     const s = asCancelacionState(state);
     const items = evaluarCanc(s);
     const cump = cumplimiento(items);
     return {
-      html: renderCancelacion(s),
-      liquidacionHtml: renderLiquidacionCanc(s),
+      html: renderCancelacion(s, tarifas),
+      liquidacionHtml: renderLiquidacionCanc(s, tarifas),
       cumplimiento: cump,
       estado: estadoDesdeCrit(cump.tiles.bloqueante),
     };
@@ -979,8 +1036,8 @@ export function generar(acto: ActoCode, state: CaseState): Resultado {
   const items = evaluar(s);
   const cump = cumplimiento(items);
   return {
-    html: renderEscritura(s),
-    liquidacionHtml: renderLiquidacion(s),
+    html: renderEscritura(s, tarifas),
+    liquidacionHtml: renderLiquidacion(s, tarifas),
     cumplimiento: cump,
     estado: estadoDesdeCrit(cump.tiles.bloqueante),
   };

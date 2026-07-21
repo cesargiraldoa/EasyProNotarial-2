@@ -73,6 +73,38 @@ export type CorpusResponse = {
   tarifas: LegalTarifa[];
 };
 
+export type CorpusBusquedaHit = {
+  source_type: string;
+  source_id: number;
+  source_ref: string;
+  titulo: string;
+  chunk_text: string;
+  score: number;
+  acto_code?: string | null;
+  vigencia_desde?: string | null;
+  vigencia_hasta?: string | null;
+};
+
+export type CorpusBusquedaResponse = {
+  q: string;
+  acto?: ActoCode | null;
+  corpus_acto_code?: string | null;
+  fecha: string;
+  hits: CorpusBusquedaHit[];
+};
+
+export type BibliotecaClausula = {
+  id: number;
+  acto_code: string;
+  titulo: string;
+  texto: string;
+  capa: string;
+  orden: number;
+  condicional: boolean;
+  vigencia_desde?: string | null;
+  vigencia_hasta?: string | null;
+};
+
 export type EscrituraCaseMeta = {
   id: number;
   notary_id: number;
@@ -123,6 +155,16 @@ function escrituraQuery(params: Record<string, string | undefined>) {
 
 export function getCorpus(acto: ActoCode, fecha?: string) {
   return apiFetch<CorpusResponse>(`/api/v1/escritura/corpus${escrituraQuery({ acto, fecha })}`);
+}
+
+export function buscarCorpus(q: string, acto?: ActoCode, fecha?: string, topK?: number) {
+  return apiFetch<CorpusBusquedaResponse>(
+    `/api/v1/escritura/corpus/buscar${escrituraQuery({ q, acto, fecha, top_k: topK ? String(topK) : undefined })}`,
+  );
+}
+
+export function getBibliotecaEscritura(acto: ActoCode, fecha?: string) {
+  return apiFetch<BibliotecaClausula[]>(`/api/v1/escritura/biblioteca${escrituraQuery({ acto, fecha })}`);
 }
 
 export function getEscrituraState(caseId: number) {
