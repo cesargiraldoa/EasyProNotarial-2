@@ -9,9 +9,13 @@ import { EscrituraWorkspace } from "../escritura-workspace";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const apiMocks = vi.hoisted(() => ({
+  clasificarEscritura: vi.fn(),
+  extraerEscritura: vi.fn(),
   getBibliotecaEscritura: vi.fn(),
   getCorpus: vi.fn(),
   getEscrituraState: vi.fn(),
+  redactarProsaGari: vi.fn(),
+  revisarEscritura: vi.fn(),
   saveEscrituraState: vi.fn(),
   generarDocumento: vi.fn(),
 }));
@@ -25,9 +29,13 @@ vi.mock("next/link", async () => {
 });
 
 vi.mock("@/lib/api-escritura", () => ({
+  clasificarEscritura: apiMocks.clasificarEscritura,
+  extraerEscritura: apiMocks.extraerEscritura,
   getBibliotecaEscritura: apiMocks.getBibliotecaEscritura,
   getCorpus: apiMocks.getCorpus,
   getEscrituraState: apiMocks.getEscrituraState,
+  redactarProsaGari: apiMocks.redactarProsaGari,
+  revisarEscritura: apiMocks.revisarEscritura,
   saveEscrituraState: apiMocks.saveEscrituraState,
   generarDocumento: apiMocks.generarDocumento,
   escrituraDownloadUrl: (downloadUrl: string) => downloadUrl,
@@ -177,6 +185,41 @@ describe("EscrituraWorkspace", () => {
         vigencia_hasta: null,
       },
     ]);
+    apiMocks.extraerEscritura.mockResolvedValue({
+      sugerencias: {
+        "C.0.nombre": {
+          valor: "ANA GARI VALIDADA",
+          confianza: 0.91,
+          fuente: "Cedula de ciudadania",
+        },
+      },
+      por_validar: true,
+      estado: "por validar",
+      modelo: "fake-gari",
+      prompt_version: "test",
+    });
+    apiMocks.clasificarEscritura.mockResolvedValue({
+      acto_sugerido: "hipoteca",
+      ramas: ["hipoteca"],
+      sugerencia: true,
+      estado: "por validar",
+      modelo: "fake-gari",
+      prompt_version: "test",
+    });
+    apiMocks.redactarProsaGari.mockResolvedValue({
+      html_sugerido: '<p class="cl">Clausula Gari editable</p>',
+      sugerencia: true,
+      estado: "por validar",
+      modelo: "fake-gari",
+      prompt_version: "test",
+    });
+    apiMocks.revisarEscritura.mockResolvedValue({
+      hallazgos: [{ tipo: "faltante", detalle: "Falta revisar Ley 258", cita_slug: "ley-258-1996-art-6" }],
+      sugerencia: true,
+      estado: "por validar",
+      modelo: "fake-gari",
+      prompt_version: "test",
+    });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -237,6 +280,39 @@ describe("EscrituraWorkspace", () => {
       expect(container.textContent).toContain("PARQUEADERO 12 SOTANO");
       expect(container.textContent).toContain("001-222222");
       expect(container.textContent).toContain("NUPRE-002");
+    });
+  });
+
+  it("muestra sugerencias de Gari para validar y permite aceptar un campo", async () => {
+    await act(async () => {
+      buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("Sugerencias de IA");
+    });
+
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Subir documento para extraer con Gari"]');
+    if (!input) throw new Error("No upload input found");
+    Object.defineProperty(input, "files", {
+      value: [new File(["folio"], "certificado.txt", { type: "text/plain" })],
+      configurable: true,
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("por validar");
+      expect(container.textContent).toContain("ANA GARI VALIDADA");
+    });
+    expect(container.textContent).not.toContain("ANA GARI VALIDADA, mayor de edad");
+
+    await act(async () => {
+      buttonByText(container, "Aceptar C.0.nombre").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("ANA GARI VALIDADA, mayor de edad");
     });
   });
 

@@ -171,3 +171,63 @@ class DocumentoOut(BaseModel):
     download_url: str | None = None
     document_id: int
     version_id: int
+
+
+class GariCampoSugerido(BaseModel):
+    valor: Any
+    confianza: float = Field(ge=0, le=1)
+    fuente: str
+
+
+class GariExtraccionOut(BaseModel):
+    sugerencias: dict[str, GariCampoSugerido]
+    por_validar: bool
+    estado: str
+    modelo: str
+    prompt_version: str
+
+
+class GariProsaIn(BaseModel):
+    acto: ActoCode
+    contexto: dict[str, Any] = Field(default_factory=dict)
+    instruccion: str = Field(min_length=1)
+
+
+class GariProsaOut(BaseModel):
+    html_sugerido: str
+    sugerencia: bool
+    estado: str
+    modelo: str
+    prompt_version: str
+
+
+class GariClasificacionIn(BaseModel):
+    descripcion: str = Field(min_length=1)
+
+
+class GariClasificacionOut(BaseModel):
+    acto_sugerido: ActoCode
+    ramas: list[str]
+    sugerencia: bool
+    estado: str
+    modelo: str
+    prompt_version: str
+
+
+class GariRevisionIn(BaseModel):
+    acto: ActoCode
+    html: str | None = None
+
+
+class GariRevisionHallazgo(BaseModel):
+    tipo: str
+    detalle: str
+    cita_slug: str | None = None
+
+
+class GariRevisionOut(BaseModel):
+    hallazgos: list[GariRevisionHallazgo]
+    sugerencia: bool
+    estado: str
+    modelo: str
+    prompt_version: str

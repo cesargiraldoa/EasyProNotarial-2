@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import { buildApiUrl } from "@/lib/config";
 import type { ActoCode, CaseState } from "@/lib/motor-escritura";
 
@@ -144,6 +145,51 @@ export type DocumentoResponse = {
   version_id: number;
 };
 
+export type GariCampoSugerido = {
+  valor: unknown;
+  confianza: number;
+  fuente: string;
+};
+
+export type GariExtraccionResponse = {
+  sugerencias: Record<string, GariCampoSugerido>;
+  por_validar: boolean;
+  estado: string;
+  modelo: string;
+  prompt_version: string;
+};
+
+export type GariProsaResponse = {
+  html_sugerido: string;
+  sugerencia: boolean;
+  estado: string;
+  modelo: string;
+  prompt_version: string;
+};
+
+export type GariClasificacionResponse = {
+  acto_sugerido: ActoCode;
+  ramas: string[];
+  sugerencia: boolean;
+  estado: string;
+  modelo: string;
+  prompt_version: string;
+};
+
+export type GariRevisionHallazgo = {
+  tipo: string;
+  detalle: string;
+  cita_slug?: string | null;
+};
+
+export type GariRevisionResponse = {
+  hallazgos: GariRevisionHallazgo[];
+  sugerencia: boolean;
+  estado: string;
+  modelo: string;
+  prompt_version: string;
+};
+
 function escrituraQuery(params: Record<string, string | undefined>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -151,6 +197,22 @@ function escrituraQuery(params: Record<string, string | undefined>) {
   });
   const suffix = query.toString();
   return suffix ? `?${suffix}` : "";
+}
+
+async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(buildApiUrl(path), {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+    credentials: "include",
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(text || "No fue posible completar la solicitud.");
+  return text.trim() ? (JSON.parse(text) as T) : (null as T);
 }
 
 export function getCorpus(acto: ActoCode, fecha?: string) {
@@ -184,6 +246,36 @@ export function generarDocumento(caseId: number, payload: DocumentoPayload) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: payload,
+  });
+}
+
+export function extraerEscritura(caseId: number, archivo: File) {
+  const formData = new FormData();
+  formData.set("archivo", archivo);
+  return apiUpload<GariExtraccionResponse>(`/api/v1/escritura/cases/${caseId}/extraer`, formData);
+}
+
+export function redactarProsaGari(acto: ActoCode, contexto: CaseState, instruccion: string) {
+  return apiFetch<GariProsaResponse>("/api/v1/escritura/redaccion/prosa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { acto, contexto, instruccion },
+  });
+}
+
+export function clasificarEscritura(descripcion: string) {
+  return apiFetch<GariClasificacionResponse>("/api/v1/escritura/clasificar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { descripcion },
+  });
+}
+
+export function revisarEscritura(caseId: number, acto: ActoCode, html?: string) {
+  return apiFetch<GariRevisionResponse>(`/api/v1/escritura/cases/${caseId}/revisar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { acto, html },
   });
 }
 

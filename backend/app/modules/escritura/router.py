@@ -8,7 +8,7 @@ from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db, get_manageable_notary_ids, get_role_codes, require_roles
@@ -27,6 +27,13 @@ from app.schemas.escritura import (
     DocumentoOut,
     EscrituraStateIn,
     EscrituraStateOut,
+    GariClasificacionIn,
+    GariClasificacionOut,
+    GariExtraccionOut,
+    GariProsaIn,
+    GariProsaOut,
+    GariRevisionIn,
+    GariRevisionOut,
     LegalClausulaOut,
     LegalNormaOut,
     LegalReglaOut,
@@ -34,6 +41,15 @@ from app.schemas.escritura import (
 )
 from app.services.document_persistence import get_or_create_document, persist_case_document_version
 from app.services.escritura_reglas import evaluar_reglas
+from app.services.escritura_gari import (
+    GariLLMClient,
+    clasificar_acto,
+    extract_upload_text,
+    get_gari_llm_client,
+    proponer_campos_desde_texto,
+    redactar_prosa,
+    revisar_escritura,
+)
 from app.services.gari_document_service import build_gari_docx_buffer
 from app.services.legal_corpus import clausulas_vigentes, normas_vigentes, reglas_vigentes, tarifas_vigentes
 from app.services.legal_rag import buscar_corpus
@@ -52,6 +68,7 @@ WRITE_ROLES = (
 
 BLOCK_TAGS = {"p", "div", "tr", "h4", "h3", "li"}
 SKIPPED_SPAN_CLASSES = {"fill", "cite"}
+MAPA_SITUACIONES_PATH = Path(__file__).resolve().parents[4] / "docs" / "ecosistema-notarial" / "mapa-situaciones.md"
 
 
 def _corpus_acto_code(acto: ActoCode) -> str:
@@ -101,6 +118,23 @@ def _state_date(acto: ActoCode, state: dict) -> date | None:
         return date.fromisoformat(raw.strip())
     except ValueError:
         return None
+
+
+def _mapa_situaciones_text() -> str:
+    try:
+        return MAPA_SITUACIONES_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _revision_source_text(case: Case, payload: GariRevisionIn) -> str:
+    html = (payload.html or "").strip()
+    if html:
+        return html
+    draft = case.act_data.gari_draft_text if case.act_data else None
+    if draft and draft.strip():
+        return draft.strip()
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No hay texto de escritura para revisar.")
 
 
 def _serialize_state(case: Case, acto: ActoCode | None = None) -> EscrituraStateOut:
@@ -260,6 +294,75 @@ def get_escritura_biblioteca(
         BibliotecaClausulaOut.model_validate(item, from_attributes=True)
         for item in clausulas_vigentes(db, corpus_acto, effective_date)
     ]
+
+
+@router.post("/cases/{case_id}/extraer", response_model=GariExtraccionOut)
+async def extraer_escritura_case(
+    case_id: int,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    llm: GariLLMClient = Depends(get_gari_llm_client),
+):
+    load_case_for_user(db, case_id, current_user)
+    content = await archivo.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Archivo vacio.")
+    upload_text = await extract_upload_text(archivo.filename, content)
+    if not upload_text.text.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No fue posible extraer texto del archivo.")
+    return GariExtraccionOut.model_validate(
+        proponer_campos_desde_texto(llm, filename=upload_text.filename, text=upload_text.text)
+    )
+
+
+@router.post("/redaccion/prosa", response_model=GariProsaOut)
+def redactar_escritura_prosa(
+    payload: GariProsaIn,
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    llm: GariLLMClient = Depends(get_gari_llm_client),
+):
+    _ = current_user
+    return GariProsaOut.model_validate(
+        redactar_prosa(llm, acto=payload.acto, contexto=payload.contexto, instruccion=payload.instruccion)
+    )
+
+
+@router.post("/clasificar", response_model=GariClasificacionOut)
+def clasificar_escritura(
+    payload: GariClasificacionIn,
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    llm: GariLLMClient = Depends(get_gari_llm_client),
+):
+    _ = current_user
+    return GariClasificacionOut.model_validate(
+        clasificar_acto(llm, descripcion=payload.descripcion, mapa_situaciones=_mapa_situaciones_text())
+    )
+
+
+@router.post("/cases/{case_id}/revisar", response_model=GariRevisionOut)
+def revisar_escritura_case(
+    case_id: int,
+    payload: GariRevisionIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    llm: GariLLMClient = Depends(get_gari_llm_client),
+):
+    case = load_case_for_user(db, case_id, current_user)
+    state = _parse_state(case.act_data.data_json if case.act_data else "{}")
+    effective_date = _state_date(payload.acto, state) or date.today()
+    source_text = _revision_source_text(case, payload)
+    return GariRevisionOut.model_validate(
+        revisar_escritura(
+            llm,
+            db,
+            acto=payload.acto,
+            corpus_acto_code=_corpus_acto_code(payload.acto),
+            fecha=effective_date,
+            html_o_texto=source_text,
+            rag_searcher=buscar_corpus,
+        )
+    )
 
 
 @router.get("/cases/{case_id}", response_model=EscrituraStateOut)
