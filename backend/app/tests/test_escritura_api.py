@@ -275,6 +275,49 @@ class EscrituraApiTests(unittest.TestCase):
         self.assertIn("compraventa_medida_cautelar_embargo", codigos)
         self.assertIn("compraventa_exencion_casa_habitacion_5000_uvt_afc", codigos)
 
+    def test_evaluador_reglas_corpus_ramas_comunes_compraventa(self):
+        with self.Session() as session:
+            state = _valid_compraventa_state()
+            state.update(
+                {
+                    "inmuebles": [
+                        {
+                            "descripcion": "Apartamento 101",
+                            "matricula": "001-123456",
+                            "linderos": "Norte con la calle 1.",
+                            "catastral": "050010101",
+                            "nupre": "AAA001",
+                        },
+                        {
+                            "descripcion": "Parqueadero 12",
+                            "matricula": "",
+                            "linderos": "",
+                            "catastral": "050010102",
+                            "nupre": "AAA002",
+                        },
+                    ],
+                    "folioEstado": "falsa_tradicion",
+                    "encadenamientos": {
+                        "cancelacionHipotecaPrevia": True,
+                        "cancelacionPatrimonioFamilia": True,
+                        "afectacionViviendaFamiliar": True,
+                    },
+                }
+            )
+            hallazgos = evaluar_reglas(session, "compraventa", date(2026, 8, 14), state)
+
+        codigos = {item.codigo for item in hallazgos}
+        self.assertIn("compraventa_varios_inmuebles_identificacion_individual", codigos)
+        self.assertIn("compraventa_varios_inmuebles_clausula_enumera_folios", codigos)
+        self.assertIn("compraventa_estado_folio_especial_advertencia_1579", codigos)
+        self.assertIn("compraventa_falsa_tradicion_advertencia_saneamiento", codigos)
+        self.assertIn("compraventa_encadena_cancelacion_hipoteca_previa", codigos)
+        self.assertIn("compraventa_encadena_cancelacion_patrimonio_familia", codigos)
+        self.assertIn("compraventa_encadena_afectacion_vivienda_familiar", codigos)
+
+        bloqueantes = {item.codigo for item in hallazgos if item.severidad == "BLOCK"}
+        self.assertIn("compraventa_varios_inmuebles_identificacion_individual", bloqueantes)
+
     def test_case_inexistente_responde_404(self):
         response = self.client.get("/api/v1/escritura/cases/999")
 

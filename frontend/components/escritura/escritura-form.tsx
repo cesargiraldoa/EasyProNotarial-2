@@ -12,8 +12,11 @@ import {
   type AuxParty,
   type CancelacionState,
   type CaseState,
+  type CompraventaInmueble,
   type CompraventaState,
+  type EncadenamientosCompraventa,
   type EstadoCivil,
+  type FolioEstado,
   type GeneroCode,
   type Party,
   type TipoDoc,
@@ -64,6 +67,15 @@ const tipoDocOptions: Array<[TipoDoc, string]> = [
   ["NIT", "NIT"],
 ];
 
+const folioEstadoOptions: Array<[FolioEstado, string]> = [
+  ["matriz", "Matriz / ordinario"],
+  ["segregado", "Segregado"],
+  ["englobe", "Englobe"],
+  ["desenglobe", "Desenglobe"],
+  ["mayor_extension", "Mayor extension"],
+  ["falsa_tradicion", "Falsa tradicion"],
+];
+
 const emptyParty: Party = {
   tipo: "natural",
   genero: "M",
@@ -80,6 +92,15 @@ const emptyParty: Party = {
   ocupacion: "",
   notiElec: true,
   pep: false,
+};
+
+const emptyInmueble: CompraventaInmueble = {
+  descripcion: "",
+  linderos: "",
+  matricula: "",
+  catastral: "",
+  nupre: "",
+  avaluoCatastral: 0,
 };
 
 function Field({ id, label, hint, children }: FieldProps) {
@@ -180,6 +201,35 @@ function isCancelacionState(state: CaseState): state is CancelacionState {
   return "cNum" in state;
 }
 
+function legacyInmueble(state: CompraventaState): CompraventaInmueble {
+  return {
+    descripcion: state.inmdesc,
+    linderos: state.linderos,
+    matricula: state.matricula,
+    catastral: state.catastral,
+    nupre: state.nupre,
+    avaluoCatastral: state.avaluoCatastral,
+  };
+}
+
+function inmueblesForm(state: CompraventaState): CompraventaInmueble[] {
+  return state.inmuebles?.length ? state.inmuebles : [legacyInmueble(state)];
+}
+
+function syncInmuebleLegacy(state: CompraventaState, inmuebles: CompraventaInmueble[]): CompraventaState {
+  const first = inmuebles[0] || emptyInmueble;
+  return {
+    ...state,
+    inmuebles,
+    inmdesc: first.descripcion,
+    linderos: first.linderos,
+    matricula: first.matricula,
+    catastral: first.catastral,
+    nupre: first.nupre,
+    avaluoCatastral: first.avaluoCatastral || 0,
+  };
+}
+
 export function EscrituraForm({ acto, state, onChange }: Props) {
   if (acto === "cancelacion") {
     if (!isCancelacionState(state)) return null;
@@ -195,6 +245,8 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
   const pagosCuadran = state.inicial + state.saldo === state.total;
   const compradorCuotas = sumaCuotas(state.C);
   const vendedorCuotas = sumaCuotas(state.V);
+  const inmuebles = inmueblesForm(state);
+  const encadenamientos = state.encadenamientos || {};
 
   function setField<K extends keyof CompraventaState>(key: K, value: CompraventaState[K]) {
     onChange({ ...state, [key]: value });
@@ -240,6 +292,36 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
 
   function setRuego(patch: Partial<AuxParty>) {
     setField("ruego", { ...state.ruego, ...patch });
+  }
+
+  function setInmueble(index: number, patch: Partial<CompraventaInmueble>) {
+    const next = inmuebles.map((inmueble, itemIndex) => itemIndex === index ? { ...inmueble, ...patch } : inmueble);
+    onChange(syncInmuebleLegacy(state, next));
+  }
+
+  function addInmueble() {
+    onChange(syncInmuebleLegacy(state, [...inmuebles, { ...emptyInmueble }]));
+  }
+
+  function removeInmueble(index: number) {
+    if (inmuebles.length <= 1) return;
+    onChange(syncInmuebleLegacy(state, inmuebles.filter((_inmueble, itemIndex) => itemIndex !== index)));
+  }
+
+  function setEncadenamiento<K extends keyof EncadenamientosCompraventa>(key: K, value: EncadenamientosCompraventa[K]) {
+    onChange({ ...state, encadenamientos: { ...encadenamientos, [key]: value } });
+  }
+
+  function setHipotecaPrevia(patch: NonNullable<EncadenamientosCompraventa["hipotecaPrevia"]>) {
+    setEncadenamiento("hipotecaPrevia", { ...(encadenamientos.hipotecaPrevia || {}), ...patch });
+  }
+
+  function setPatrimonioFamilia(patch: NonNullable<EncadenamientosCompraventa["patrimonioFamilia"]>) {
+    setEncadenamiento("patrimonioFamilia", { ...(encadenamientos.patrimonioFamilia || {}), ...patch });
+  }
+
+  function setAfectacion(patch: NonNullable<EncadenamientosCompraventa["afectacion"]>) {
+    setEncadenamiento("afectacion", { ...(encadenamientos.afectacion || {}), ...patch });
   }
 
   return (
@@ -314,17 +396,8 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         <p className={`mt-2 text-xs ${compradorCuotas === 100 ? "text-emerald-700" : "text-red-700"}`}>Cuotas compradoras: {compradorCuotas}%.</p>
       </Fieldset>
 
-      <Fieldset marker="2" title="Inmueble">
-        <TextAreaField id="inmdesc" label="Descripcion y area" value={state.inmdesc} onChange={(value) => setField("inmdesc", value)} />
-        <TextAreaField id="linderos" label="Linderos" value={state.linderos} onChange={(value) => setField("linderos", value)} />
-        <div className={row2Class}>
-          <TextField id="matricula" label="Matricula inmobiliaria" value={state.matricula} onChange={(value) => setField("matricula", value)} />
-          <TextField id="catastral" label="Cedula catastral" value={state.catastral} onChange={(value) => setField("catastral", value)} />
-        </div>
-        <div className={row2Class}>
-          <MoneyField id="avaluoCatastral" label="Avaluo catastral" value={state.avaluoCatastral} onChange={(value) => setField("avaluoCatastral", value)} />
-          <TextField id="nupre" label="NUPRE" value={state.nupre} onChange={(value) => setField("nupre", value)} />
-        </div>
+      <Fieldset marker="2" title="Inmuebles">
+        <InmuebleList inmuebles={inmuebles} onPatch={setInmueble} onAdd={addInmueble} onRemove={removeInmueble} />
         <Checkbox id="ph" checked={state.ph} label="Sometido a propiedad horizontal" onChange={(checked) => setField("ph", checked)} />
         {state.ph ? <TextField id="phReg" label="Reglamento de P.H." value={state.phReg} onChange={(value) => setField("phReg", value)} /> : null}
         <SelectField
@@ -361,6 +434,66 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
             ["embargo", "Embargo / demanda"],
           ]}
         />
+        <SelectField<FolioEstado>
+          id="folioEstado"
+          label="Estado del folio"
+          value={state.folioEstado || "matriz"}
+          onChange={(value) => setField("folioEstado", value)}
+          options={folioEstadoOptions}
+        />
+      </Fieldset>
+
+      <Fieldset marker="3b" title="Encadenamientos">
+        <Checkbox
+          id="enc-cancelacion-hipoteca"
+          checked={Boolean(encadenamientos.cancelacionHipotecaPrevia)}
+          label="Agregar cancelacion de hipoteca previa"
+          onChange={(checked) => setEncadenamiento("cancelacionHipotecaPrevia", checked)}
+        />
+        {encadenamientos.cancelacionHipotecaPrevia ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <div className={row2Class}>
+              <TextField id="enc-hip-acreedor" label="Acreedor que cancela" value={encadenamientos.hipotecaPrevia?.acreedor || ""} onChange={(value) => setHipotecaPrevia({ acreedor: value })} />
+              <TextField id="enc-hip-nit" label="NIT acreedor" value={encadenamientos.hipotecaPrevia?.nit || ""} onChange={(value) => setHipotecaPrevia({ nit: value })} />
+            </div>
+            <div className={row2Class}>
+              <TextField id="enc-hip-escritura" label="E.P. hipoteca" value={encadenamientos.hipotecaPrevia?.escritura || ""} onChange={(value) => setHipotecaPrevia({ escritura: value })} />
+              <TextField id="enc-hip-fecha" label="Fecha hipoteca" type="date" value={encadenamientos.hipotecaPrevia?.fecha || ""} onChange={(value) => setHipotecaPrevia({ fecha: value })} />
+            </div>
+            <TextField id="enc-hip-notaria" label="Notaria hipoteca" value={encadenamientos.hipotecaPrevia?.notaria || ""} onChange={(value) => setHipotecaPrevia({ notaria: value })} />
+            <div className={row2Class}>
+              <TextField id="enc-hip-registro" label="Fecha registro" value={encadenamientos.hipotecaPrevia?.registroFecha || ""} onChange={(value) => setHipotecaPrevia({ registroFecha: value })} />
+              <TextField id="enc-hip-orip" label="ORIP" value={encadenamientos.hipotecaPrevia?.orip || ""} onChange={(value) => setHipotecaPrevia({ orip: value })} />
+            </div>
+          </div>
+        ) : null}
+        <Checkbox
+          id="enc-cancelacion-patrimonio"
+          checked={Boolean(encadenamientos.cancelacionPatrimonioFamilia)}
+          label="Agregar cancelacion de patrimonio de familia"
+          onChange={(checked) => setEncadenamiento("cancelacionPatrimonioFamilia", checked)}
+        />
+        {encadenamientos.cancelacionPatrimonioFamilia ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <div className={row2Class}>
+              <TextField id="enc-pat-escritura" label="E.P. patrimonio" value={encadenamientos.patrimonioFamilia?.escritura || ""} onChange={(value) => setPatrimonioFamilia({ escritura: value })} />
+              <TextField id="enc-pat-fecha" label="Fecha patrimonio" type="date" value={encadenamientos.patrimonioFamilia?.fecha || ""} onChange={(value) => setPatrimonioFamilia({ fecha: value })} />
+            </div>
+            <TextField id="enc-pat-notaria" label="Notaria patrimonio" value={encadenamientos.patrimonioFamilia?.notaria || ""} onChange={(value) => setPatrimonioFamilia({ notaria: value })} />
+            <TextField id="enc-pat-beneficiarios" label="Beneficiarios / interesados" value={encadenamientos.patrimonioFamilia?.beneficiarios || ""} onChange={(value) => setPatrimonioFamilia({ beneficiarios: value })} />
+          </div>
+        ) : null}
+        <Checkbox
+          id="enc-afectacion"
+          checked={Boolean(encadenamientos.afectacionViviendaFamiliar)}
+          label="Agregar afectacion a vivienda familiar"
+          onChange={(checked) => setEncadenamiento("afectacionViviendaFamiliar", checked)}
+        />
+        {encadenamientos.afectacionViviendaFamiliar ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <TextField id="enc-afectacion-beneficiarios" label="Nucleo familiar / beneficiarios" value={encadenamientos.afectacion?.beneficiarios || ""} onChange={(value) => setAfectacion({ beneficiarios: value })} />
+          </div>
+        ) : null}
       </Fieldset>
 
       <Fieldset marker="4" title="Precio">
@@ -448,6 +581,50 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         </div>
       </Fieldset>
     </form>
+  );
+}
+
+function InmuebleList({
+  inmuebles,
+  onPatch,
+  onAdd,
+  onRemove,
+}: {
+  inmuebles: CompraventaInmueble[];
+  onPatch: (index: number, patch: Partial<CompraventaInmueble>) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="mt-3 space-y-3">
+      {inmuebles.map((inmueble, index) => (
+        <div key={index} className="rounded-lg border border-line bg-white p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-primary">Inmueble {index + 1}</h3>
+            {inmuebles.length > 1 ? (
+              <button type="button" onClick={() => onRemove(index)} className="inline-flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs font-semibold text-secondary hover:border-red-300 hover:text-red-700">
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Quitar
+              </button>
+            ) : null}
+          </div>
+          <TextAreaField id={`inmueble-${index}-descripcion`} label={`Descripcion inmueble ${index + 1}`} value={inmueble.descripcion} onChange={(value) => onPatch(index, { descripcion: value })} />
+          <TextAreaField id={`inmueble-${index}-linderos`} label={`Linderos inmueble ${index + 1}`} value={inmueble.linderos} onChange={(value) => onPatch(index, { linderos: value })} />
+          <div className={row2Class}>
+            <TextField id={`inmueble-${index}-matricula`} label={`Matricula inmueble ${index + 1}`} value={inmueble.matricula} onChange={(value) => onPatch(index, { matricula: value })} />
+            <TextField id={`inmueble-${index}-catastral`} label={`Cedula catastral inmueble ${index + 1}`} value={inmueble.catastral} onChange={(value) => onPatch(index, { catastral: value })} />
+          </div>
+          <div className={row2Class}>
+            <MoneyField id={`inmueble-${index}-avaluo`} label={`Avaluo catastral inmueble ${index + 1}`} value={inmueble.avaluoCatastral || 0} onChange={(value) => onPatch(index, { avaluoCatastral: value })} />
+            <TextField id={`inmueble-${index}-nupre`} label={`NUPRE inmueble ${index + 1}`} value={inmueble.nupre} onChange={(value) => onPatch(index, { nupre: value })} />
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={onAdd} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/8 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/12">
+        <Plus className="h-4 w-4" aria-hidden="true" />
+        Agregar inmueble
+      </button>
+    </div>
   );
 }
 

@@ -78,10 +78,45 @@ def _any_party_type(state: dict[str, Any], key: str, expected: str) -> bool:
     return any(isinstance(item, dict) and item.get("tipo") == expected for item in parties)
 
 
+def _state_inmuebles(state: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = state.get("inmuebles")
+    if isinstance(raw, list) and raw:
+        return [item for item in raw if isinstance(item, dict)]
+    return [
+        {
+            "descripcion": state.get("inmdesc"),
+            "matricula": state.get("matricula"),
+            "linderos": state.get("linderos"),
+            "catastral": state.get("catastral"),
+            "nupre": state.get("nupre"),
+        }
+    ]
+
+
+def _encadenamiento_activo(state: dict[str, Any], key: str) -> bool:
+    encadenamientos = state.get("encadenamientos")
+    return isinstance(encadenamientos, dict) and bool(encadenamientos.get(key))
+
+
 def _resolve_value(state: dict[str, Any], field: str) -> Any:
     direct = _path_value(state, field)
     if direct is not None:
         return direct
+
+    if field == "varios_inmuebles":
+        return len(_state_inmuebles(state)) > 1
+    if field == "inmuebles_con_identificacion_incompleta":
+        return any(_is_missing(item.get("matricula")) or _is_missing(item.get("linderos")) for item in _state_inmuebles(state))
+    if field == "folio_estado_especial":
+        return state.get("folioEstado") in {"segregado", "englobe", "desenglobe", "mayor_extension", "falsa_tradicion"}
+    if field == "folio_falsa_tradicion":
+        return state.get("folioEstado") == "falsa_tradicion"
+    if field == "encadenamiento_cancelacion_hipoteca_previa":
+        return _encadenamiento_activo(state, "cancelacionHipotecaPrevia")
+    if field == "encadenamiento_cancelacion_patrimonio_familia":
+        return _encadenamiento_activo(state, "cancelacionPatrimonioFamilia")
+    if field == "encadenamiento_afectacion_vivienda_familiar":
+        return _encadenamiento_activo(state, "afectacionViviendaFamiliar")
 
     aliases = {
         "matricula_inmobiliaria": ("matricula", "cMatricula"),

@@ -241,6 +241,45 @@ class LegalCorpusTests(unittest.TestCase):
         ).scalar_one()
         self.assertEqual(regla.condicion_json["persona_sexo"]["allowed"], ["F", "M", "NB", "T"])
 
+    def test_ramas_comunes_compraventa_seed(self):
+        self._seed()
+        ley_1561 = self._norma_by_slug("ley-1561-2012")
+        self.assertEqual(ley_1561.confianza, "baja")
+        self.assertIn("falsa tradición", ley_1561.materia)
+
+        reglas = {
+            row.codigo: row
+            for row in self.session.execute(
+                select(LegalRegla).where(
+                    LegalRegla.codigo.in_(
+                        [
+                            "compraventa_varios_inmuebles_identificacion_individual",
+                            "compraventa_varios_inmuebles_clausula_enumera_folios",
+                            "compraventa_estado_folio_especial_advertencia_1579",
+                            "compraventa_falsa_tradicion_advertencia_saneamiento",
+                            "compraventa_encadena_cancelacion_hipoteca_previa",
+                            "compraventa_encadena_cancelacion_patrimonio_familia",
+                            "compraventa_encadena_afectacion_vivienda_familiar",
+                        ]
+                    )
+                )
+            ).scalars()
+        }
+        self.assertEqual(len(reglas), 7)
+        self.assertEqual(reglas["compraventa_varios_inmuebles_identificacion_individual"].severidad, "BLOCK")
+        self.assertEqual(self._norma_slug(reglas["compraventa_falsa_tradicion_advertencia_saneamiento"].norma_id), "ley-1561-2012")
+
+        clausulas = {
+            row.titulo
+            for row in self.session.execute(
+                select(LegalClausula).where(LegalClausula.orden.in_([240, 250, 260, 270, 280, 290]))
+            ).scalars()
+        }
+        self.assertIn("Parágrafo - Varios inmuebles", clausulas)
+        self.assertIn("Parágrafo - Falsa tradición", clausulas)
+        self.assertIn("Acto previo - Cancelación de hipoteca previa", clausulas)
+        self.assertIn("Acto posterior - Afectación a vivienda familiar", clausulas)
+
     def test_jurisprudencia_verificada_seed(self):
         self._seed()
         providencias = {
