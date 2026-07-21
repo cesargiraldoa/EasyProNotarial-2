@@ -8,6 +8,7 @@
                     "dev:next":  "next dev -H 127.0.0.1 -p 5179",
                     "build":  "next build",
                     "start":  "next start --hostname 127.0.0.1 -p 5179",
+                    "test":  "vitest run",
                     "lint":  "next lint"
                 },
     "dependencies":  {
@@ -26,6 +27,8 @@
                             "autoprefixer":  "^10.4.21",
                             "postcss":  "^8.5.3",
                             "tailwindcss":  "^3.4.17",
-                            "typescript":  "^5.8.3"
+                            "typescript":  "^5.8.3",
+                            "vite":  "^4.5.5",
+                            "vitest":  "^0.34.6"
                         }
 }
