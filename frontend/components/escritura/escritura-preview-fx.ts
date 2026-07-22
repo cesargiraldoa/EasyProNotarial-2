@@ -125,31 +125,42 @@ function sectionForCancelacion(id: string): string {
   return "sincuantia"; // cSinCuantia, cRecaudo y demás → sección sin cuantía (siempre presente)
 }
 
-// Los inputs React usan ids con guiones (`v-0-nombre`, `inmueble-0-matricula`,
-// `divisas-moneda`, `enc-hip-acreedor`) mientras el motor emite `data-f` sin
-// guiones (`v0nombre`), con puntos (`divisas.moneda`) o anidado
-// (`encadenamientos.hipotecaPrevia.acreedor`). Devuelve los candidatos a buscar.
+// Alias EXACTO id-del-form → data-f del motor, para los campos cuyo id NO coincide
+// con la clave que emite el motor. Así se resalta el VALOR en el cuerpo (no una sección).
+const DATAF_ALIAS: Record<string, string> = {
+  "divisas-moneda": "divisas.moneda",
+  "divisas-valor": "divisas.valorDivisas",
+  "divisas-declaracion": "divisas.declaracionCambio",
+  "divisas-origen": "divisas.paisOrigenFondos",
+  "rural-region": "rural.municipioRegionUaf",
+  "capacidad-autorizacion": "capacidad.autorizacionDetalle",
+  apoyoNombre: "capacidad.apoyoNombre",
+  apoyoDocumento: "capacidad.apoyoDocumento",
+};
+
+// Devuelve los data-f candidatos para el campo, del más específico al más laxo.
 function dataFCandidates(id: string): string[] {
-  const out = [id];
+  const out: string[] = [];
+  if (DATAF_ALIAS[id]) out.push(DATAF_ALIAS[id]);
+  out.push(id);
   // partes: lado en MAYÚSCULA en el form (V-0-nombre) → data-f del motor en minúscula (v0nombre)
   const party = id.match(/^([vcVC])-(\d+)-(.+)$/);
   if (party) out.push(`${party[1].toLowerCase()}${party[2]}${party[3]}`);
+  // inmuebles: inmueble-N-key → clave simple (1 inmueble) o inmuebles.N.key (varios)
   const inmueble = id.match(/^inmueble-(\d+)-(.+)$/);
   if (inmueble) {
-    const key = inmueble[2] === "avaluo" ? "avaluoCatastral" : inmueble[2];
-    out.push(key, `inmueble.${inmueble[1]}.${key}`);
+    const raw = inmueble[2];
+    const key = raw === "avaluo" ? "avaluoCatastral" : raw;
+    const single = raw === "descripcion" ? "inmdesc" : key; // 1 inmueble: descripcion → inmdesc
+    out.push(single, `inmuebles.${inmueble[1]}.${key}`);
   }
+  // encadenamientos: enc-hip-acreedor → encadenamientos.hipotecaPrevia.acreedor
   for (const [prefix, base] of Object.entries(NESTED_ENC)) {
     if (id.startsWith(prefix)) {
       const key = id.slice(prefix.length) === "registro" ? "registroFecha" : id.slice(prefix.length);
       out.push(base + key);
     }
   }
-  if (id.startsWith("divisas-")) out.push(`divisas.${id.slice("divisas-".length)}`);
-  if (id === "capacidad-autorizacion") out.push("capacidad.autorizacionDetalle");
-  if (id === "apoyoNombre") out.push("capacidad.apoyoNombre");
-  if (id === "apoyoDocumento") out.push("capacidad.apoyoDocumento");
-  if (id.includes("-")) out.push(id.replace(/-/g, "."));
   return out;
 }
 
@@ -195,6 +206,9 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
     }
   }
 
+  // Sin valor en el cuerpo: resalta la SECCIÓN correcta del campo (no un párrafo
+  // cualquiera). Si esa sección no está renderizada, no se resalta nada — es
+  // preferible a pintar un párrafo donde el dato no aparece.
   const key = sectionForId(lastId);
   if (key) {
     const sec = root.querySelector<HTMLElement>(`[data-sec="${key}"]`);
@@ -202,14 +216,6 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
       paintSection(sec);
       return sec;
     }
-  }
-
-  // Último recurso: si la sección mapeada no está renderizada (p. ej. un bloque
-  // apagado), resalta la primera sección presente para que SIEMPRE haya feedback.
-  const anySection = root.querySelector<HTMLElement>("[data-sec]");
-  if (anySection) {
-    paintSection(anySection);
-    return anySection;
   }
   return null;
 }

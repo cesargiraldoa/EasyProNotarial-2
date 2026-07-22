@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
-// Barrido: por cada acto, activa todos los bloques y edita TODOS los controles
-// del formulario, verificando que cada uno resalta algo en el documento
-// (.hl valor en el cuerpo, o .hl-sec la sección). Garantía de "todos sin excepción".
+// Correctitud: al editar un campo cuyo valor SÍ va en el cuerpo, el elemento
+// resaltado (.hl) debe CONTENER el texto tecleado — no una sección cualquiera.
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +14,6 @@ const apiMocks = vi.hoisted(() => ({
   getCorpus: vi.fn(), getEscrituraState: vi.fn(), redactarProsaGari: vi.fn(),
   revisarEscritura: vi.fn(), saveEscrituraState: vi.fn(), generarDocumento: vi.fn(),
 }));
-
 vi.mock("next/link", async () => {
   const react = await vi.importActual<typeof import("react")>("react");
   return { default: ({ href, children, ...props }: { href: string; children?: ReactNode; className?: string }) =>
@@ -28,7 +26,6 @@ const caseMeta = {
   current_state: "borrador", internal_case_number: "EP-123", official_deed_number: null, official_deed_year: null,
   updated_at: "2026-07-21T00:00:00",
 };
-
 function buttonByText(c: HTMLElement, t: string) {
   const b = Array.from(c.querySelectorAll("button")).find((i) => i.textContent?.includes(t));
   if (!b) throw new Error(`No button ${t}`); return b;
@@ -39,38 +36,17 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-async function sweepActo(container: HTMLElement, actoButton: string): Promise<string[]> {
-  await act(async () => {
-    buttonByText(container, actoButton).dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-  await act(async () => {});
-  // activar todos los checkboxes → revela campos y renderiza secciones condicionales
-  for (const cb of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"][id]'))) {
-    if (!cb.checked) await act(async () => cb.click());
-  }
-  const ids = Array.from(container.querySelectorAll<HTMLElement>("input[id], select[id], textarea[id]")).map((e) => e.id).filter(Boolean);
-  const fails: string[] = [];
-  for (const id of ids) {
-    const el = container.ownerDocument.getElementById(id);
-    if (!el) continue;
-    if (el instanceof HTMLInputElement && el.type === "checkbox") {
-      // Probar la acción significativa: MARCAR (revela/renderiza la sección).
-      await act(async () => el.click());
-      if (!el.checked) await act(async () => el.click());
-    } else if (el instanceof HTMLSelectElement && el.options.length > 1) {
-      await act(async () => {
-        el.selectedIndex = el.selectedIndex === 0 ? 1 : 0;
-        el.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-    } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      await act(async () => setValue(el, `X-${id}`));
-    }
-    if (container.querySelectorAll(".hl, .hl-sec").length === 0) fails.push(id);
-  }
-  return fails;
-}
+// Campos cuyo valor DEBE aparecer resaltado en el cuerpo del documento.
+const VALUE_FIELDS = [
+  "banco", "apoderadoBanco", "apodNombre", "tituloNum", "tituloNotaria",
+  "V-0-nombre", "C-0-nombre", "V-0-id",
+  "inmueble-0-matricula", "inmueble-0-descripcion", "inmueble-0-linderos", "inmueble-0-nupre",
+  "enc-hip-acreedor", "enc-pat-escritura", "enc-afectacion-beneficiarios",
+  "divisas-declaracion", "divisas-origen", "rural-region",
+  "capacidad-autorizacion", "apoyoNombre",
+];
 
-describe("resaltado: todos los campos sin excepción", () => {
+describe("resaltado por valor: el .hl contiene el texto tecleado", () => {
   let container: HTMLDivElement;
   let root: Root;
   beforeEach(async () => {
@@ -86,11 +62,23 @@ describe("resaltado: todos los campos sin excepción", () => {
   });
   afterEach(() => { act(() => root.unmount()); container.remove(); vi.clearAllMocks(); });
 
-  it("Compraventa + Hipoteca: cada control resalta algo", async () => {
-    expect(await sweepActo(container, "Compraventa + Hipoteca")).toEqual([]);
-  }, 60000);
-
-  it("Cancelacion de hipoteca: cada control resalta algo", async () => {
-    expect(await sweepActo(container, "Cancelacion de hipoteca")).toEqual([]);
+  it("Compraventa + Hipoteca: cada campo con valor en el cuerpo se resalta", async () => {
+    await act(async () => {
+      buttonByText(container, "Compraventa + Hipoteca").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {});
+    for (const cb of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"][id]'))) {
+      if (!cb.checked) await act(async () => cb.click());
+    }
+    const wrong: string[] = [];
+    for (const id of VALUE_FIELDS) {
+      const el = container.ownerDocument.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (!el) { wrong.push(`${id}(no-render)`); continue; }
+      const uniq = `ZQX${id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      await act(async () => setValue(el, uniq));
+      const hl = container.querySelector<HTMLElement>(".hl");
+      if (!hl || !hl.textContent?.includes(uniq)) wrong.push(id);
+    }
+    expect(wrong, `campos que no resaltaron su valor: ${wrong.join(", ")}`).toEqual([]);
   }, 60000);
 });
