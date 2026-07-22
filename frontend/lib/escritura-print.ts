@@ -1,6 +1,9 @@
-// Impresión / exportación a PDF de la escritura desde el modo Captura.
-// Abre una ventana con el HTML determinístico del motor y dispara window.print(),
-// que permite "Guardar como PDF". Devuelve false si el navegador bloqueó la ventana.
+// Impresión / exportación a PDF de la escritura.
+// Abre una ventana con el HTML del motor y dispara window.print() (permite
+// "Guardar como PDF"). Rellena los guiones de relleno (line-leaders) que impiden
+// intercalar texto al final de cada renglón/párrafo, midiéndolos al ancho de la
+// página — igual que hacía el prototipo `escritura-asistida.html`.
+// Devuelve false si el navegador bloqueó la ventana emergente.
 
 const PRINT_CSS = `
 @page{size:A4;margin:18mm}
@@ -21,8 +24,44 @@ body{background:#fff;color:#1b1e23;font-family:Georgia,"Times New Roman",serif;f
 .ins{font-weight:600}
 .sech{text-align:center}
 .cite{display:none}
-.fill{display:none}
+.fill{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;color:#8a8a8a;letter-spacing:.05em}
 `;
+
+// Script que corre DENTRO de la ventana de impresión: mide cada guion de relleno
+// al ancho real de la página y luego imprime.
+const FILL_AND_PRINT = `
+window.onload=function(){
+  var LEADER=Array(401).join('\\u2014');
+  var fills=document.querySelectorAll('.fill');
+  var i,f;
+  for(i=0;i<fills.length;i++){f=fills[i];f.textContent=LEADER;f.style.width='0px';}
+  for(i=0;i<fills.length;i++){
+    f=fills[i];var host=f.parentElement;if(!host)continue;
+    var cs=getComputedStyle(host);
+    var right=host.getBoundingClientRect().right-parseFloat(cs.paddingRight||0);
+    var left=f.getBoundingClientRect().left;
+    var w=right-left-2;
+    f.style.width=(w>4?w:0)+'px';
+  }
+  setTimeout(function(){window.focus();window.print();},80);
+};
+`;
+
+// Garantiza un guion de relleno al final de cada cláusula y parágrafo.
+function ensureFillLeaders(html: string): string {
+  if (typeof document === "undefined") return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll<HTMLElement>("p.cl, p.para").forEach((block) => {
+    const last = block.lastElementChild;
+    if (!(last && last.classList.contains("fill"))) {
+      const span = document.createElement("span");
+      span.className = "fill";
+      block.appendChild(span);
+    }
+  });
+  return root.innerHTML;
+}
 
 export function printEscrituraHtml(html: string): boolean {
   // Nota: NO usar "noopener"/"noreferrer" aquí — con esas flags el navegador
@@ -32,8 +71,8 @@ export function printEscrituraHtml(html: string): boolean {
   printWindow.document.open();
   printWindow.document.write(
     `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Escritura</title><style>${PRINT_CSS}</style></head>` +
-      `<body><article class="sheet">${html}</article>` +
-      `<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},60);};<\/script>` +
+      `<body><article class="sheet">${ensureFillLeaders(html)}</article>` +
+      `<script>${FILL_AND_PRINT}<\/script>` +
       `</body></html>`,
   );
   printWindow.document.close();

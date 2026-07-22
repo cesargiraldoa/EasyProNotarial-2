@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import styles from "./escritura-preview.module.css";
-import { applyHighlight, useNormaTooltip } from "./escritura-preview-fx";
+import { applyHighlight, fillLeaders, useNormaTooltip } from "./escritura-preview-fx";
 
 type Props = {
   html: string;
@@ -22,6 +22,25 @@ export function EscrituraPreview({ html, lastId = null, highlightTick = 0 }: Pro
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useNormaTooltip(sheetRef, html);
+
+  // Guiones de relleno: rellenar/medir tras cada render y al redimensionar la ventana.
+  useEffect(() => {
+    const root = sheetRef.current;
+    if (!root) return;
+    fillLeaders(root);
+    let raf = 0;
+    function onResize() {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (sheetRef.current) fillLeaders(sheetRef.current);
+      });
+    }
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [html]);
 
   useEffect(() => {
     const root = sheetRef.current;

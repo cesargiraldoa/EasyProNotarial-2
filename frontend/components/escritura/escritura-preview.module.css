@@ -142,8 +142,16 @@
   white-space: nowrap;
 }
 
+/* Guion de relleno (line-leader): rellena el resto del renglón para impedir
+   intercalar texto. El ancho se calcula en JS (fillLeaders). */
 .sheet :global(.fill) {
-  display: none;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--line-strong);
+  letter-spacing: 0.05em;
+  user-select: none;
 }
 
 .sheet :global(.sech) {

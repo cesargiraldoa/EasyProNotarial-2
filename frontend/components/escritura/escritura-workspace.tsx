@@ -443,8 +443,9 @@ export function EscrituraWorkspace({ caseId }: Props) {
   }
 
   function handlePrintPdf() {
-    if (!resultado) return;
-    const opened = printEscrituraHtml(resultado.html);
+    const html = mode === "redaccion" && editorRef.current ? editorRef.current.getHtmlForExport() : resultado?.html;
+    if (!html) return;
+    const opened = printEscrituraHtml(html);
     if (opened) {
       setError(null);
       setFeedback("Vista de impresion abierta. Elige 'Guardar como PDF' en el dialogo.");
@@ -479,17 +480,15 @@ export function EscrituraWorkspace({ caseId }: Props) {
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
             {mode === "redaccion" ? "Guardar borrador" : "Guardar"}
           </button>
-          {mode === "captura" ? (
-            <button
-              type="button"
-              onClick={handlePrintPdf}
-              disabled={!acto || !state || !resultado || isLoadingState}
-              className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Printer className="h-4 w-4" aria-hidden="true" />
-              Imprimir / PDF
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={handlePrintPdf}
+            disabled={!acto || !state || !resultado || isLoadingState}
+            className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Printer className="h-4 w-4" aria-hidden="true" />
+            Imprimir / PDF
+          </button>
           <button
             type="button"
             onClick={handleGenerate}

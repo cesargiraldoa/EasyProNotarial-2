@@ -125,6 +125,45 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
   return null;
 }
 
+const LEADER = "—".repeat(400); // 400 rayas (—) para el guion de relleno
+
+/**
+ * Rellena los guiones de relleno (line-leaders) al final de cada cláusula y
+ * parágrafo, midiéndolos para que cubran el resto del renglón hasta el margen
+ * derecho — impide intercalar texto. Portado de fillLeaders() del prototipo.
+ * Lee y escribe en fases separadas para forzar un solo reflujo.
+ */
+export function fillLeaders(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("p.cl, p.para").forEach((block) => {
+    const last = block.lastElementChild;
+    if (!(last && last.classList.contains("fill"))) {
+      const span = document.createElement("span");
+      span.className = "fill";
+      block.appendChild(span);
+    }
+  });
+
+  const fills = Array.from(root.querySelectorAll<HTMLElement>(".fill"));
+  // fase 1 (escritura): materializa y colapsa para medir el fin del texto
+  fills.forEach((fill) => {
+    fill.textContent = LEADER;
+    fill.style.width = "0px";
+  });
+  // fase 2 (lectura): un solo reflujo para todas las mediciones
+  const widths = fills.map((fill) => {
+    const host = fill.parentElement;
+    if (!host) return 0;
+    const cs = window.getComputedStyle(host);
+    const right = host.getBoundingClientRect().right - parseFloat(cs.paddingRight || "0");
+    const left = fill.getBoundingClientRect().left;
+    return right - left - 2;
+  });
+  // fase 3 (escritura): aplica el ancho restante en la última línea
+  fills.forEach((fill, index) => {
+    fill.style.width = `${widths[index] > 4 ? widths[index] : 0}px`;
+  });
+}
+
 function esc(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
