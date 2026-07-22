@@ -189,12 +189,33 @@ function clearPaint(el: HTMLElement) {
   el.style.boxShadow = "";
 }
 
+// Busca el elemento más pequeño cuyo texto contenga el valor tecleado y lo resalta.
+// Cubre campos cuyo valor SÍ aparece en el cuerpo pero sin data-f (p. ej. firmas).
+function highlightByValue(root: HTMLElement, value: string | null | undefined): HTMLElement | null {
+  const v = (value ?? "").trim();
+  if (v.length < 3) return null;
+  let best: HTMLElement | null = null;
+  const els = root.querySelectorAll<HTMLElement>("p, span, div, td, li, h4, h5, strong, em, b, i");
+  for (const el of els) {
+    const text = el.textContent ?? "";
+    if (text.includes(v)) {
+      if (!best || text.length < (best.textContent ?? "").length) best = el;
+    }
+  }
+  if (best) {
+    paintField(best);
+    return best;
+  }
+  return null;
+}
+
 /**
  * Aplica el resaltado del último campo editado sobre el preview ya renderizado.
- * Limpia el resaltado anterior y devuelve el elemento resaltado (para scroll/flash).
+ * Orden: (1) valor por data-f, (2) valor por coincidencia de texto, (3) sección.
+ * Limpia el resaltado anterior y devuelve el elemento resaltado (para scroll).
  * Usa estilos inline para que el amarillo se vea sí o sí, sin depender del CSS.
  */
-export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLElement | null {
+export function applyHighlight(root: HTMLElement, lastId: string | null, lastValue?: string | null): HTMLElement | null {
   root.querySelectorAll<HTMLElement>(".hl, .hl-sec").forEach(clearPaint);
   if (!lastId) return null;
 
@@ -205,6 +226,10 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
       return spans[0];
     }
   }
+
+  // El valor tecleado aparece en el cuerpo pero sin data-f (firmas, etc.)
+  const byValue = highlightByValue(root, lastValue);
+  if (byValue) return byValue;
 
   // Sin valor en el cuerpo: resalta la SECCIÓN correcta del campo (no un párrafo
   // cualquiera). Si esa sección no está renderizada, no se resalta nada — es

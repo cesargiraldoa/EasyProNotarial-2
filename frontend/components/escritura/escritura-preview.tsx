@@ -8,11 +8,13 @@ type Props = {
   html: string;
   /** Id del último campo editado en el formulario (para resaltarlo en la escritura). */
   lastId?: string | null;
+  /** Valor tecleado del último campo editado (para resaltar por coincidencia de texto). */
+  lastValue?: string | null;
   /** Contador que cambia en cada edición para re-disparar el resaltado aunque el id se repita. */
   highlightTick?: number;
 };
 
-export function EscrituraPreview({ html, lastId = null, highlightTick = 0 }: Props) {
+export function EscrituraPreview({ html, lastId = null, lastValue = null, highlightTick = 0 }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useNormaTooltip(sheetRef, html);
@@ -39,12 +41,12 @@ export function EscrituraPreview({ html, lastId = null, highlightTick = 0 }: Pro
   useEffect(() => {
     const root = sheetRef.current;
     if (!root) return;
-    const target = applyHighlight(root, lastId);
+    const target = applyHighlight(root, lastId, lastValue);
     if (!target) return;
     // Lleva la vista al cambio (mínimo movimiento si ya está visible).
     target.scrollIntoView({ behavior: "smooth", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, lastId, highlightTick]);
+  }, [html, lastId, lastValue, highlightTick]);
 
   return (
     <section className={styles.previewShell} aria-label="Vista previa de la escritura">

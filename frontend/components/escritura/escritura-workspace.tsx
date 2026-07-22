@@ -212,6 +212,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [lastId, setLastId] = useState<string | null>(null);
+  const [lastValue, setLastValue] = useState<string | null>(null);
   const [highlightTick, setHighlightTick] = useState(0);
 
   const resultado = useMemo(() => {
@@ -227,6 +228,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setState(null);
     setMode("captura");
     setLastId(null);
+    setLastValue(null);
     setHighlightTick(0);
     setRedaccionDraft(null);
     setRedaccionDirty(false);
@@ -438,7 +440,12 @@ export function EscrituraWorkspace({ caseId }: Props) {
   function handleFormSignal(event: FormEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement | null;
     if (!target || typeof target.id !== "string" || !target.id) return;
+    const value =
+      target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
+        ? target.value
+        : null;
     setLastId(target.id);
+    setLastValue(value);
     setHighlightTick((tick) => tick + 1);
   }
 
@@ -561,7 +568,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
               <main className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
                 <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
                 <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
-                <EscrituraPreview html={resultado.html} lastId={lastId} highlightTick={highlightTick} />
+                <EscrituraPreview html={resultado.html} lastId={lastId} lastValue={lastValue} highlightTick={highlightTick} />
               </main>
               <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
                 <CumplimientoPanel cumplimiento={resultado.cumplimiento} />

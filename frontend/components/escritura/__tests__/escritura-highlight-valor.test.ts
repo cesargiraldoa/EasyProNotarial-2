@@ -44,6 +44,8 @@ const VALUE_FIELDS = [
   "enc-hip-acreedor", "enc-pat-escritura", "enc-afectacion-beneficiarios",
   "divisas-declaracion", "divisas-origen", "rural-region",
   "capacidad-autorizacion", "apoyoNombre",
+  // firmas: el valor aparece en el cuerpo sin data-f → resaltado por coincidencia de texto
+  "testigo-0-nombre", "ruego-nombre",
 ];
 
 describe("resaltado por valor: el .hl contiene el texto tecleado", () => {
