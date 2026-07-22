@@ -151,7 +151,7 @@
 - ✅ **Bloque A** — Corpus vivo + RAG + gobernanza + biblioteca API (PR #138, `473b1cc`; backend 22/22 + frontend 13/13). El corpus es la fuente de verdad viva: 409 server-side, RAG con vigencia, gobernanza por fecha.
 - ✅ **Bloque B** — Gari (capa IA) (PR #139, `5483e02`). Frontera probada: sugiere/valida, citas del corpus.
 - ✅ **Bloque C (Lote 1)** — Todo tipo: varios inmuebles + folio + encadenamientos (PR #140, `1b96f3c`). Golden base intactos.
-- ⏳ **Bloque D (Lote 2)** — Todo tipo: extranjero/divisas + rural/UAF + capacidad/apoyos. Prompt: `prompts/wp-D-todotipo-lote2.md`.
+- ✅ **Bloque D (Lote 2)** — Todo tipo: extranjero/divisas + rural/UAF + capacidad/apoyos (PR #141, `c596a9a`). Golden base intactos. +7 normas en confianza=baja → brief GPT `prompts/tarea-gpt-normas-nuevas-2.md`.
 - Follow-up de datos: aplicar el JSON de GPT (enlaces/confianza) al corpus cuando llegue.
 
 Siguiente: pegar `prompts/wp-B-gari.md` en Codex → PR → revisión.
