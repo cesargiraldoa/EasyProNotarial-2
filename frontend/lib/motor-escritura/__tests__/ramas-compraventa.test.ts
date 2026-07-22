@@ -98,4 +98,79 @@ describe("motor-escritura ramas comunes de compraventa", () => {
     expect(resultado.html).toContain("BANCO TEST S.A.");
     expect(resultado.cumplimiento.items.map((item) => item.titulo)).toContain("Cancelación de hipoteca previa encadenada");
   });
+
+  it("activa cláusula de divisas para extranjero no residente", () => {
+    const base = state({
+      divisas: {
+        parteExtranjeraNoResidente: true,
+        pagoDivisas: true,
+        moneda: "USD",
+        valorDivisas: 100000,
+        paisOrigenFondos: "Estados Unidos",
+        declaracionCambio: "Formulario No. 4",
+        canalizacionMercadoCambiario: false,
+        registroInversionExtranjera: false,
+      },
+    });
+    base.C = [{ ...base.C[0], tipoDoc: "PA", nombre: "MARIA FOREIGN TEST" }];
+
+    const resultado = generar("compraventa", base);
+
+    expect(resultado.html).toContain("Extranjería, no residencia y régimen cambiario");
+    expect(resultado.html).toContain("Banco de la República");
+    expect(resultado.html).toContain("Circular DCIN Banrep");
+    expect(resultado.html).toContain("Formulario No. 4");
+    expect(resultado.cumplimiento.items.map((item) => item.titulo)).toContain("Canalización por mercado cambiario pendiente");
+    expect(resultado.cumplimiento.items.map((item) => item.titulo)).toContain("Registro de inversión extranjera pendiente");
+  });
+
+  it("bloquea predio rural que supera UAF sin autorización", () => {
+    const resultado = generar(
+      "compraventa",
+      state({
+        ph: false,
+        rural: {
+          predioRural: true,
+          baldioAdjudicado: true,
+          restriccionTemporal: true,
+          superaUaf: true,
+          autorizacionAnt: false,
+          derechoPreferencia: true,
+          municipioRegionUaf: "Urabá antioqueño",
+          areaHectareas: 80,
+          uafHectareas: 40,
+        },
+      }),
+    );
+
+    expect(resultado.html).toContain("Predio rural, UAF y baldíos");
+    expect(resultado.html).toContain("arts. 39 y 72 · Ley 160/1994");
+    expect(resultado.cumplimiento.items).toContainEqual(expect.objectContaining({ tipo: "crit", titulo: "UAF excedida sin autorización" }));
+    expect(resultado.cumplimiento.tiles.bloqueante).toBeGreaterThan(0);
+  });
+
+  it("redacta venta de bien de menor con autorización por validar", () => {
+    const resultado = generar(
+      "compraventa",
+      state({
+        capacidad: {
+          menorVendedor: true,
+          ventaBienMenor: true,
+          autorizacionVentaMenor: false,
+          autorizacionDetalle: "auto judicial del Juzgado Primero de Familia",
+          discapacidadConApoyos: true,
+          apoyoAcreditado: true,
+          apoyoNombre: "ANA APOYO TEST",
+          apoyoDocumento: "C.C. 1.000.000",
+          apoyoTipo: "acuerdo",
+        },
+      }),
+    );
+
+    expect(resultado.html).toContain("Capacidad, representación y apoyos");
+    expect(resultado.html).toContain("capacidad legal plena");
+    expect(resultado.html).toContain("auto judicial del Juzgado Primero de Familia");
+    expect(resultado.html.toLowerCase()).not.toContain("incapaz");
+    expect(resultado.cumplimiento.items.map((item) => item.titulo)).toContain("Venta de bien de menor sin autorización");
+  });
 });

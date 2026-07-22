@@ -70,6 +70,45 @@ export interface EncadenamientosCompraventa {
   };
 }
 
+export interface CompraventaDivisas {
+  parteExtranjeraNoResidente?: boolean;
+  pagoDivisas?: boolean;
+  registroInversionExtranjera?: boolean;
+  canalizacionMercadoCambiario?: boolean;
+  poderExteriorApostillado?: boolean;
+  declaracionCambio?: string;
+  paisOrigenFondos?: string;
+  moneda?: string;
+  valorDivisas?: number;
+}
+
+export interface CompraventaRural {
+  predioRural?: boolean;
+  baldioAdjudicado?: boolean;
+  restriccionTemporal?: boolean;
+  superaUaf?: boolean;
+  autorizacionAnt?: boolean;
+  derechoPreferencia?: boolean;
+  municipioRegionUaf?: string;
+  areaHectareas?: number;
+  uafHectareas?: number;
+}
+
+export type ApoyoTipo = "acuerdo" | "adjudicacion";
+
+export interface CompraventaCapacidad {
+  menorVendedor?: boolean;
+  ventaBienMenor?: boolean;
+  autorizacionVentaMenor?: boolean;
+  autorizacionDetalle?: string;
+  discapacidadConApoyos?: boolean;
+  apoyoAcreditado?: boolean;
+  apoyoNombre?: string;
+  apoyoDocumento?: string;
+  apoyoTipo?: ApoyoTipo;
+  apoyoActo?: string;
+}
+
 export interface CompraventaState {
   derecho: "dominio" | "nuda" | "usufructo" | "cuota" | "uso";
   credito: boolean;
@@ -85,6 +124,9 @@ export interface CompraventaState {
   inmuebles?: CompraventaInmueble[];
   folioEstado?: FolioEstado;
   encadenamientos?: EncadenamientosCompraventa;
+  divisas?: CompraventaDivisas;
+  rural?: CompraventaRural;
+  capacidad?: CompraventaCapacidad;
   apod: boolean;
   apodN: string;
   apodP: string;
@@ -731,6 +773,65 @@ function renderEncadenamientos(s: CompraventaState, compradorLabel: string): str
   return h;
 }
 
+function divisasActivas(s: CompraventaState): CompraventaDivisas {
+  return s.divisas || {};
+}
+
+function ruralActiva(s: CompraventaState): CompraventaRural {
+  return s.rural || {};
+}
+
+function capacidadActiva(s: CompraventaState): CompraventaCapacidad {
+  return s.capacidad || {};
+}
+
+function formatHectareas(value: number | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? String(value).replace(".", ",") + " hectáreas" : "________ hectáreas";
+}
+
+function partesExtranjeras(s: CompraventaState): string {
+  const naturales = s.V.concat(s.C).filter((party) => party.tipo === "natural" && ["CE", "PA", "PPT"].includes(party.tipoDoc));
+  if (!naturales.length) return "la parte extranjera o no residente";
+  return naturales.map((party) => esc(party.nombre || "________")).join("; ");
+}
+
+function renderSituacionesEspeciales(s: CompraventaState): string {
+  const divisas = divisasActivas(s);
+  const rural = ruralActiva(s);
+  const capacidad = capacidadActiva(s);
+  let h = "";
+
+  if (divisas.parteExtranjeraNoResidente || divisas.pagoDivisas) {
+    const declaracion = divisas.declaracionCambio ? " identificada como " + IF("divisas.declaracionCambio", divisas.declaracionCambio) : "";
+    const monedaValor = divisas.valorDivisas ? " por " + IF("divisas.moneda", divisas.moneda || "USD") + " " + IF("divisas.valorDivisas", fmtMoneyStr(String(divisas.valorDivisas))) : "";
+    const origen = divisas.paisOrigenFondos ? ", con origen declarado en " + IF("divisas.paisOrigenFondos", divisas.paisOrigenFondos) : "";
+    const identidad = divisas.parteExtranjeraNoResidente ? "Cuando interviene " + partesExtranjeras(s) + ", se deja constancia de la identificación con pasaporte, cédula de extranjería o PPT según corresponda; si el poder proviene del exterior, deberá protocolizarse apostillado o legalizado y traducido cuando aplique. " : "";
+    const pago = divisas.pagoDivisas ? "Si el precio se paga en divisas" + monedaValor + origen + ", las partes declaran que la operación se canaliza por el mercado cambiario mediante la declaración de cambio" + declaracion + " y que se realizará el registro de inversión extranjera ante el Banco de la República cuando proceda." : "";
+    h += '<p class="para" data-sec="divisas"><span class="clh">Parágrafo — Extranjería, no residencia y régimen cambiario.</span> '
+      + R((identidad + pago).trim(), "Ley 9/1991 · Dcto 1068/2015 · Circular DCIN Banrep")
+      + "</p>";
+  }
+
+  if (rural.predioRural || rural.baldioAdjudicado || rural.superaUaf || rural.derechoPreferencia) {
+    const area = formatHectareas(rural.areaHectareas);
+    const uaf = formatHectareas(rural.uafHectareas);
+    const region = rural.municipioRegionUaf ? " para " + IF("rural.municipioRegionUaf", rural.municipioRegionUaf) : "";
+    h += '<p class="para" data-sec="rural-uaf"><span class="clh">Parágrafo — Predio rural, UAF y baldíos.</span> '
+      + R("Las partes declaran que el inmueble se identifica como predio rural no sometido a propiedad horizontal, con cabida aproximada de " + area + " y Unidad Agrícola Familiar de referencia de " + uaf + region + ". Si el predio proviene de baldío adjudicado o supera la UAF, deberá verificarse la restricción de enajenación, acumulación, autorización de la Agencia Nacional de Tierras y eventual derecho de preferencia antes del otorgamiento o registro.", "arts. 39 y 72 · Ley 160/1994")
+      + "</p>";
+  }
+
+  if (capacidad.menorVendedor || capacidad.ventaBienMenor || capacidad.discapacidadConApoyos) {
+    const autorizacion = capacidad.autorizacionDetalle ? " Se protocoliza " + IF("capacidad.autorizacionDetalle", capacidad.autorizacionDetalle) + "." : " La autorización judicial o notarial vigente deberá protocolizarse si el bien pertenece a una persona menor de edad.";
+    const apoyo = capacidad.apoyoNombre ? " La persona de apoyo " + IF("capacidad.apoyoNombre", capacidad.apoyoNombre) + (capacidad.apoyoDocumento ? ", identificada con " + IF("capacidad.apoyoDocumento", capacidad.apoyoDocumento) : "") + ", asiste en la comunicación y comprensión del acto sin sustituir la voluntad de la persona titular." : " La persona de apoyo, cuando sea usada, asiste en la comunicación y comprensión del acto sin sustituir la voluntad de la persona titular.";
+    h += '<p class="para" data-sec="capacidad-apoyos"><span class="clh">Parágrafo — Capacidad, representación y apoyos.</span> '
+      + R("Cuando se vende un bien de persona menor de edad, comparece su representante legal en los términos autorizados y se deja constancia de la autorización aplicable." + autorizacion + " La persona con discapacidad conserva capacidad legal plena; si utiliza apoyos, deben acreditarse mediante acuerdo o adjudicación de apoyos vigente." + apoyo, "Ley 1996/2019 arts. 6, 15 y 16 · Dcto 1429/2020")
+      + "</p>";
+  }
+
+  return h;
+}
+
 export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TARIFAS): string {
   const V = s.V;
   const C = s.C;
@@ -807,6 +908,7 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
     h += '<p class="para" data-sec="ley258"><span class="clh">Parágrafo — Efectos de la Ley 258 de 1996.</span> ' + R("Advertido" + (vpl ? "s" : "") + " del Artículo 6.º de la Ley 258 de 1996, modificada por la Ley 854 de 2003, e indagado" + (vpl ? "s" : "") + " expresamente, " + vend + " manifest" + adq + " bajo juramento " + decl + ".", "art. 6 · Ley 258/1996") + "</p>";
   }
   if (anyEncadenamiento(s)) h += renderEncadenamientos(s, COMPRA);
+  h += renderSituacionesEspeciales(s);
 
   h += '<p class="cl" data-sec="precio"><span class="clh">CUARTO: PRECIO DE VENTA.</span> El precio de la compraventa lo constituye la suma de ' + IF("total", money(s.total)) + ", que " + COMPRA + ' cancelará así:<span class="fill"></span></p>';
   h += '<p class="para"><span class="clh">a)</span> La suma de ' + IF("inicial", money(s.inicial)) + ", con recursos propios, que " + vend + " declara" + tf + " recibida a satisfacción.</p>";
@@ -991,6 +1093,24 @@ export function evaluar(s: CompraventaState): EvaluacionItem[] {
   if (enc.cancelacionHipotecaPrevia) it.push({ t: "obl", h: "Cancelación de hipoteca previa encadenada", p: "El instrumento incluye acto previo de cancelación de hipoteca antes de la transferencia.", n: "art. 2457 C.C. · Ley 1579/2012" });
   if (enc.cancelacionPatrimonioFamilia) it.push({ t: "obl", h: "Cancelación de patrimonio de familia encadenada", p: "El instrumento cancela el patrimonio de familia antes de transferir el dominio.", n: "Ley 70/1931 · Ley 495/1999" });
   if (enc.afectacionViviendaFamiliar) it.push({ t: "obl", h: "Afectación a vivienda familiar encadenada", p: "El instrumento constituye la afectación a vivienda familiar después de la compra.", n: "art. 6 · Ley 258/1996" });
+  const divisas = divisasActivas(s);
+  if (divisas.parteExtranjeraNoResidente) it.push({ t: "obl", h: "Parte extranjera o no residente", p: "La comparecencia identifica pasaporte, cédula de extranjería o PPT; si hay poder otorgado en el exterior, debe protocolizarse apostillado/legalizado.", n: "Dcto 1069/2015 · régimen cambiario" });
+  if (divisas.parteExtranjeraNoResidente && s.apod && !divisas.poderExteriorApostillado) it.push({ t: "warn", h: "Poder del exterior por validar", p: "Si el poder fue otorgado fuera de Colombia, verificar apostilla o legalización y traducción oficial cuando aplique.", n: "Dcto 1069/2015" });
+  if (divisas.pagoDivisas) {
+    it.push({ t: "obl", h: "Declaración de cambio", p: "La operación en divisas debe quedar soportada con declaración de cambio y trazabilidad de origen de fondos.", n: "Circular DCIN Banrep" });
+    if (!divisas.canalizacionMercadoCambiario) it.push({ t: "warn", h: "Canalización por mercado cambiario pendiente", p: "El pago en divisas debe canalizarse por el mercado cambiario cuando corresponda.", n: "Ley 9/1991 · Dcto 1068/2015" });
+    if (!divisas.registroInversionExtranjera) it.push({ t: "warn", h: "Registro de inversión extranjera pendiente", p: "Cuando la adquisición configure inversión extranjera, registrar la operación ante el Banco de la República.", n: "Ley 9/1991 · Circular DCIN Banrep" });
+  }
+  const rural = ruralActiva(s);
+  if (rural.predioRural) it.push({ t: "obl", h: "Predio rural identificado sin PH", p: "El instrumento deja constancia de cabida, UAF de referencia y revisión de restricciones agrarias.", n: "Ley 160/1994" });
+  if (rural.superaUaf && !rural.autorizacionAnt) it.push({ t: "crit", h: "UAF excedida sin autorización", p: "La adquisición de terrenos inicialmente adjudicados como baldíos no puede exceder la UAF sin la autorización o habilitación aplicable.", n: "art. 72 · Ley 160/1994" });
+  if (rural.baldioAdjudicado && rural.restriccionTemporal) it.push({ t: "warn", h: "Baldío adjudicado con restricción temporal", p: "Verificar término de restricción, autorización ANT y antecedentes antes del otorgamiento o registro.", n: "arts. 39 y 72 · Ley 160/1994" });
+  if (rural.derechoPreferencia) it.push({ t: "warn", h: "Derecho de preferencia agrario", p: "Debe revisarse si procede oferta previa o autorización de la ANT u otro beneficiario preferente.", n: "art. 39 · Ley 160/1994" });
+  const capacidad = capacidadActiva(s);
+  if ((capacidad.menorVendedor || capacidad.ventaBienMenor) && !capacidad.autorizacionVentaMenor) it.push({ t: "warn", h: "Venta de bien de menor sin autorización", p: "Debe protocolizarse autorización judicial o notarial vigente antes de completar la venta del bien de una persona menor de edad.", n: "Ley 1996/2019 · Dcto 1429/2020" });
+  if ((capacidad.menorVendedor || capacidad.ventaBienMenor) && capacidad.autorizacionVentaMenor) it.push({ t: "obl", h: "Autorización para venta de bien de menor", p: "La autorización aplicable queda relacionada para revisión del notario.", n: "Ley 1996/2019 · Dcto 1429/2020" });
+  if (capacidad.discapacidadConApoyos && !capacidad.apoyoAcreditado) it.push({ t: "warn", h: "Apoyos no acreditados", p: "La persona conserva capacidad legal plena; si utiliza apoyos, el acuerdo o adjudicación vigente debe acreditarse.", n: "Ley 1996/2019 arts. 6, 15 y 16" });
+  if (capacidad.discapacidadConApoyos && capacidad.apoyoAcreditado) it.push({ t: "obl", h: "Apoyos acreditados", p: "El instrumento deja constancia del apoyo sin sustituir la voluntad de la persona titular.", n: "Ley 1996/2019 arts. 6, 15 y 16" });
   it.push({ t: "obl", h: "Declaración de valor real", p: "Declaración juramentada incluida — evita la base de 4×.", n: "art. 90 E.T." });
   it.push({ t: "obl", h: "Declaración de origen de fondos", p: "Cláusula SIPLAFT presente para la parte compradora.", n: "Ley 2195/2022" });
   it.push({ t: "obl", h: "Retención en la fuente del 1%", p: "Constancia de recaudo por el Notario incluida.", n: "art. 398 E.T." });

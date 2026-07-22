@@ -9,10 +9,14 @@ import {
   pts,
   sumaCuotas,
   type ActoCode,
+  type ApoyoTipo,
   type AuxParty,
   type CancelacionState,
   type CaseState,
+  type CompraventaCapacidad,
+  type CompraventaDivisas,
   type CompraventaInmueble,
+  type CompraventaRural,
   type CompraventaState,
   type EncadenamientosCompraventa,
   type EstadoCivil,
@@ -74,6 +78,11 @@ const folioEstadoOptions: Array<[FolioEstado, string]> = [
   ["desenglobe", "Desenglobe"],
   ["mayor_extension", "Mayor extension"],
   ["falsa_tradicion", "Falsa tradicion"],
+];
+
+const apoyoTipoOptions: Array<[ApoyoTipo, string]> = [
+  ["acuerdo", "Acuerdo de apoyos"],
+  ["adjudicacion", "Adjudicacion judicial de apoyos"],
 ];
 
 const emptyParty: Party = {
@@ -247,6 +256,9 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
   const vendedorCuotas = sumaCuotas(state.V);
   const inmuebles = inmueblesForm(state);
   const encadenamientos = state.encadenamientos || {};
+  const divisas = state.divisas || {};
+  const rural = state.rural || {};
+  const capacidad = state.capacidad || {};
 
   function setField<K extends keyof CompraventaState>(key: K, value: CompraventaState[K]) {
     onChange({ ...state, [key]: value });
@@ -322,6 +334,19 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
 
   function setAfectacion(patch: NonNullable<EncadenamientosCompraventa["afectacion"]>) {
     setEncadenamiento("afectacion", { ...(encadenamientos.afectacion || {}), ...patch });
+  }
+
+  function setDivisas(patch: Partial<CompraventaDivisas>) {
+    onChange({ ...state, divisas: { ...divisas, ...patch } });
+  }
+
+  function setRural(patch: Partial<CompraventaRural>) {
+    const nextRural = { ...rural, ...patch };
+    onChange({ ...state, ph: nextRural.predioRural ? false : state.ph, rural: nextRural });
+  }
+
+  function setCapacidad(patch: Partial<CompraventaCapacidad>) {
+    onChange({ ...state, capacidad: { ...capacidad, ...patch } });
   }
 
   return (
@@ -492,6 +517,86 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         {encadenamientos.afectacionViviendaFamiliar ? (
           <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
             <TextField id="enc-afectacion-beneficiarios" label="Nucleo familiar / beneficiarios" value={encadenamientos.afectacion?.beneficiarios || ""} onChange={(value) => setAfectacion({ beneficiarios: value })} />
+          </div>
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="3c" title="Extranjeria y divisas">
+        <Checkbox
+          id="parteExtranjeraNoResidente"
+          checked={Boolean(divisas.parteExtranjeraNoResidente)}
+          label="Interviene parte extranjera o no residente"
+          onChange={(checked) => setDivisas({ parteExtranjeraNoResidente: checked })}
+        />
+        <Checkbox
+          id="pagoDivisas"
+          checked={Boolean(divisas.pagoDivisas)}
+          label="El precio se paga total o parcialmente en divisas"
+          onChange={(checked) => setDivisas({ pagoDivisas: checked })}
+        />
+        {divisas.parteExtranjeraNoResidente || divisas.pagoDivisas ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <div className={row2Class}>
+              <TextField id="divisas-moneda" label="Moneda" value={divisas.moneda || ""} onChange={(value) => setDivisas({ moneda: value })} />
+              <NumberField id="divisas-valor" label="Valor en divisas" value={divisas.valorDivisas || 0} onChange={(value) => setDivisas({ valorDivisas: value })} />
+            </div>
+            <div className={row2Class}>
+              <TextField id="divisas-declaracion" label="Declaracion de cambio" value={divisas.declaracionCambio || ""} onChange={(value) => setDivisas({ declaracionCambio: value })} />
+              <TextField id="divisas-origen" label="Pais / origen de fondos" value={divisas.paisOrigenFondos || ""} onChange={(value) => setDivisas({ paisOrigenFondos: value })} />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Checkbox id="divisas-canalizacion" checked={Boolean(divisas.canalizacionMercadoCambiario)} label="Canalizado por mercado cambiario" onChange={(checked) => setDivisas({ canalizacionMercadoCambiario: checked })} />
+              <Checkbox id="divisas-registro" checked={Boolean(divisas.registroInversionExtranjera)} label="Registro de inversion extranjera" onChange={(checked) => setDivisas({ registroInversionExtranjera: checked })} />
+              <Checkbox id="divisas-apostilla" checked={Boolean(divisas.poderExteriorApostillado)} label="Poder exterior apostillado/legalizado" onChange={(checked) => setDivisas({ poderExteriorApostillado: checked })} />
+            </div>
+          </div>
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="3d" title="Rural / UAF / baldios">
+        <Checkbox
+          id="predioRural"
+          checked={Boolean(rural.predioRural)}
+          label="Predio rural no sometido a PH"
+          onChange={(checked) => setRural({ predioRural: checked })}
+        />
+        {rural.predioRural || rural.baldioAdjudicado || rural.superaUaf ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <div className={row2Class}>
+              <NumberField id="rural-area" label="Area hectareas" value={rural.areaHectareas || 0} onChange={(value) => setRural({ areaHectareas: value })} />
+              <NumberField id="rural-uaf" label="UAF hectareas" value={rural.uafHectareas || 0} onChange={(value) => setRural({ uafHectareas: value })} />
+            </div>
+            <TextField id="rural-region" label="Municipio / region UAF" value={rural.municipioRegionUaf || ""} onChange={(value) => setRural({ municipioRegionUaf: value })} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Checkbox id="rural-baldio" checked={Boolean(rural.baldioAdjudicado)} label="Baldio adjudicado por ANT/INCORA" onChange={(checked) => setRural({ baldioAdjudicado: checked })} />
+              <Checkbox id="rural-restriccion" checked={Boolean(rural.restriccionTemporal)} label="Restriccion temporal vigente" onChange={(checked) => setRural({ restriccionTemporal: checked })} />
+              <Checkbox id="rural-supera-uaf" checked={Boolean(rural.superaUaf)} label="Supera la UAF" onChange={(checked) => setRural({ superaUaf: checked })} />
+              <Checkbox id="rural-autorizacion-ant" checked={Boolean(rural.autorizacionAnt)} label="Autorizacion ANT acreditada" onChange={(checked) => setRural({ autorizacionAnt: checked })} />
+              <Checkbox id="rural-preferencia" checked={Boolean(rural.derechoPreferencia)} label="Derecho de preferencia por revisar" onChange={(checked) => setRural({ derechoPreferencia: checked })} />
+            </div>
+          </div>
+        ) : null}
+      </Fieldset>
+
+      <Fieldset marker="3e" title="Capacidad y apoyos">
+        <Checkbox id="menorVendedor" checked={Boolean(capacidad.menorVendedor)} label="Otorgante vendedor menor de edad" onChange={(checked) => setCapacidad({ menorVendedor: checked, ventaBienMenor: checked || capacidad.ventaBienMenor })} />
+        <Checkbox id="ventaBienMenor" checked={Boolean(capacidad.ventaBienMenor)} label="Venta de bien de persona menor de edad" onChange={(checked) => setCapacidad({ ventaBienMenor: checked })} />
+        <Checkbox id="discapacidadConApoyos" checked={Boolean(capacidad.discapacidadConApoyos)} label="Persona con discapacidad usa apoyos" onChange={(checked) => setCapacidad({ discapacidadConApoyos: checked })} />
+        {capacidad.menorVendedor || capacidad.ventaBienMenor || capacidad.discapacidadConApoyos ? (
+          <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <Checkbox id="autorizacionVentaMenor" checked={Boolean(capacidad.autorizacionVentaMenor)} label="Autorizacion judicial/notarial vigente" onChange={(checked) => setCapacidad({ autorizacionVentaMenor: checked })} />
+            <TextField id="capacidad-autorizacion" label="Detalle de autorizacion" value={capacidad.autorizacionDetalle || ""} onChange={(value) => setCapacidad({ autorizacionDetalle: value })} />
+            {capacidad.discapacidadConApoyos ? (
+              <>
+                <Checkbox id="apoyoAcreditado" checked={Boolean(capacidad.apoyoAcreditado)} label="Apoyo acreditado" onChange={(checked) => setCapacidad({ apoyoAcreditado: checked })} />
+                <SelectField<ApoyoTipo> id="apoyoTipo" label="Tipo de apoyo" value={capacidad.apoyoTipo || "acuerdo"} onChange={(value) => setCapacidad({ apoyoTipo: value })} options={apoyoTipoOptions} />
+                <div className={row2Class}>
+                  <TextField id="apoyoNombre" label="Persona de apoyo" value={capacidad.apoyoNombre || ""} onChange={(value) => setCapacidad({ apoyoNombre: value })} />
+                  <TextField id="apoyoDocumento" label="Documento apoyo" value={capacidad.apoyoDocumento || ""} onChange={(value) => setCapacidad({ apoyoDocumento: value })} />
+                </div>
+                <TextField id="apoyoActo" label="Acuerdo / adjudicacion de apoyos" value={capacidad.apoyoActo || ""} onChange={(value) => setCapacidad({ apoyoActo: value })} />
+              </>
+            ) : null}
           </div>
         ) : null}
       </Fieldset>

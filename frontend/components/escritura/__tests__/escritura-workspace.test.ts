@@ -283,6 +283,31 @@ describe("EscrituraWorkspace", () => {
     });
   });
 
+  it("activa una rama rural/UAF desde el formulario y actualiza el preview", async () => {
+    await act(async () => {
+      buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Rural / UAF / baldios");
+    });
+
+    await act(async () => {
+      inputByLabel(container, "Predio rural no sometido a PH").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      setControlValue(controlByLabel(container, "Area hectareas"), "80");
+      setControlValue(controlByLabel(container, "UAF hectareas"), "40");
+      inputByLabel(container, "Supera la UAF").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Predio rural, UAF y baldíos");
+      expect(container.textContent).toContain("UAF excedida sin autorización");
+    });
+  });
+
   it("muestra sugerencias de Gari para validar y permite aceptar un campo", async () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
