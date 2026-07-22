@@ -7,9 +7,27 @@
 import { useEffect, type RefObject } from "react";
 import { lookupNorma } from "@/lib/escritura-normas";
 
-// FIELD_SEC / FALLBACK / secForId — portados 1:1 del HTML (bloque "resaltado y navegación").
-const FIELD_SEC: Record<string, string> = {
+// Sección (data-sec REAL que emite el motor) por campo del formulario. Garantiza
+// que TODO campo resalte al menos su sección aunque su valor no aparezca como
+// span en el cuerpo. Se cubre por id exacto y por prefijo/patrón.
+const FIELD_SECTION: Record<string, string> = {
+  // objeto / inmueble
   derecho: "objeto",
+  tipoNegocio: "objeto",
+  inmdesc: "objeto",
+  linderos: "objeto",
+  matricula: "objeto",
+  catastral: "objeto",
+  nupre: "notas",
+  avaluoCatastral: "notas",
+  folioEstado: "estado-folio",
+  // precio
+  total: "precio",
+  inicial: "precio",
+  saldo: "precio",
+  subsidio: "precio",
+  subsidioEnt: "precio",
+  // hipoteca / acreedor
   credito: "hipoteca",
   banco: "hipoteca",
   bancoNit: "hipoteca",
@@ -18,81 +36,106 @@ const FIELD_SEC: Record<string, string> = {
   apoderadoBanco: "acreedor",
   poderBancoEP: "acreedor",
   poderBancoNot: "acreedor",
-  avaluoCatastral: "notas",
-  nupre: "notas",
+  // comparecencia / apoderado
   apoderado: "comparecencia",
   apodNombre: "comparecencia",
   apodPoder: "comparecencia",
-  afectada: "ley258",
-  inmdesc: "objeto",
-  linderos: "objeto",
-  matricula: "objeto",
-  catastral: "objeto",
+  fechaOtorg: "comparecencia",
+  pep: "comparecencia",
+  // ph / vis / ley258
   ph: "ph",
   phReg: "ph",
   vis: "vis",
+  afectada: "ley258",
+  // titulo
   tituloNum: "titulo",
   tituloFecha: "titulo",
   tituloNotaria: "titulo",
-  gravamen: "saneamiento",
-  total: "precio",
-  inicial: "precio",
-  saldo: "precio",
-  ax_tradicion: "compliance",
-  ax_predial: "compliance",
-  ax_admin: "compliance",
-  ax_cedulas: "compliance",
-  tipoNegocio: "objeto",
   tituloTipo: "titulo",
-  subsidio: "precio",
-  subsidioEnt: "precio",
-  posesion2: "compliance",
+  gravamen: "saneamiento",
+  // fiscal / otorgamiento / firmas
+  posesion2: "fiscal",
+  numEscritura: "otorgamiento",
   firmaRuego: "firmas",
   interprete: "firmas",
-  pep: "compliance",
-  cuentaTercero: "compliance",
-  numEscritura: "otorgamiento",
-  fechaOtorg: "comparecencia",
-  huella: "firmas",
   testigos: "firmas",
+  huella: "firmas",
   hojaInicial: "firmas",
+  // capacidad / apoyos
+  menorVendedor: "capacidad-apoyos",
+  ventaBienMenor: "capacidad-apoyos",
+  discapacidadConApoyos: "capacidad-apoyos",
+  autorizacionVentaMenor: "capacidad-apoyos",
+  apoyoAcreditado: "capacidad-apoyos",
+  apoyoNombre: "capacidad-apoyos",
+  apoyoDocumento: "capacidad-apoyos",
+  apoyoActo: "capacidad-apoyos",
 };
 
-const FALLBACK: Record<string, string> = { hipoteca: "precio", ph: "objeto", vis: "precio", ley258: "saneamiento" };
+// Alias de data-f anidado (con punto) para campos cuyo id usa guiones.
+const NESTED_ENC: Record<string, string> = {
+  "enc-hip-": "encadenamientos.hipotecaPrevia.",
+  "enc-pat-": "encadenamientos.patrimonioFamilia.",
+  "enc-afectacion-": "encadenamientos.afectacion.",
+};
 
-function secForId(id: string | null): string | null {
-  if (!id) return null;
-  if (id === "firmas") return "firmas";
-  if (FIELD_SEC[id]) return FIELD_SEC[id];
-  if (/^[vc]\d+(direccion|telefono|correo|ocupacion|pep|notiElec)$/.test(id)) return "firmas";
+export function sectionForId(id: string): string | null {
+  if (FIELD_SECTION[id]) return FIELD_SECTION[id];
+  // prefijos de los bloques nuevos
+  if (/^inmueble-/.test(id)) return "objeto";
+  if (/^enc-hip-/.test(id)) return "enc-cancelacion-hipoteca";
+  if (/^enc-pat-/.test(id)) return "enc-cancelacion-patrimonio";
+  if (/^enc-afectacion-/.test(id)) return "enc-afectacion-vivienda";
+  if (/^divisas-/.test(id)) return "divisas";
+  if (/^rural-/.test(id)) return "rural-uaf";
+  if (/^(capacidad-|apoyo)/.test(id)) return "capacidad-apoyos";
+  // partes compraventa (ids con guiones y lado en MAYÚSCULA: V-0-…, C-0-…)
+  if (/^[vV]-\d/.test(id)) return "comparecencia";
+  if (/^[cC]-\d/.test(id)) return "aceptacion";
+  // firmantes: testigo-N-… y ruego-…
+  if (/^(testigo-|ruego-)/.test(id)) return "firmas";
+  // cancelación de hipoteca (ids cXxx en camelCase, sin guiones)
+  if (/^c[A-Z]/.test(id)) return sectionForCancelacion(id);
+  // partes ya normalizadas (vNkey / cNkey)
   if (/^v\d/.test(id)) return "comparecencia";
   if (/^c\d/.test(id)) return "aceptacion";
   return null;
 }
 
-// Los inputs React usan ids con guiones (`v-0-nombre`, `inmueble-0-matricula`, `divisas-moneda`)
-// mientras el motor emite `data-f` sin guiones (`v0nombre`) o con puntos (`divisas.moneda`).
-// Devuelve los posibles valores de `data-f` a buscar, del más específico al más laxo.
+function sectionForCancelacion(id: string): string {
+  if (/^(cBanco|cBancoNit|cBancoDom|cRep|cApo|cDeudor|cPoder|cSarlaft|cNoPazSalvo)/.test(id)) return "primero";
+  if (/^(cHip|cOrip|cInmdesc|cMatricula|cCatastral|cNupre)/.test(id)) return "segundo";
+  if (/^(cNum|cFechaOtorg|cNotario|cCalidad|cActoAdmin|cHojas)/.test(id)) return "otorgamiento";
+  if (/^(cCorreoNotif|cNotiElec)/.test(id)) return "firmas";
+  return "sincuantia"; // cSinCuantia, cRecaudo y demás → sección sin cuantía (siempre presente)
+}
+
+// Los inputs React usan ids con guiones (`v-0-nombre`, `inmueble-0-matricula`,
+// `divisas-moneda`, `enc-hip-acreedor`) mientras el motor emite `data-f` sin
+// guiones (`v0nombre`), con puntos (`divisas.moneda`) o anidado
+// (`encadenamientos.hipotecaPrevia.acreedor`). Devuelve los candidatos a buscar.
 function dataFCandidates(id: string): string[] {
   const out = [id];
-  const party = id.match(/^([vc])-(\d+)-(.+)$/);
-  if (party) out.push(`${party[1]}${party[2]}${party[3]}`);
+  // partes: lado en MAYÚSCULA en el form (V-0-nombre) → data-f del motor en minúscula (v0nombre)
+  const party = id.match(/^([vcVC])-(\d+)-(.+)$/);
+  if (party) out.push(`${party[1].toLowerCase()}${party[2]}${party[3]}`);
   const inmueble = id.match(/^inmueble-(\d+)-(.+)$/);
   if (inmueble) {
     const key = inmueble[2] === "avaluo" ? "avaluoCatastral" : inmueble[2];
-    out.push(key);
-    out.push(`inmueble.${inmueble[1]}.${key}`);
+    out.push(key, `inmueble.${inmueble[1]}.${key}`);
   }
+  for (const [prefix, base] of Object.entries(NESTED_ENC)) {
+    if (id.startsWith(prefix)) {
+      const key = id.slice(prefix.length) === "registro" ? "registroFecha" : id.slice(prefix.length);
+      out.push(base + key);
+    }
+  }
+  if (id.startsWith("divisas-")) out.push(`divisas.${id.slice("divisas-".length)}`);
+  if (id === "capacidad-autorizacion") out.push("capacidad.autorizacionDetalle");
+  if (id === "apoyoNombre") out.push("capacidad.apoyoNombre");
+  if (id === "apoyoDocumento") out.push("capacidad.apoyoDocumento");
   if (id.includes("-")) out.push(id.replace(/-/g, "."));
   return out;
-}
-
-// Clave normalizada para secForId (fallback por sección).
-function sectionKeyFor(id: string): string {
-  const party = id.match(/^([vc])-(\d+)-(.+)$/);
-  if (party) return `${party[1]}${party[2]}${party[3]}`;
-  if (/^inmueble-\d+-/.test(id)) return "matricula"; // cualquier campo de inmueble → sección objeto
-  return id;
 }
 
 const HL_BG = "#fce96a";
@@ -137,11 +180,9 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
     }
   }
 
-  const key = secForId(sectionKeyFor(lastId));
-  if (key && key !== "compliance") {
-    const sec =
-      root.querySelector<HTMLElement>(`[data-sec="${key}"]`) ||
-      (FALLBACK[key] ? root.querySelector<HTMLElement>(`[data-sec="${FALLBACK[key]}"]`) : null);
+  const key = sectionForId(lastId);
+  if (key) {
+    const sec = root.querySelector<HTMLElement>(`[data-sec="${key}"]`);
     if (sec) {
       paintSection(sec);
       return sec;

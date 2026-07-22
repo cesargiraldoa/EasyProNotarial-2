@@ -103,4 +103,22 @@ describe("DIAG integración resaltado", () => {
       expect(hlTotal?.style.backgroundColor).not.toBe("");
     });
   });
+
+  it("editar un campo sin data-f (direccion) resalta su seccion", async () => {
+    await act(async () => {
+      buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitFor(() => { expect(container.textContent).toContain("PRIMERO: OBJETO"); });
+
+    // "Direccion" del vendedor 1 (id v-0-direccion): no aparece como span en el
+    // cuerpo, debe resaltar la seccion de comparecencia.
+    const dir = inputByLabel(container, "Direccion");
+    await act(async () => { setInputValue(dir, "CALLE 30 SUR 27-45"); });
+
+    await waitFor(() => {
+      const sec = container.querySelector<HTMLElement>('[data-sec="comparecencia"].hl-sec');
+      expect(sec).toBeTruthy();
+      expect(sec?.style.backgroundColor).not.toBe("");
+    });
+  });
 });
