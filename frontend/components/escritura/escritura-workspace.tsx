@@ -429,7 +429,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setMode("redaccion");
   }
 
-  const selectedTitle = acto ? humanActo(acto) : "Escritura asistida";
+  const selectedTitle = acto ? humanActo(acto) : "Minutas Asistidas";
   const downloadHref = documento?.download_url ? escrituraDownloadUrl(documento.download_url) : null;
 
   return (

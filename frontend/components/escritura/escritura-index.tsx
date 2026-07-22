@@ -29,7 +29,7 @@ export function EscrituraIndex() {
   return (
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] px-6 py-5">
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Escritura asistida</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Minutas Asistidas</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">Elige un caso para redactar su escritura</h1>
         <p className="mt-2 text-sm text-secondary">
           Abre la captura y la redacción asistida (compraventa, compraventa + hipoteca, cancelación de hipoteca) de cualquier caso.
@@ -73,7 +73,7 @@ export function EscrituraIndex() {
                   </p>
                 </div>
                 <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary">
-                  Escritura asistida <ArrowRight className="h-4 w-4" />
+                  Minutas Asistidas <ArrowRight className="h-4 w-4" />
                 </span>
               </Link>
             ))}

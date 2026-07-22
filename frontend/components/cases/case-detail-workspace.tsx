@@ -359,7 +359,7 @@ export function CaseDetailWorkspace({ caseId }: { caseId: number; initialTab?: s
                 href={`/dashboard/casos/${caseId}/escritura`}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
               >
-                ✒ Escritura asistida
+                ✒ Minutas Asistidas
               </Link>
             </div>
           </div>
