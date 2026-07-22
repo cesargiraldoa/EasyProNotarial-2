@@ -43,8 +43,8 @@ export function EscrituraPreview({ html, lastId = null, lastValue = null, highli
     if (!root) return;
     const target = applyHighlight(root, lastId, lastValue);
     if (!target) return;
-    // Lleva la vista al cambio (mínimo movimiento si ya está visible).
-    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Centra el cambio en el preview (que tiene su propio scroll, no mueve el form).
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, lastId, lastValue, highlightTick]);
 

@@ -166,12 +166,14 @@ function dataFCandidates(id: string): string[] {
 
 const HL_BG = "#fce96a";
 const HL_SEC_BG = "rgba(252, 233, 106, 0.45)";
+const HL_TEXT = "#1a3fb0"; // azul fuerte para el texto que cambia (visible sobre el amarillo)
 
 // Estilos aplicados INLINE (no dependemos del CSS module para el amarillo).
 function paintField(el: HTMLElement) {
   el.classList.add("hl");
   el.style.backgroundColor = HL_BG;
-  el.style.color = "#1b1e23";
+  el.style.color = HL_TEXT;
+  el.style.fontWeight = "700";
   el.style.borderRadius = "3px";
   el.style.boxShadow = `0 0 0 2px ${HL_BG}`;
 }
@@ -185,6 +187,7 @@ function clearPaint(el: HTMLElement) {
   el.classList.remove("hl", "hl-sec");
   el.style.backgroundColor = "";
   el.style.color = "";
+  el.style.fontWeight = "";
   el.style.borderRadius = "";
   el.style.boxShadow = "";
 }
