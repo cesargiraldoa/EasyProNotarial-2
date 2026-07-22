@@ -70,6 +70,19 @@ const FIELD_SECTION: Record<string, string> = {
   apoyoNombre: "capacidad-apoyos",
   apoyoDocumento: "capacidad-apoyos",
   apoyoActo: "capacidad-apoyos",
+  // checkboxes que activan bloques (toggles)
+  "enc-cancelacion-hipoteca": "enc-cancelacion-hipoteca",
+  "enc-cancelacion-patrimonio": "enc-cancelacion-patrimonio",
+  "enc-afectacion": "enc-afectacion-vivienda",
+  parteExtranjeraNoResidente: "divisas",
+  pagoDivisas: "divisas",
+  predioRural: "rural-uaf",
+  // cumplimiento / anexos (paz y salvo, debida diligencia) → notas notariales
+  cuentaTercero: "notas",
+  ax_tradicion: "notas",
+  ax_predial: "notas",
+  ax_admin: "notas",
+  ax_cedulas: "notas",
 };
 
 // Alias de data-f anidado (con punto) para campos cuyo id usa guiones.
@@ -102,10 +115,12 @@ export function sectionForId(id: string): string | null {
   return null;
 }
 
+// Secciones reales del acto de cancelación: comparecencia, primero, segundo,
+// tercero, sincuantia, firmas (no existe "otorgamiento" como en compraventa).
 function sectionForCancelacion(id: string): string {
   if (/^(cBanco|cBancoNit|cBancoDom|cRep|cApo|cDeudor|cPoder|cSarlaft|cNoPazSalvo)/.test(id)) return "primero";
   if (/^(cHip|cOrip|cInmdesc|cMatricula|cCatastral|cNupre)/.test(id)) return "segundo";
-  if (/^(cNum|cFechaOtorg|cNotario|cCalidad|cActoAdmin|cHojas)/.test(id)) return "otorgamiento";
+  if (/^(cNum|cFechaOtorg|cNotario|cCalidad|cActoAdmin|cHojas)/.test(id)) return "tercero";
   if (/^(cCorreoNotif|cNotiElec)/.test(id)) return "firmas";
   return "sincuantia"; // cSinCuantia, cRecaudo y demás → sección sin cuantía (siempre presente)
 }
@@ -187,6 +202,14 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
       paintSection(sec);
       return sec;
     }
+  }
+
+  // Último recurso: si la sección mapeada no está renderizada (p. ej. un bloque
+  // apagado), resalta la primera sección presente para que SIEMPRE haya feedback.
+  const anySection = root.querySelector<HTMLElement>("[data-sec]");
+  if (anySection) {
+    paintSection(anySection);
+    return anySection;
   }
   return null;
 }
