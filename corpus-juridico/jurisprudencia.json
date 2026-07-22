@@ -1,0 +1,57 @@
+[
+  {
+    "tipo": "C",
+    "numero": "159",
+    "anio": 2021,
+    "providencia": "C-159/2021",
+    "regla_operacional": "Los artículos 59 a 63 del Decreto-Ley 2106 de 2019 sobre escritura pública electrónica fueron declarados inexequibles; efectos desde el 20 de junio de 2023. El motor no debe ofrecer cláusulas o flujos basados en esos artículos para fechas posteriores.",
+    "norma_relacionada_slug": "decreto-ley-2106-2019-arts-59-63",
+    "fecha": "2021-04-21",
+    "url_oficial": "corteconstitucional c-159-21; SUIN id=30041794",
+    "confianza": "alta"
+  },
+  {
+    "tipo": "C",
+    "numero": "193",
+    "anio": 2016,
+    "providencia": "C-193/2016",
+    "regla_operacional": "Eliminó el plazo de un año para la unión marital de hecho en la Ley 54/1990 art. 2 literal b; mantuvo la exigencia de disolución previa de sociedad conyugal.",
+    "norma_relacionada_slug": "ley-54-1990-art-2",
+    "fecha": "2016-04-20",
+    "url_oficial": "corteconstitucional C-193-16; SUIN id=30032816",
+    "confianza": "alta"
+  },
+  {
+    "tipo": "SU",
+    "numero": "214",
+    "anio": 2016,
+    "providencia": "SU-214/2016",
+    "regla_operacional": "Los notarios deben celebrar matrimonio civil de parejas del mismo sexo cuando cumplan los requisitos ordinarios del matrimonio civil.",
+    "norma_relacionada_slug": null,
+    "fecha": "2016-04-28",
+    "url_oficial": "corteconstitucional su214-16",
+    "confianza": "alta"
+  },
+  {
+    "tipo": "C",
+    "numero": "112",
+    "anio": 2000,
+    "providencia": "C-112/2000",
+    "regla_operacional": "El matrimonio puede celebrarse ante notario del domicilio de cualquiera de los contrayentes; la referencia al domicilio de la mujer fue declarada inexequible.",
+    "norma_relacionada_slug": null,
+    "fecha": null,
+    "url_oficial": "corteconstitucional C-112-00; SUIN id=20007801",
+    "confianza": "media"
+  },
+  {
+    "tipo": "C",
+    "numero": "039",
+    "anio": 2025,
+    "providencia": "C-039/2025",
+    "regla_operacional": "Es inconstitucional el matrimonio o unión con menores de 18 años; edad mínima 18.",
+    "norma_relacionada_slug": "ley-2447-2025",
+    "fecha": null,
+    "url_oficial": "corteconstitucional c-039-25",
+    "confianza": "media"
+  }
+]

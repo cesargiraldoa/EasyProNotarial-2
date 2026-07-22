@@ -1,0 +1,463 @@
+<title>Mapa exhaustivo — Compraventa (Ecosistema Notarial)</title>
+<style>
+  :root{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--ok:#2E7D53;--ok-tint:#E7F2EC;--teal:#2A6E77;--teal-tint:#E2F0F1;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;--shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);--serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;}
+  @media (prefers-color-scheme:dark){:root{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ok:#6CC08C;--ok-tint:#16241C;--teal:#5FB6BF;--teal-tint:#12262A;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;--shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);}}
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--ok:#2E7D53;--ok-tint:#E7F2EC;--teal:#2A6E77;--teal-tint:#E2F0F1;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ok:#6CC08C;--ok-tint:#16241C;--teal:#5FB6BF;--teal-tint:#12262A;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px 90px;}
+  .top{background:var(--chrome);color:#EDEFF4;margin:0 -20px;padding:32px 20px 26px;}
+  .top-inner{max-width:1080px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#CBD6E8;background:rgba(143,166,214,.16);border:1px solid rgba(143,166,214,.35);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(24px,4vw,34px);margin:15px 0 8px;letter-spacing:-.01em;text-wrap:balance;}
+  .top p{margin:0;color:#B9C1D4;max-width:72ch;font-size:15px;}
+  nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin:0 -20px 4px;padding:8px 20px;display:flex;gap:4px;flex-wrap:wrap;font-size:11px;}
+  nav a{color:var(--ink-soft);text-decoration:none;padding:3px 8px;border-radius:6px;border:1px solid transparent;font-weight:500;white-space:nowrap;}
+  nav a:hover{color:var(--accent);border-color:var(--line);} nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .legend{display:flex;flex-wrap:wrap;gap:9px 16px;margin:20px 0 6px;font-size:12.5px;color:var(--ink-soft);align-items:center;}
+  .fr{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;text-transform:uppercase;letter-spacing:.03em;}
+  .fr.com{color:var(--accent);background:var(--accent-tint);} .fr.oca{color:var(--teal);background:var(--teal-tint);} .fr.rar{color:var(--ink-faint);background:var(--grey-tint);}
+  .cov{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 4px;}
+  .cov .b{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 2.5%);}
+  .cov .n{font-family:var(--serif);font-size:26px;font-weight:600;line-height:1;} .cov .l{font-size:11px;color:var(--ink-soft);margin-top:5px;}
+  .cov .ok .n{color:var(--ok)} .cov .ac .n{color:var(--accent)}
+  section{margin-top:26px;scroll-margin-top:52px;}
+  .eyebrow{display:flex;align-items:center;gap:10px;font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin:0 0 3px;}
+  .eyebrow .n{font-family:var(--mono);font-size:10.5px;background:var(--accent);color:var(--paper);min-width:20px;height:20px;padding:0 5px;border-radius:6px;display:grid;place-items:center;flex:none;}
+  h2{font-family:var(--serif);font-weight:600;font-size:18px;margin:0 0 10px;letter-spacing:-.01em;}
+  .tblw{overflow-x:auto;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:660px;}
+  th{text-align:left;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-faint);font-weight:700;padding:8px 11px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border-bottom:1px solid var(--line);position:sticky;top:0;}
+  td{padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tr:last-child td{border-bottom:0;}
+  td.sit{font-weight:600;min-width:160px;} td.eff{color:var(--ink-soft);} td.nrm{color:var(--accent);font-size:11px;white-space:nowrap;min-width:120px;} td.frc{white-space:nowrap;}
+  .wz{color:var(--ok);font-weight:700;} .pv{color:var(--warn);font-size:10px;font-weight:700;}
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:12.5px;line-height:1.7;} footer b{color:var(--ink-soft);}
+</style>
+
+<div class="top"><div class="top-inner">
+  <span class="flag">🗺️ Mapa exhaustivo · Ecosistema Notarial</span>
+  <h1>Todas las situaciones de la compraventa</h1>
+  <p>Catálogo completo: ~320 situaciones en 21 sub-dimensiones, cada una con qué cambia en la escritura, la norma que la rige y su frecuencia. <b style="color:#F4D9CE">✓</b> marca lo que el wizard ya cubre. <b style="color:#F4D9CE">V</b> = por verificar contra fuente oficial.</p>
+</div></div>
+
+<nav>
+  <a href="#s1">1 Naturaleza</a><a href="#s2">2 Capacidad</a><a href="#s3">3 Estado civil</a><a href="#s4">4 Nacionalidad</a><a href="#s5">5 Representación</a>
+  <a href="#s6">6 Derecho</a><a href="#s7">7 Negocio</a><a href="#s8">8 Tipo inmueble</a><a href="#s9">9 Régimen</a><a href="#s10">10 Folio</a><a href="#s11">11 Rural</a><a href="#s12">12 Afectaciones</a><a href="#s13">13 VIS</a>
+  <a href="#s14">14 Gravámenes</a><a href="#s15">15 Título</a><a href="#s16">16 Precio</a><a href="#s17">17 Hipoteca</a><a href="#s18">18 Tributario</a><a href="#s19">19 LA/FT</a><a href="#s20">20 Otorgamiento</a><a href="#s21">21 Posteriores/especiales</a>
+</nav>
+
+<div class="wrap">
+  <div class="legend"><span><span class="wz">✓</span> ya en el wizard</span><span><span class="pv">V</span> por verificar</span><span style="margin-left:8px">Frecuencia:</span><span class="fr com">Común</span><span class="fr oca">Ocasional</span><span class="fr rar">Rara</span></div>
+  <div class="cov">
+    <div class="b ac"><div class="n">~320</div><div class="l">Situaciones mapeadas</div></div>
+    <div class="b ac"><div class="n">21</div><div class="l">Sub-dimensiones</div></div>
+    <div class="b ok"><div class="n">~24</div><div class="l">Cubiertas por el wizard</div></div>
+    <div class="b ac"><div class="n">4</div><div class="l">Frentes de investigación</div></div>
+  </div>
+
+  <!-- 1 -->
+  <section id="s1"><p class="eyebrow"><span class="n">1</span> Partes · Naturaleza y subtipos</p><h2>Quién puede comparecer</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Persona natural</td><td class="eff">Nombre, ID, domicilio, estado civil, nacionalidad; sin documento societario</td><td class="nrm">Dcto 960/70 art. 31</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> S.A.S.</td><td class="eff">Cert. existencia y repr.; límites de cuantía en estatutos → autorización asamblea</td><td class="nrm">Ley 1258/2008</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> S.A.</td><td class="eff">Cert.; tope estatutario; autorización de junta/asamblea; junta integrada</td><td class="nrm">C.Co. 434-440</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Ltda.</td><td class="eff">Cert.; enajenación puede requerir junta de socios; facultades</td><td class="nrm">C.Co. 353-372</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">S. en C. / S. en C. por acciones</td><td class="eff">Representación en socios gestores; comanditarios no administran</td><td class="nrm">C.Co. 323-352</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Sociedad colectiva</td><td class="eff">Todos administran salvo delegación; facultad del socio compareciente</td><td class="nrm">C.Co. 294-322</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Empresa Unipersonal (E.U.)</td><td class="eff">Cert.; documento de constitución; representación del titular</td><td class="nrm">Ley 222/95 art. 71</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Sociedad extranjera con sucursal</td><td class="eff">Cert. de la sucursal + facultades del mandatario; régimen cambiario</td><td class="nrm">C.Co. 469-497</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Sociedad extranjera sin sucursal</td><td class="eff">Documentos del país de origen apostillados y traducidos; poder apostillado</td><td class="nrm">C.Co. 474-480</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">ESAL (fundación/corporación/asociación)</td><td class="eff">Cert.; enajenar suele requerir autorización de junta/consejo; objeto</td><td class="nrm">Dcto 2150/95</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Cooperativa / economía solidaria</td><td class="eff">Cert.; autorización del consejo/asamblea; vigilancia Supersolidaria</td><td class="nrm">Ley 79/88 · 454/98</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Fondo de empleados / mutual</td><td class="eff">Cert.; autorización del órgano de administración</td><td class="nrm">Dcto 1481/89</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Entidad pública nacional</td><td class="eff">Acto administrativo de autorización; régimen de enajenación de bienes públicos; avalúo</td><td class="nrm">Ley 1437/11 · 80/93</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Entidad territorial (mpio/dpto)</td><td class="eff">Autorización de concejo/asamblea (acuerdo/ordenanza); avalúo</td><td class="nrm">Ley 136/94 · CN 313</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Descentralizada / EICE / SEM</td><td class="eff">Cert. y autorización de junta directiva; régimen mixto</td><td class="nrm">Ley 489/98</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Propiedad Horizontal (persona jurídica)</td><td class="eff">Representa el administrador; enajenar bien común desafectado → asamblea (mayoría calificada)</td><td class="nrm">Ley 675/01 32-33</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Patrimonio autónomo / fiducia mercantil</td><td class="eff">NO es persona jurídica; comparece la fiduciaria como vocera; contrato + instrucción</td><td class="nrm">C.Co. 1226-1244</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Encargo fiduciario (sin transferencia)</td><td class="eff">El titular sigue siendo el fideicomitente; distinguir de fiducia mercantil</td><td class="nrm">C.Co. 1226</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Consorcio</td><td class="eff">NO es persona jurídica ni titular registral; comparecen los miembros por su cuota</td><td class="nrm">Ley 80/93 art. 7</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Unión temporal</td><td class="eff">Igual que consorcio; comparecen los integrantes</td><td class="nrm">Ley 80/93 art. 7</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Comunidad / copropiedad proindiviso</td><td class="eff">No es persona jurídica; comparecen todos los comuneros; venta del todo = unanimidad</td><td class="nrm">C.C. 2322-2340</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Iglesia Católica / diócesis / parroquia</td><td class="eff">Representa obispo/párroco; puede requerir licencia canónica; cert. personería</td><td class="nrm">Ley 20/74 (Concordato)</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Otras entidades religiosas</td><td class="eff">Personería ante Mininterior; autorización según estatutos</td><td class="nrm">Ley 133/94</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Fondo de inversión colectiva / FCP</td><td class="eff">No es persona jurídica; comparece la administradora como vocera; reglamento</td><td class="nrm">Dcto 1242/13</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Sociedad en liquidación</td><td class="eff">Comparece el liquidador; venta hace parte de la liquidación; facultades</td><td class="nrm">C.Co. 218-238</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Sociedad de hecho <span class="pv">V</span></td><td class="eff">No inscrita; comparecen todos los socios de hecho; viabilidad registral por verificar</td><td class="nrm">C.Co. 498-506</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 2 -->
+  <section id="s2"><p class="eyebrow"><span class="n">2</span> Partes · Capacidad</p><h2>Capacidad de obrar (persona natural)</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Mayor de edad plenamente capaz</td><td class="eff">Comparecencia y firma directas; regla general</td><td class="nrm">C.C. 1502-1504</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Menor adulto (14-17)</td><td class="eff">Incapaz relativo; representado por padres; enajenar inmueble → licencia judicial</td><td class="nrm">C.C. 34, 303, 483</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Menor impúber (&lt;14)</td><td class="eff">Incapaz absoluto; representado; enajenación con licencia judicial</td><td class="nrm">C.C. 34, 303</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Peculio profesional del menor</td><td class="eff">Más autonomía, pero enajenar inmuebles igual requiere licencia judicial</td><td class="nrm">C.C. 291-294</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Patria potestad de un solo padre / conflicto</td><td class="eff">Acreditar quién ejerce; posible curador ad litem por conflicto de intereses</td><td class="nrm">C.C. 288, 306</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Persona con discapacidad — regla general</td><td class="eff">Capacidad plena; ya no existe interdicción; otorga directamente</td><td class="nrm">Ley 1996/19 art. 6</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Con acuerdo de apoyos</td><td class="eff">Aporta el acuerdo; actúa con el apoyo designado; el apoyo no sustituye la voluntad</td><td class="nrm">Ley 1996/19 15-19</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Con adjudicación judicial de apoyos</td><td class="eff">Sentencia define alcance; verificar que el acto esté cubierto; comparecen ambos</td><td class="nrm">Ley 1996/19 32-52</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Con directivas anticipadas</td><td class="eff">Documento de voluntad previa ante notario; se acata en su ámbito</td><td class="nrm">Ley 1996/19 21-30</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Interdicto anterior en reconversión <span class="pv">V</span></td><td class="eff">Verificar vigencia y conversión a apoyos antes de contratar</td><td class="nrm">Ley 1996/19 53-56</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Pródigo / disipador <span class="pv">V</span></td><td class="eff">Reconducido a apoyos; tratamiento actual por verificar</td><td class="nrm">Ley 1996/19</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Ausente (declaración)</td><td class="eff">Curador de bienes; enajenar con autorización judicial</td><td class="nrm">C.C. 96-109; CGP 583</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Muerto presunto por desaparecimiento</td><td class="eff">Herederos disponen según etapa; posesión provisional con restricciones</td><td class="nrm">C.C. 96-109</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Incapacidad transitoria al firmar</td><td class="eff">El notario debe abstenerse; nulidad por falta de consentimiento</td><td class="nrm">C.C. 1502, 1508</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 3 -->
+  <section id="s3"><p class="eyebrow"><span class="n">3</span> Partes · Estado civil y régimen patrimonial</p><h2>Régimen de bienes</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Soltero(a)</td><td class="eff">Dispone libremente; ojo con unión marital y vivienda</td><td class="nrm">C.C. 1502</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Casado c/ soc. conyugal (vendedor)</td><td class="eff">Bien social común; comparecen ambos; vivienda familiar → consentimiento</td><td class="nrm">Ley 258/96; C.C. 1771</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Casado c/ soc. conyugal (comprador)</td><td class="eff">El bien ingresa al haber social; declarar origen si se excluye</td><td class="nrm">C.C. 1781</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Casado con capitulaciones</td><td class="eff">Acredita escritura de capitulaciones; dispone sin firma del otro salvo vivienda</td><td class="nrm">C.C. 1771-1780</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Soc. conyugal disuelta no liquidada</td><td class="eff">Comunidad de bienes; concurrencia de ambos o adjudicación previa</td><td class="nrm">C.C. 1820-1830</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Separado de bienes</td><td class="eff">Cada uno dispone lo propio; acreditar sentencia/escritura</td><td class="nrm">C.C. 197-200</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Separado de cuerpos</td><td class="eff">Puede subsistir la sociedad conyugal; verificar; vivienda puede seguir afectada</td><td class="nrm">C.C. 165-176</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Divorciado</td><td class="eff">Si liquidada, dispone libre; si no, comunidad; acreditar sentencia y liquidación</td><td class="nrm">C.C. 152-163</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Viudo(a)</td><td class="eff">Si no liquidada → comparece con herederos/sucesión; acreditar defunción</td><td class="nrm">C.C. 1820; CGP</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Unión marital CON sociedad patrimonial</td><td class="eff">Bienes comunes → concurrencia; Ley 258 aplica a compañeros</td><td class="nrm">Ley 54/90; 979/05</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Unión marital SIN sociedad patrimonial <span class="pv">V</span></td><td class="eff">Dispone lo propio; vivienda familiar puede afectar aun sin sociedad</td><td class="nrm">Ley 54/90; 258/96</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Unión marital con impedimento legal</td><td class="eff">No surge sociedad patrimonial mientras subsista sociedad conyugal previa</td><td class="nrm">Ley 54/90 art. 2b</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Unión marital / matrimonio del mismo sexo</td><td class="eff">Mismo régimen; sociedad patrimonial y vivienda familiar iguales</td><td class="nrm">C-075/07; SU-214/16</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Matrimonio celebrado en el exterior <span class="pv">V</span></td><td class="eff">Acreditar régimen del país; registro válido (apostilla); ley aplicable</td><td class="nrm">C.C. 163, 180</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Afectación a vivienda familiar</td><td class="eff">Consentimiento del otro para enajenar o desafectación previa; nota en folio</td><td class="nrm">Ley 258/96 1,3,4</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Patrimonio de familia inembargable</td><td class="eff">Licencia judicial si hay menores; cancelación o autorización</td><td class="nrm">Ley 70/31; 495/99</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 4 -->
+  <section id="s4"><p class="eyebrow"><span class="n">4</span> Partes · Nacionalidad y residencia</p><h2>Extranjería y régimen cambiario</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Nacional residente</td><td class="eff">Régimen general; cédula de ciudadanía</td><td class="nrm">Dcto 960/70 art. 31</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Extranjero residente</td><td class="eff">Cédula de extranjería/visa; capacidad general (salvo frontera)</td><td class="nrm">CN art. 100</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Extranjero no residente</td><td class="eff">Pasaporte; si paga con divisas → canalización por mercado cambiario</td><td class="nrm">Dcto 1068/15; Ley 9/91</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Compra con divisas (inversión extranjera)</td><td class="eff">Declarar origen; registro de inversión extranjera ante Banrep vía IMC</td><td class="nrm">Res. Ext. 1/2018 JDBR</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Documentos del exterior (apostilla)</td><td class="eff">Apostillados o legalizados vía consular; traducción oficial</td><td class="nrm">Conv. La Haya; Ley 455/98</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Zona de frontera <span class="pv">V</span></td><td class="eff">Adquisición por extranjeros puede requerir autorización/estar restringida</td><td class="nrm">Ley 191/95; CN</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Baldíos / UAF (rural)</td><td class="eff">Restricciones de enajenación y acumulación (nacionales y extranjeros)</td><td class="nrm">Ley 160/94 39,72</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Doble nacionalidad</td><td class="eff">Se identifica con documento colombiano; declarar</td><td class="nrm">CN art. 96</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 5 -->
+  <section id="s5"><p class="eyebrow"><span class="n">5</span> Partes · Representación</p><h2>Quién firma por quién</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Comparecencia directa</td><td class="eff">Firma ante el notario; identificación; huella</td><td class="nrm">Dcto 960/70 13,39</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Apoderado con poder especial</td><td class="eff">Poder faculta expresamente vender/comprar ese inmueble; se protocoliza</td><td class="nrm">C.C. 2142; CGP 74</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Apoderado con poder general</td><td class="eff">Por escritura pública + facultad expresa de enajenar/gravar</td><td class="nrm">C.C. 2158</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Poder sin facultad expresa de enajenar</td><td class="eff">Insuficiente: el notario rechaza o exige poder que faculte disponer</td><td class="nrm">C.C. 2158 inc. final</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Vigencia / revocatoria del poder</td><td class="eff">Verificar vigente y no revocado; declarar vigencia</td><td class="nrm">C.C. 2189, 2191</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Sustitución del poder</td><td class="eff">El sustituto acredita la cadena; verificar facultad de sustituir</td><td class="nrm">C.C. 2161</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Poder otorgado en el exterior</td><td class="eff">Apostillado y traducido; ante cónsul colombiano = escritura pública</td><td class="nrm">Ley 455/98; Dcto 960/70 68</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Representante legal de jurídica</td><td class="eff">Cert. existencia; límites de cuantía; autorización de junta/asamblea</td><td class="nrm">C.Co. 117, 196</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Autorización de órgano social (acta)</td><td class="eff">Se inserta/protocoliza el acta que autoriza el acto</td><td class="nrm">C.Co. 196</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Fiduciaria como vocera de P.A.</td><td class="eff">Comparece "como vocera del P.A. XXX"; contrato + instrucción del comité</td><td class="nrm">C.Co. 1226, 1234</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Sucesión ilíquida — herederos</td><td class="eff">Venden derechos herenciales o el bien con licencia judicial; comparecen todos</td><td class="nrm">CGP 473; C.C. 1008</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Albacea con tenencia de bienes</td><td class="eff">Vende si testamento/juez lo autoriza; acreditar facultades</td><td class="nrm">C.C. 1327-1352</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Curador de bienes</td><td class="eff">Comparece con autorización judicial para enajenar</td><td class="nrm">C.C. 561, 583</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Padres en patria potestad</td><td class="eff">Representan al menor; enajenar con licencia judicial; ambos padres</td><td class="nrm">C.C. 288, 303</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Persona de apoyo (Ley 1996)</td><td class="eff">Comparece junto a la persona según acuerdo/sentencia; no sustituye voluntad</td><td class="nrm">Ley 1996/19 9,16</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Firma a ruego</td><td class="eff">Firma un tercero a ruego + dos testigos; huella del compareciente</td><td class="nrm">Dcto 960/70 art. 39</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Intérprete / traductor</td><td class="eff">Intérprete traduce y firma; constancia; oficial de ser posible</td><td class="nrm">Dcto 960/70 13,40</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Intérprete de lengua de señas</td><td class="eff">Para persona sorda; constancia de comprensión</td><td class="nrm">Ley 1996/19; 982/05</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Autocontrato (apoderado compra lo que vende)</td><td class="eff">Requiere autorización expresa; declarar el conflicto</td><td class="nrm">C.C. 2170; C.Co. 839</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Factor / mandato mercantil</td><td class="eff">Factor con facultades registradas; verificar alcance</td><td class="nrm">C.Co. 1332-1339</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 6 -->
+  <section id="s6"><p class="eyebrow"><span class="n">6</span> Objeto · Derecho transferido</p><h2>Qué se transfiere</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Pleno dominio</td><td class="eff">Todos los atributos; cláusula estándar de tradición y modo</td><td class="nrm">C.C. 669, 740, 756</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Nuda propiedad (usufructo vitalicio)</td><td class="eff">Reserva de usufructo; se consolida al fallecer; menor base gravable</td><td class="nrm">C.C. 823, 825, 829</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Nuda propiedad con usufructo temporal</td><td class="eff">Usufructo por plazo/condición; consolidación al vencimiento</td><td class="nrm">C.C. 829</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Usufructo (cesión del derecho)</td><td class="eff">Solo goce; transferible salvo prohibición; se extingue por muerte del usufructuario</td><td class="nrm">C.C. 823, 852</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Uso y habitación</td><td class="eff">Personalísimos e INTRANSFERIBLES: la venta sería nula por objeto</td><td class="nrm">C.C. 878, 883</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Cuota / proindiviso</td><td class="eff">Venta de cuota abstracta; comprador entra a comunidad; derecho de preferencia si aplica</td><td class="nrm">C.C. 2322, 1401</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Derechos herenciales</td><td class="eff">Cede la posición en la herencia (universalidad), no un bien determinado</td><td class="nrm">C.C. 1967-1972</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Derechos litigiosos</td><td class="eff">Objeto incierto del pleito; advertir litigio; retracto litigioso</td><td class="nrm">C.C. 1969-1972</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Posesión y mejoras</td><td class="eff">No registrable como dominio; falsa tradición si hay antecedente parcial</td><td class="nrm">Ley 1579/12; C.C. 762</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Dominio bajo condición</td><td class="eff">Se advierte la condición; comprador adquiere derecho resoluble; se inscribe</td><td class="nrm">C.C. 1530-1547</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 7 -->
+  <section id="s7"><p class="eyebrow"><span class="n">7</span> Objeto · Tipo de negocio / modalidad</p><h2>La modalidad del contrato</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Compraventa pura y simple</td><td class="eff">Sin modalidad; precio pagado o saldo simple</td><td class="nrm">C.C. 1849</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Con reserva de dominio <span class="pv">V</span></td><td class="eff">En inmuebles su eficacia es discutida; se asimila a condición resolutoria</td><td class="nrm">C.C. 750, 1931-1935</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Con pacto de retroventa</td><td class="eff">Vendedor puede recomprar; plazo máx. 4 años; se inscribe</td><td class="nrm">C.C. 1939-1943</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Con pacto comisorio (por no pago)</td><td class="eff">Condición resolutoria por incumplimiento (simple o calificado)</td><td class="nrm">C.C. 1935-1938</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Condición resolutoria expresa</td><td class="eff">Resolución ante hecho futuro; se inscribe para oponibilidad</td><td class="nrm">C.C. 1536, 1546</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Permuta</td><td class="eff">Intercambio de inmuebles; doble tradición, doble base gravable</td><td class="nrm">C.C. 1955-1958</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Permuta con saldo (alcance en dinero)</td><td class="eff">Permuta + compensación; naturaleza según predomine cosa o dinero</td><td class="nrm">C.C. 1850, 1955</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Dación en pago</td><td class="eff">Transfiere para extinguir deuda; identificar la deuda extinguida</td><td class="nrm">C.C. 1627 (analogía)</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Aporte a sociedad (en especie)</td><td class="eff">A cambio de cuotas/acciones; requiere avalúo y acta/estatutos</td><td class="nrm">C.Co. 126-136</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Compraventa con hipoteca</td><td class="eff">Misma escritura: compraventa + hipoteca; doble acto y registro</td><td class="nrm">C.C. 2432; Ley 1579/12</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Venta de cosa futura / sobre planos</td><td class="eff">Condicionada a que la cosa exista; requiere licencia y reglamento PH</td><td class="nrm">C.C. 1518, 1870</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Venta en globo</td><td class="eff">Extensión sin discriminar áreas; riesgo de indeterminación</td><td class="nrm">C.C. 1888</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Como cuerpo cierto (ad corpus)</td><td class="eff">Sin garantía de cabida; no hay ajuste por diferencia de área</td><td class="nrm">C.C. 1887</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Por cabida (por medida)</td><td class="eff">Precio según área; ajuste/rescisión si difiere &gt;1/10</td><td class="nrm">C.C. 1887-1891</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Venta entre parientes / precio vil</td><td class="eff">Riesgo de donación encubierta (insinuación &gt;50 SMLMV); lesión enorme</td><td class="nrm">C.C. 1458, 1946</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 8 -->
+  <section id="s8"><p class="eyebrow"><span class="n">8</span> Inmueble · Tipo</p><h2>Clase de bien</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Apartamento (PH)</td><td class="eff">Unidad privada + coeficiente + linderos internos; anexidades</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Casa independiente (no PH)</td><td class="eff">Linderos generales del predio; área de lote y construcción</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Casa en conjunto cerrado</td><td class="eff">Unidad privada con coeficiente; sujeta a reglamento</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Lote urbano</td><td class="eff">Área y linderos; verificar uso del suelo/urbanismo (POT)</td><td class="nrm">Ley 388/97</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Local comercial</td><td class="eff">Uso comercial; en PH con coeficiente y destinación</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Oficina</td><td class="eff">Destinación en reglamento PH</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Bodega</td><td class="eff">Uso industrial/almacenamiento; verificar destinación</td><td class="nrm">POT; Ley 675/01</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Parqueadero</td><td class="eff">Unidad propia vs. común de uso exclusivo vs. proindiviso: cambia todo</td><td class="nrm">Ley 675/01 22</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Depósito / útil</td><td class="eff">Propio (matrícula) vs. común de uso exclusivo</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Casa-lote</td><td class="eff">Lote con construcción parcial; describir ambos</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Finca / predio rural</td><td class="eff">Régimen rural: UAF, baldío, uso del suelo rural</td><td class="nrm">Ley 160/94</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Local en centro comercial</td><td class="eff">PH comercial; coeficiente, expensas, destinación específica</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 9 -->
+  <section id="s9"><p class="eyebrow"><span class="n">9</span> Inmueble · Régimen</p><h2>Régimen de propiedad</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Propiedad horizontal — coeficientes</td><td class="eff">Citar coeficiente de copropiedad, calculado sobre área privada</td><td class="nrm">Ley 675/01 25-27</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">PH — bienes comunes</td><td class="eff">Se transfieren con la unidad; no se venden por separado</td><td class="nrm">Ley 675/01 19-21</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">PH — bienes comunes de uso exclusivo</td><td class="eff">Accesorios de la unidad; el constructor no los vende por separado</td><td class="nrm">Ley 675/01 22</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> PH — paz y salvo de administración <span class="pv">V</span></td><td class="eff">Se exige paz y salvo de expensas; obligación propter rem; alcance por verificar</td><td class="nrm">Ley 675/01 29-30</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">No sometido a PH</td><td class="eff">Sin coeficiente; linderos generales del predio</td><td class="nrm">C.C.</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Conjunto / unidad inmobiliaria cerrada</td><td class="eff">Sub-régimen de PH con bienes comunes por etapas</td><td class="nrm">Ley 675/01 58-59</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Multipropiedad / tiempo compartido <span class="pv">V</span></td><td class="eff">Derecho de uso periódico; descripción del turno; régimen turístico</td><td class="nrm">Ley 300/96</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 10 -->
+  <section id="s10"><p class="eyebrow"><span class="n">10</span> Inmueble · Estado del folio</p><h2>La matrícula inmobiliaria</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Matrícula matriz</td><td class="eff">Predio origen; de él se segregan unidades</td><td class="nrm">Ley 1579/12 art. 8</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Predio segregado</td><td class="eff">Nueva matrícula derivada; citar matriz, área segregada y remanente</td><td class="nrm">Ley 1579/12 8,45</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Englobe</td><td class="eff">Reunir varios predios en una matrícula; describir folios integrados</td><td class="nrm">Ley 1579/12 45</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Desenglobe / segregación</td><td class="eff">División en varias matrículas; áreas y linderos resultantes</td><td class="nrm">Ley 1579/12 45</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Mayor extensión</td><td class="eff">Venta de porción; identificar el remanente</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Falsa tradición</td><td class="eff">Transfiere derecho incompleto; se inscribe en columna de falsa tradición; advertencia</td><td class="nrm">Ley 1579/12; Ley 1561/12</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Sin antecedente registral / posesión</td><td class="eff">No hay folio de dominio; no se transfiere dominio; eventual folio de posesión</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Área / linderos por corregir</td><td class="eff">Aclaración/rectificación de cabida y linderos; concordancia catastral</td><td class="nrm">Ley 1579/12 103</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Predio en varios círculos registrales</td><td class="eff">Abarca varias ORIP; se registra en cada círculo</td><td class="nrm">Ley 1579/12 art. 7</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Varios inmuebles en una escritura</td><td class="eff">Un instrumento, múltiples folios; descripción y registro por cada uno</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Anexidad con matrícula propia</td><td class="eff">Parqueo/depósito con folio: inmuebles adicionales (venibles aparte)</td><td class="nrm">Ley 675/01; 1579/12</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Anexidad como bien común de uso exclusivo</td><td class="eff">Sin matrícula propia; sigue a la unidad (no venible por separado)</td><td class="nrm">Ley 675/01 22</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 11 -->
+  <section id="s11"><p class="eyebrow"><span class="n">11</span> Inmueble · Rural y restricciones</p><h2>Predios rurales y restricciones territoriales</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit">Predio rural bajo UAF</td><td class="eff">No fraccionable bajo la UAF; verificar acumulación; control notarial/registral</td><td class="nrm">Ley 160/94 art. 72</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Baldío adjudicado (ANT)</td><td class="eff">Prohibición de enajenar por término legal sin autorización de la ANT</td><td class="nrm">Ley 160/94 39, 72</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Derecho de preferencia (adjudicados)</td><td class="eff">Ofrecer primero a la ANT/otro beneficiario; autorización previa</td><td class="nrm">Ley 160/94 art. 39</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Prohibición de enajenar registrada</td><td class="eff">Requiere levantamiento o autorización antes de escriturar</td><td class="nrm">Ley 1579/12; 160/94</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Restitución de tierras (RUPTA)</td><td class="eff">No puede enajenarse sin autorización; el notario debe abstenerse</td><td class="nrm">Ley 1448/11 74, 91</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Zona de reserva forestal / campesina</td><td class="eff">Restricciones de uso y enajenación; verificar sustracción</td><td class="nrm">Ley 2ª/59; 160/94 80</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Territorio étnico (resguardo/consejo)</td><td class="eff">Inalienable, imprescriptible, inembargable: no es objeto de compraventa</td><td class="nrm">CN 63; Ley 70/93</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Servidumbres (activas/pasivas)</td><td class="eff">Describir; se transfieren con el predio (activas) o lo gravan (pasivas)</td><td class="nrm">C.C. 879-946</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 12 -->
+  <section id="s12"><p class="eyebrow"><span class="n">12</span> Inmueble · Afectaciones especiales</p><h2>Cargas urbanísticas y culturales</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit">Bien de Interés Cultural (BIC)</td><td class="eff">Informar al Estado; derecho de preferencia; régimen de intervención</td><td class="nrm">Ley 397/97 art. 11</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Zona de riesgo / amenaza</td><td class="eff">Advertir; posible restricción de uso o reasentamiento</td><td class="nrm">Ley 388/97; 1523/12</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Afectación urbanística / vial</td><td class="eff">Porción afectada a obra pública; advertir; limita construcción</td><td class="nrm">Ley 9ª/89 37; 388/97</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Patrimonio de familia</td><td class="eff">Inembargable; enajenar requiere requisitos (autorización judicial si hay menores)</td><td class="nrm">Ley 70/31; 495/99</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Afectación a vivienda familiar</td><td class="eff">Consentimiento de ambos para enajenar o levantamiento</td><td class="nrm">Ley 258/96</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Expropiación en curso</td><td class="eff">Anotación de proceso; puede impedir disposición o requerir advertencia</td><td class="nrm">Ley 388/97 58-72</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Uso del suelo / licencias</td><td class="eff">Concordancia con POT y licencias; afecta destinación</td><td class="nrm">Ley 388/97; Dcto 1077/15</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 13 -->
+  <section id="s13"><p class="eyebrow"><span class="n">13</span> Inmueble · VIS/VIP y subsidios</p><h2>Vivienda de interés social</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit">VIS sin subsidio</td><td class="eff">Compraventa ordinaria; solo topes de precio VIS</td><td class="nrm">Ley 1537/12; Dcto 1077/15</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Subsidio 100% en especie (VIP)</td><td class="eff">Patrimonio de familia obligatorio; prohibición de transferencia 5 años; condición resolutoria</td><td class="nrm">Ley 1537/12 21; 2079/21</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">SFVE — enajenación tras 5 años</td><td class="eff">El registrador autoriza actos cumplidos 5 años desde la transferencia</td><td class="nrm">Ley 1537/12; Dcto 1077/15</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">SFV (cajas/FONVIVIENDA, no 100%)</td><td class="eff">Puede exigir patrimonio de familia; restricciones según acto de asignación</td><td class="nrm">Ley 3ª/91; Dcto 1077/15</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Subsidio de entidad territorial</td><td class="eff">Condiciones del acto administrativo territorial; restricciones registradas</td><td class="nrm">Dcto 1077/15</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Vivienda con condición resolutoria vigente</td><td class="eff">Transcribir la condición; enajenar antes genera restitución del subsidio</td><td class="nrm">Ley 1537/12 21</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 14 -->
+  <section id="s14"><p class="eyebrow"><span class="n">14</span> Estado jurídico · Gravámenes y limitaciones</p><h2>Cargas sobre el bien</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Libre de gravámenes</td><td class="eff">Declaración de libertad + saneamiento por evicción; sustenta el CTL</td><td class="nrm">C.C. 1893-1896</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Hipoteca — se cancela en el acto</td><td class="eff">El acreedor cancela (o minuta/paz y salvo); se fondea con el precio</td><td class="nrm">C.C. 2457</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Hipoteca abierta — se cancela</td><td class="eff">La carta de cancelación abarca todas las obligaciones garantizadas</td><td class="nrm">C.C. 2438</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Hipoteca — se subroga (nuevo deudor)</td><td class="eff">El acreedor acepta el cambio de deudor; la hipoteca subsiste</td><td class="nrm">C.C. 1666-1670, 1694</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Hipoteca — comprador asume sin liberar <span class="pv">V</span></td><td class="eff">Sin comparecencia del acreedor no hay novación; vendedor sigue obligado</td><td class="nrm">C.C. 1694</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Hipoteca de mayor extensión</td><td class="eff">Levantamiento parcial o liberación proporcional del acreedor</td><td class="nrm">C.C. 2445</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Hipoteca — subsiste (venta con gravamen)</td><td class="eff">El comprador adquiere con la hipoteca; el acreedor conserva persecución</td><td class="nrm">C.C. 2452</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Anticresis</td><td class="eff">Entrega al acreedor para pago con frutos; cancelar o respetar</td><td class="nrm">C.C. 2458-2467</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Censo</td><td class="eff">Rédito anual gravando finca; asumir o redimir; en desuso</td><td class="nrm">C.C. 2317</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Embargo judicial/administrativo</td><td class="eff">Objeto ilícito: no enajenable sin desembargo; el notario se abstiene</td><td class="nrm">C.C. 1521 num.3; CGP 593</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Demanda registrada (litis)</td><td class="eff">Comprador adquiere sujeto a las resultas del proceso; se advierte</td><td class="nrm">CGP art. 591</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Medida cautelar innominada <span class="pv">V</span></td><td class="eff">Verificar alcance; puede impedir la enajenación</td><td class="nrm">CGP art. 590</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Condición resolutoria vigente (título anterior)</td><td class="eff">Riesgo de resolución por saldo insoluto del vendedor; pedir paz y salvo</td><td class="nrm">C.C. 1546, 1930</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Prohibición judicial de enajenar</td><td class="eff">Impide la venta; debe levantarse</td><td class="nrm">Según proceso</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Usufructo / uso / habitación vigente</td><td class="eff">Se vende nuda propiedad; el titular respeta o el usufructuario renuncia</td><td class="nrm">C.C. 823-878</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Prohibición de enajenar VIS <span class="pv">V</span></td><td class="eff">No transferible dentro del plazo; requiere autorización</td><td class="nrm">Ley 3ª/91; Dcto 1077/15</td><td class="frc"><span class="fr com">Común (VIS)</span></td></tr>
+  <tr><td class="sit">Prohibición convencional (pacto/donación)</td><td class="eff">Validez limitada; se analiza si es de donación con cargo/condición</td><td class="nrm">C.C. 1443 ss.</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Patrimonio autónomo / fiducia</td><td class="eff">Comparece la fiduciaria; contrato de fiducia y facultades</td><td class="nrm">C.Co. 1226; Ley 1328/09</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Leasing habitacional inscrito</td><td class="eff">La entidad es propietaria durante el contrato; venta a tercero requiere terminarlo</td><td class="nrm">Ley 795/03; Dcto 1787/04</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">RUPTA / protección de predios</td><td class="eff">Impide transferencia sin autorización de la URT; el notario se abstiene</td><td class="nrm">Ley 387/97; 1448/11</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Hipoteca a favor de fondos de vivienda</td><td class="eff">Cancelación/subrogación con reglas propias del fondo; subsidio ligado</td><td class="nrm">Ley 432/98 (FNA)</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 15 -->
+  <section id="s15"><p class="eyebrow"><span class="n">15</span> Estado jurídico · Título de adquisición</p><h2>Encadenamiento de la tradición</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Compraventa anterior</td><td class="eff">Citar escritura y registro previos</td><td class="nrm">C.C. 1849, 756</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Sucesión con partición</td><td class="eff">Citar escritura/sentencia de partición y registro; impuestos sucesorales</td><td class="nrm">CGP; Dcto 902/88</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Sucesión sin partición</td><td class="eff">Comparecen todos los herederos/cesionarios; o se vende cuota</td><td class="nrm">C.C. 1401, 1857</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Adjudicación en remate</td><td class="eff">Citar auto y acta de remate registrados; título de proceso ejecutivo</td><td class="nrm">CGP art. 448</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Donación</td><td class="eff">Verificar insinuación si &gt;50 SMLMV; posibles cargas o revocación</td><td class="nrm">C.C. 1443, 1458</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Aporte a sociedad</td><td class="eff">Citar escritura de constitución/aumento; título societario</td><td class="nrm">C.Co. 98, 126</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Prescripción adquisitiva</td><td class="eff">Citar sentencia de pertenencia registrada; verificar firmeza</td><td class="nrm">C.C. 2512; CGP 375</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Permuta</td><td class="eff">Citar la escritura de permuta anterior</td><td class="nrm">C.C. 1955</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Dación en pago</td><td class="eff">Citar como título; verificar impuestos y saneamiento</td><td class="nrm">C.C. 1627</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Accesión</td><td class="eff">Título especial (edificación, aluvión); poco frecuente</td><td class="nrm">C.C. 713 ss.</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Título antiguo / colonial</td><td class="eff">Encadenamiento incompleto; puede requerir saneamiento (Ley 1561)</td><td class="nrm">Ley 1561/12</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 16 -->
+  <section id="s16"><p class="eyebrow"><span class="n">16</span> Precio y forma de pago</p><h2>Cómo se paga</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Contado</td><td class="eff">"Recibido a satisfacción"; suele incluir renuncia a condición resolutoria</td><td class="nrm">C.C. 1849, 1928</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Saldo insoluto / a plazos</td><td class="eff">Pacto de saldo, plazos e intereses; condición resolutoria tácita</td><td class="nrm">C.C. 1546, 1930</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Reserva de dominio <span class="pv">V</span></td><td class="eff">El dominio no se transfiere hasta el pago total; se registra</td><td class="nrm">C.C. 1931-1937; Ley 45/90</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Renuncia a condición resolutoria</td><td class="eff">Cláusula expresa; da seguridad al comprador y a su acreedor</td><td class="nrm">C.C. 1546, 1930</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Crédito hipotecario</td><td class="eff">Precio con desembolso; hipoteca simultánea a favor del banco</td><td class="nrm">Ley 546/99; C.C. 2432</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Subrogación de crédito</td><td class="eff">El comprador asume el crédito ante el mismo acreedor; comparece el banco</td><td class="nrm">C.C. 1666-1670</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Leasing habitacional</td><td class="eff">No es compraventa clásica; transferencia al ejercer opción (≤30%)</td><td class="nrm">Ley 795/03; Dcto 1787/04</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Subsidio Familiar de Vivienda</td><td class="eff">Declarar subsidio, entidad, valor; posible patrimonio y restricción</td><td class="nrm">Ley 3ª/91; Dcto 1077/15</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Subsidio de caja de compensación</td><td class="eff">Citar resolución de asignación; concurrencia con SFV</td><td class="nrm">Dcto 1077/15</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Concurrencia de subsidios</td><td class="eff">Detallar todas las fuentes que integran el precio</td><td class="nrm">Dcto 1077/15</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Cesantías</td><td class="eff">Declarar el uso de cesantías; destinación autorizada</td><td class="nrm">CST art. 256</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Permuta (con/sin saldo)</td><td class="eff">Determinar naturaleza (venta/permuta); doble base gravable</td><td class="nrm">C.C. 1955, 1958</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Dación en pago</td><td class="eff">Citar la obligación extinguida; efectos tributarios propios</td><td class="nrm">C.C. 1627</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Pago en UVR</td><td class="eff">Precio/saldo indexado a UVR; típico en crédito de largo plazo</td><td class="nrm">Ley 546/99</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Pago en divisas / no residente</td><td class="eff">Canalizar por mercado cambiario; registro ante Banrep; declaración de canje</td><td class="nrm">Res. 1/2022 JDBR</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Pago en efectivo</td><td class="eff">Alerta LA/FT; reporte a UIAF; verificar origen de fondos</td><td class="nrm">Ley 1121/06; SIPLAFT</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Precio simbólico / irrisorio</td><td class="eff">Riesgo de simulación/donación; base mínima = avalúo; advertir</td><td class="nrm">C.C. 1872; E.T. 90</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Retención en la fuente 1% (natural)</td><td class="eff">Notario liquida y recauda 1% antes de autorizar</td><td class="nrm">E.T. art. 398</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Retención mayor / jurídica <span class="pv">V</span></td><td class="eff">Persona jurídica activo fijo: base/tarifa distinta; por verificar</td><td class="nrm">E.T. 398, 365 ss.</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">No retención (activo movible)</td><td class="eff">Constructor/urbanizador: no aplica art. 398; autorretención de renta</td><td class="nrm">E.T. art. 398</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Reducción de retención (antes 1987)</td><td class="eff">Disminución escalonada 10%/año hasta 100%</td><td class="nrm">E.T. art. 399</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Exención de retención (VIS)</td><td class="eff">No sujeta a retención en la fuente</td><td class="nrm">Doctrina DIAN</td><td class="frc"><span class="fr com">Común (VIS)</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 17 -->
+  <section id="s17"><p class="eyebrow"><span class="n">17</span> Financiación · Hipoteca y garantías</p><h2>La garantía</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Sin hipoteca</td><td class="eff">No hay cláusula de garantía</td><td class="nrm">—</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Con hipoteca (constitución simultánea)</td><td class="eff">Misma escritura: compraventa + hipoteca; comparece la entidad</td><td class="nrm">C.C. 2432-2434</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Primer grado</td><td class="eff">Prelación total del acreedor; lo usual en crédito de adquisición</td><td class="nrm">C.C. art. 2499</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Segundo (o ulterior) grado</td><td class="eff">Sobre inmueble ya hipotecado; prelación subordinada; declarar previa</td><td class="nrm">C.C. 2440, 2499</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Abierta sin límite de cuantía</td><td class="eff">Garantiza obligaciones presentes y futuras indeterminadas</td><td class="nrm">C.C. art. 2438</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Cerrada / con límite</td><td class="eff">Garantiza obligación específica y monto fijo</td><td class="nrm">C.C. art. 2438</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Acreedor: banco</td><td class="eff">Cláusulas de crédito de vivienda; seguros; reglas Ley 546</td><td class="nrm">Ley 546/99; EOSF</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Acreedor: cooperativa / fondo de empleados</td><td class="eff">Reglas propias; garantía a favor de la entidad solidaria</td><td class="nrm">Ley 79/88; 454/98</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Acreedor: FNA</td><td class="eff">Reglas del FNA; cesantías/subsidio ligados</td><td class="nrm">Ley 432/98</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Acreedor: persona natural</td><td class="eff">Hipoteca a favor de particular; verificar LA/FT y capacidad</td><td class="nrm">C.C. art. 2432</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Leasing habitacional</td><td class="eff">Arrendamiento financiero + opción; la entidad es propietaria</td><td class="nrm">Ley 795/03; Dcto 2555/10</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Subrogación de hipoteca (compra de cartera)</td><td class="eff">Se subroga crédito y garantía a nuevo acreedor sin extinguir la hipoteca</td><td class="nrm">C.C. 1666; Ley 546/99 17</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Hipoteca de tercero</td><td class="eff">El propietario hipoteca para garantizar deuda ajena; comparece como garante</td><td class="nrm">C.C. art. 2439</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Hipoteca en UVR</td><td class="eff">Obligación indexada; cláusulas de reajuste UVR</td><td class="nrm">Ley 546/99</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Cancelación previa + nueva hipoteca</td><td class="eff">Comparecen ambos acreedores; el desembolso paga la anterior</td><td class="nrm">C.C. 2457; Ley 546/99</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Hipoteca de mayor extensión</td><td class="eff">Garantía sobre globo mayor; liberación parcial proporcional</td><td class="nrm">C.C. art. 2445</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 18 -->
+  <section id="s18"><p class="eyebrow"><span class="n">18</span> Tributario y fiscal</p><h2>Cargas económicas</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Derechos notariales (con cuantía)</td><td class="eff">3 por mil sobre el valor; liquidación notarial</td><td class="nrm">Res. SNR anual</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Tarifa mínima / actos sin cuantía <span class="pv">V</span></td><td class="eff">Valor fijo aunque 3×1000 dé menos; tarifa fija por acto</td><td class="nrm">Res. SNR</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Derechos notariales VIS (−50%)</td><td class="eff">Reducción al 50% (1,5 por mil) con particulares</td><td class="nrm">Ley 3ª/91; Res. SNR</td><td class="frc"><span class="fr com">Común (VIS)</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> IVA sobre el servicio notarial</td><td class="eff">19% sobre los derechos notariales (no sobre el inmueble)</td><td class="nrm">E.T. art. 468</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Impuesto de registro (con cuantía)</td><td class="eff">Base = mayor entre valor y avalúo; tarifa departamental 0,5-1%</td><td class="nrm">Ley 223/95 226-235</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Impuesto de registro (sin cuantía)</td><td class="eff">Tarifa fija en SMDLV según ordenanza</td><td class="nrm">Ley 223/95 230</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Tope legal del impuesto de registro <span class="pv">V</span></td><td class="eff">Máximo hasta el tope de la ley marco</td><td class="nrm">Ley 1607/12</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Derechos de registro (SNR)</td><td class="eff">Escala nacional por cuantía en UVB; independiente del impuesto departamental</td><td class="nrm">Ley 1579/12; Res. SNR</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Beneficencia (donde subsiste)</td><td class="eff">Recargo adicional según departamento</td><td class="nrm">Ordenanzas</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Retención 1% (natural, activo fijo)</td><td class="eff">Notario recauda antes de autorizar; protocoliza comprobante</td><td class="nrm">E.T. art. 398</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Reducción retención (antes 1987)</td><td class="eff">Disminución 10%/año hasta 0%</td><td class="nrm">E.T. art. 399</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Ganancia ocasional (posesión ≥2 años)</td><td class="eff">Utilidad grava al 15% (no renta ordinaria)</td><td class="nrm">E.T. 300, 313 (L.2277/22)</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Ganancia ocasional (posesión &lt;2 años)</td><td class="eff">Utilidad = renta ordinaria (tarifa marginal)</td><td class="nrm">E.T. art. 300</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Exención casa de habitación</td><td class="eff">Exentas primeras 5.000 UVT; avalúo ≤ 15.000 UVT</td><td class="nrm">E.T. 311-1 (L.2277/22)</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Depósito en cuenta AFC</td><td class="eff">Condición de la exención: consignar en AFC para nueva vivienda/hipoteca</td><td class="nrm">E.T. art. 311-1</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Valor real bajo juramento</td><td class="eff">Cláusula de juramento; base para retención, GO, registro; base 4× si se omite</td><td class="nrm">E.T. art. 90</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Impuesto predial (paz y salvo)</td><td class="eff">Exigir certificado/paz y salvo; citar en la escritura</td><td class="nrm">Ley 44/90</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Contribución de valorización</td><td class="eff">A paz y salvo o descontarse; protocolizar</td><td class="nrm">Dcto-Ley 1604/66</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Participación en plusvalía</td><td class="eff">Pagar antes de escriturar/registrar; acreditar</td><td class="nrm">Ley 388/97 73-90</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Boletín / certificado catastral</td><td class="eff">Citar cédula catastral y avalúo; base tributaria</td><td class="nrm">Res. IGAC/catastros</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 19 -->
+  <section id="s19"><p class="eyebrow"><span class="n">19</span> Prevención de lavado (LA/FT)</p><h2>SIPLAFT notarial</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Origen de fondos</td><td class="eff">Cláusula/formulario de origen lícito firmado por las partes</td><td class="nrm">SIPLAFT SNR; UIAF</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Actuación por cuenta propia</td><td class="eff">Constancia; sin beneficiario final adicional</td><td class="nrm">SIPLAFT SNR</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Beneficiario final (por cuenta de tercero)</td><td class="eff">Identificar y registrar beneficiario final; debida diligencia ampliada</td><td class="nrm">Dcto 830/21</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">PEP (persona expuesta políticamente)</td><td class="eff">Debida diligencia reforzada; declaración PEP; aprobación superior</td><td class="nrm">Dcto 1674/16; 830/21</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Operaciones en efectivo (sobre umbral) <span class="pv">V</span></td><td class="eff">Reporte a UIAF; constancia del medio de pago</td><td class="nrm">Res. UIAF</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Operación sospechosa (ROS)</td><td class="eff">Reporte reservado a UIAF; no se informa al usuario</td><td class="nrm">Estatuto Anticorrupción</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Listas restrictivas (OFAC/ONU)</td><td class="eff">Debida diligencia; posible abstención de la operación</td><td class="nrm">Res. ONU 1267 ss.</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Debida diligencia reforzada</td><td class="eff">Documentación adicional; verificación de fuente de riqueza</td><td class="nrm">Dcto 830/21</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Persona jurídica — cadena de propiedad</td><td class="eff">Cert., composición accionaria, beneficiario final</td><td class="nrm">Dcto 830/21</td><td class="frc"><span class="fr com">Común (PJ)</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 20 -->
+  <section id="s20"><p class="eyebrow"><span class="n">20</span> Otorgamiento y formalidades</p><h2>El cierre del instrumento</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit"><span class="wz">✓</span> Recepción/extensión/otorgamiento/autorización</td><td class="eff">Proceso completo; la autorización perfecciona el instrumento</td><td class="nrm">Dcto 960/70 13,34-40</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Lectura</td><td class="eff">Constancia de lectura por otorgantes o notario</td><td class="nrm">Dcto 960/70 37</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Firma presencial + huella</td><td class="eff">Firma directa e impresión dactilar</td><td class="nrm">Dcto 960/70 39</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Firma a ruego</td><td class="eff">Firma un tercero a ruego + testigos; constancia y huella</td><td class="nrm">Dcto 960/70 39</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Intérprete / traductor</td><td class="eff">Intérprete oficial; traducción oficial de documentos</td><td class="nrm">Dcto 960/70 38</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Lengua de señas</td><td class="eff">Intérprete de señas; constancia de comprensión</td><td class="nrm">Ley 982/05</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Otorgante ciego</td><td class="eff">Lectura reforzada y testigos; constancia</td><td class="nrm">Dcto 960/70 38</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Testigos instrumentales</td><td class="eff">Comparecen testigos hábiles; se identifican</td><td class="nrm">Dcto 960/70 38-39</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Comparecencia en fechas distintas</td><td class="eff">Escritura abierta; la última firma/autorización perfecciona</td><td class="nrm">Dcto 960/70 40</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Salvedad de errores antes de firmar</td><td class="eff">Nota de salvedad salvando enmendaduras/testados</td><td class="nrm">Dcto 960/70 36</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Corrección después de firmar</td><td class="eff">Escritura aclaratoria o nota marginal según el error</td><td class="nrm">Dcto 960/70 102-104</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Documentos protocolizados</td><td class="eff">Anexos (poderes, licencias, planos, paz y salvos) se transcriben</td><td class="nrm">Dcto 960/70 73-77</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Papel de seguridad</td><td class="eff">Extensión en papel notarial con numeración/serie</td><td class="nrm">Instrucciones SNR</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Vencimiento de escritura no firmada <span class="pv">V</span></td><td class="eff">Caduca/no se autoriza; debe rehacerse</td><td class="nrm">Dcto 960/70 40</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Primera copia</td><td class="eff">Copia auténtica para las partes</td><td class="nrm">Dcto 960/70 78-81</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Copia con mérito ejecutivo (hipoteca)</td><td class="eff">Copia única con constancia; presta mérito ejecutivo al acreedor</td><td class="nrm">Dcto 960/70 81; CGP 422</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Copias sustitutivas</td><td class="eff">Pérdida de copia ejecutiva: requiere orden judicial para reponer</td><td class="nrm">CGP; Dcto 960/70</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <!-- 21 -->
+  <section id="s21"><p class="eyebrow"><span class="n">21</span> Actuaciones posteriores y situaciones especiales</p><h2>Después de la firma y casos complejos</h2>
+  <div class="tblw"><table><thead><tr><th>Situación</th><th>Qué cambia</th><th>Norma</th><th>Frec.</th></tr></thead><tbody>
+  <tr><td class="sit">Radicación registral (2 meses)</td><td class="eff">Registro dentro del término evita mayor impuesto/sanción</td><td class="nrm">Ley 1579/12 27; 223/95 231</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Devolución registral</td><td class="eff">Nota devolutiva; corregir (aclaratoria) y re-radicar</td><td class="nrm">Ley 1579/12 18-19</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Notas de referencia / cancelación</td><td class="eff">Cancelación de hipoteca/patrimonio/gravamen; nota en folio</td><td class="nrm">Ley 1579/12</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Inmueble en patrimonio autónomo</td><td class="eff">Comparece la fiduciaria; reglamento del fideicomiso; NIT del PA</td><td class="nrm">C.Co. 1226; E.T. 102</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Bien de entidad pública</td><td class="eff">Avalúo comercial, autorización/acto administrativo, régimen especial</td><td class="nrm">Ley 1682/13; 80/93</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Bien público — infraestructura</td><td class="eff">Enajenación voluntaria/expropiación; régimen especial</td><td class="nrm">Ley 1682/13 19-25</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Sucesión ilíquida</td><td class="eff">Comparecen herederos con licencia/partición; autorización judicial</td><td class="nrm">CGP art. 487; C.C.</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit"><span class="wz">✓</span> Compra + afectación/patrimonio en el acto</td><td class="eff">Constituir afectación (Ley 258) o patrimonio en la misma escritura</td><td class="nrm">Ley 258/96; 70/31</td><td class="frc"><span class="fr com">Común</span></td></tr>
+  <tr><td class="sit">Levantamiento de afectación</td><td class="eff">Consentimiento de ambos o levantamiento previo</td><td class="nrm">Ley 258/96 3-4</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Venta entre parientes / precio vil</td><td class="eff">Insinuación de donación si &gt;50 SMLMV con ánimo de liberalidad</td><td class="nrm">C.C. 1458; Dcto 1712/89</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Englobe / segregación simultáneos</td><td class="eff">Nuevos folios/linderos; planos aprobados; puede requerir licencia</td><td class="nrm">Ley 1579/12; 388/97</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Propiedad horizontal por constituir</td><td class="eff">Constituir PH y reglamento antes/simultáneo; folios matriz e hijuelas</td><td class="nrm">Ley 675/01</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Derecho de preferencia — comuneros <span class="pv">V</span></td><td class="eff">Ofrecer primero a comuneros; su omisión da retracto</td><td class="nrm">C.C. 1993-1994</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Derecho de preferencia — arrendatario comercial</td><td class="eff">Local arrendado ≥2 años: preferencia a igualdad de condiciones</td><td class="nrm">C.Co. 518-521</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Retracto (violación de preferencia)</td><td class="eff">Acción de retracto del titular preferente</td><td class="nrm">C.Co. art. 521</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  <tr><td class="sit">Rescisión por lesión enorme</td><td class="eff">Precio &lt; mitad (o &gt; doble) del justo precio: acción rescisoria (4 años)</td><td class="nrm">C.C. 1946-1954</td><td class="frc"><span class="fr oca">Ocasional</span></td></tr>
+  <tr><td class="sit">Extranjeros / zonas restringidas <span class="pv">V</span></td><td class="eff">Restricciones especiales de adquisición (frontera/costa)</td><td class="nrm">Dcto-Ley 2324/84; Ley 160/94</td><td class="frc"><span class="fr rar">Rara</span></td></tr>
+  </tbody></table></div></section>
+
+  <footer>
+    <p><b>Cómo usar este mapa.</b> Es el catálogo completo (~320 situaciones) del acto de compraventa, consolidado de cuatro investigaciones verificadas contra fuente oficial. Prioriza por <b>frecuencia</b>: primero las <span class="fr com">Comunes</span> aún no cubiertas por el wizard (título de adquisición, formas de pago, gastos/anexos, corrección de errores, copias, PH-parqueaderos). Las <span class="fr rar">Raras</span> pueden resolverse con un flujo manual asistido.</p>
+    <p>Los <b class="pv">V</b> son puntos que los investigadores marcaron para confirmación literal contra fuente oficial antes de producción: eficacia de la reserva de dominio en inmuebles, carácter del paz y salvo PH, retención a personas jurídicas, plazos de subsidio en especie, umbrales UIAF, restricciones a extranjeros en frontera, y numeración fina de algunos artículos. La <b>validación jurídica final</b> corresponde al notario. Verificación realizada en julio de 2026.</p>
+  </footer>
+</div>

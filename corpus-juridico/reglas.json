@@ -1,0 +1,561 @@
+[
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_afectacion_vivienda_familiar_doble_firma",
+    "condicion_json": {
+      "inmueble_afectado_vivienda_familiar": true,
+      "conyuge_o_companero_firma": false
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Bien afectado a vivienda familiar: exige consentimiento libre y firma de ambos cónyuges o compañeros.",
+    "norma_slug": "ley-258-1996-art-3",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_indagacion_ley_258",
+    "condicion_json": {
+      "vendedor_persona_natural": true,
+      "inmueble_destinado_vivienda": true,
+      "declaracion_ley_258": "faltante"
+    },
+    "efecto": "exigir_declaracion_juramentada",
+    "severidad": "BLOCK",
+    "mensaje": "El notario debe indagar bajo juramento sobre sociedad conyugal, unión marital y afectación a vivienda familiar.",
+    "norma_slug": "ley-258-1996-art-6",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_matricula_obligatoria",
+    "condicion_json": {
+      "matricula_inmobiliaria": "faltante"
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Falta matrícula inmobiliaria; el registro devolvería el título.",
+    "norma_slug": "ley-1579-2012-art-8",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_linderos_area_identificacion_plena",
+    "condicion_json": {
+      "linderos": "faltante",
+      "area": "faltante"
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Sin linderos, cabida y área el inmueble no queda plenamente individualizado para registro.",
+    "norma_slug": "ley-1579-2012-art-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_medida_cautelar_embargo",
+    "condicion_json": {
+      "gravamen": "embargo_o_medida_cautelar_vigente"
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "El embargo o la medida cautelar debe levantarse antes de transferir.",
+    "norma_slug": "codigo-civil-art-1521",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_patrimonio_familia_no_cancelado",
+    "condicion_json": {
+      "patrimonio_familia_vigente": true,
+      "cancelacion_acreditada": false
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "El patrimonio de familia vigente debe cancelarse por la vía correspondiente antes de vender.",
+    "norma_slug": "ley-70-1931-ley-495-1999-patrimonio-familia",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_leasing_habitacional_vigente",
+    "condicion_json": {
+      "leasing_habitacional_vigente": true,
+      "entidad_financiera_propietaria": true
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Con leasing habitacional vigente, la entidad financiera es la propietaria; debe terminarse o ejercerse la opción antes de vender a un tercero.",
+    "norma_slug": "ley-795-2003-leasing-habitacional",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_precio_real_declaracion_obligatoria",
+    "condicion_json": {
+      "declaracion_precio_real": "faltante"
+    },
+    "efecto": "exigir_declaracion",
+    "severidad": "BLOCK",
+    "mensaje": "Las partes deben declarar bajo juramento que el precio incluido en la escritura es real y no existen pactos privados distintos.",
+    "norma_slug": "estatuto-tributario-art-90",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_base_gravable_cuatro_veces_sin_declaracion",
+    "condicion_json": {
+      "declaracion_precio_real": "omitida"
+    },
+    "efecto": "liquidar_base_cuatro_veces",
+    "severidad": "WARN",
+    "mensaje": "Si se omite la declaración de precio real, renta, ganancia ocasional, impuesto de registro y derechos notariales se liquidan sobre cuatro veces el valor de la escritura.",
+    "norma_slug": "estatuto-tributario-art-90",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_retencion_vendedor_natural_1pct_notario",
+    "condicion_json": {
+      "vendedor_tipo_persona": "natural",
+      "activo_fijo": true
+    },
+    "efecto": "retencion_notarial_1_por_ciento",
+    "severidad": "REVIEW",
+    "mensaje": "C3: vendedor persona natural: retención del 1% recaudada por el notario antes de la enajenación.",
+    "norma_slug": "estatuto-tributario-art-398",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_retencion_vendedor_juridico_comprador_no_notario",
+    "condicion_json": {
+      "vendedor_tipo_persona": "juridica"
+    },
+    "efecto": "sin_retencion_notarial_comprador_retiene",
+    "severidad": "REVIEW",
+    "mensaje": "C3: vendedor persona jurídica: el notario no retiene; retiene el comprador y el pago debe acreditarse antes de la escritura.",
+    "norma_slug": "estatuto-tributario-art-401",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_exencion_casa_habitacion_5000_uvt_afc",
+    "condicion_json": {
+      "activo": "casa_o_apartamento_habitacion",
+      "exencion_uvt": 5000,
+      "requiere_cuenta_afc": true,
+      "destino_admitido": [
+        "otra_vivienda",
+        "pago_credito_hipotecario"
+      ],
+      "tope_valor_catastral_eliminado": true
+    },
+    "efecto": "aplicar_exencion_ganancia_ocasional_hasta_5000_uvt_si_cumple_afc",
+    "severidad": "REVIEW",
+    "mensaje": "C4: exención de casa de habitación hasta 5.000 UVT, condicionada a AFC y destino a otra vivienda o crédito hipotecario.",
+    "norma_slug": "estatuto-tributario-art-311-1",
+    "vigencia_desde": "2022-12-13",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_registro_dos_meses_intereses_ley_223_231",
+    "condicion_json": {
+      "acto_sujeto_impuesto_registro": true,
+      "registro_presentado_despues_de_meses": 2
+    },
+    "efecto": "advertir_intereses_moratorios",
+    "severidad": "WARN",
+    "mensaje": "C1: el término de dos meses y los intereses moratorios se anclan al art. 231 Ley 223/1995, no a Ley 1579/2012.",
+    "norma_slug": "ley-223-1995-art-231",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_vis_sfve_restriccion_cinco_anios",
+    "condicion_json": {
+      "vivienda_interes_social": true,
+      "subsidio_familiar_vivienda_100_por_ciento_especie": true,
+      "anos_desde_transferencia": {
+        "lt": 5
+      },
+      "autorizacion_entidad_otorgante": false
+    },
+    "efecto": "bloquear_o_exigir_autorizacion",
+    "severidad": "BLOCK",
+    "mensaje": "La vivienda SFVE no puede transferirse durante cinco años salvo autorización de la entidad otorgante.",
+    "norma_slug": "ley-2079-2021-art-13",
+    "vigencia_desde": "2021-01-14",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "hipoteca",
+    "codigo": "hipoteca_firma_fuera_sede_constancia_1069",
+    "condicion_json": {
+      "acreedor_firma_fuera_sede": true
+    },
+    "efecto": "insertar_nota_firma_fuera_sede",
+    "severidad": "REVIEW",
+    "mensaje": "C2: citar art. 2.2.6.1.2.1.5 Dcto 1069/2015 para firma fuera de sede.",
+    "norma_slug": "decreto-1069-2015-art-2-2-6-1-2-1-5",
+    "vigencia_desde": "2015-05-26",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "hipoteca",
+    "codigo": "hipoteca_registro_90_dias_habiles",
+    "condicion_json": {
+      "acto": "hipoteca",
+      "registro_plazo_especial": true
+    },
+    "efecto": "advertir_90_dias_habiles",
+    "severidad": "WARN",
+    "mensaje": "C1: en hipoteca y patrimonio de familia la Ley 1579 art. 28 fija término especial de 90 días hábiles.",
+    "norma_slug": "ley-1579-2012-art-28",
+    "vigencia_desde": "2012-10-01",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "hipoteca",
+    "codigo": "hipoteca_registro_dos_meses_intereses_ley_223_231",
+    "condicion_json": {
+      "acto_sujeto_impuesto_registro": true,
+      "registro_presentado_despues_de_meses": 2
+    },
+    "efecto": "advertir_intereses_moratorios",
+    "severidad": "WARN",
+    "mensaje": "C1: la consecuencia de dos meses e intereses se ancla al art. 231 Ley 223/1995.",
+    "norma_slug": "ley-223-1995-art-231",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "cancelacion_hipoteca",
+    "codigo": "cancelacion_acreedor_comparece_no_deudor",
+    "condicion_json": {
+      "compareciente": "deudor",
+      "acreedor_comparece": false
+    },
+    "efecto": "requerir_comparecencia_acreedor",
+    "severidad": "BLOCK",
+    "mensaje": "En cancelación de hipoteca comparece el banco acreedor por representante o apoderado; el deudor no firma el acto.",
+    "norma_slug": "codigo-comercio-representacion-personas-juridicas",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "cancelacion_hipoteca",
+    "codigo": "cancelacion_identificacion_hipoteca_tracto",
+    "condicion_json": {
+      "hipoteca_numero_escritura": "faltante",
+      "hipoteca_fecha": "faltante",
+      "hipoteca_notaria": "faltante",
+      "hipoteca_fecha_registro": "faltante"
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Debe identificarse la escritura de constitución, notaría, fecha y registro de la hipoteca a cancelar.",
+    "norma_slug": "ley-1579-2012",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "cancelacion_hipoteca",
+    "codigo": "cancelacion_firma_fuera_sede_constancia_1069",
+    "condicion_json": {
+      "apoderado_banco_firma_fuera_sede": true
+    },
+    "efecto": "insertar_nota_firma_fuera_sede",
+    "severidad": "REVIEW",
+    "mensaje": "C2: citar art. 2.2.6.1.2.1.5 Dcto 1069/2015, equivalente vigente del art. 12 Dcto 2148/1983.",
+    "norma_slug": "decreto-1069-2015-art-2-2-6-1-2-1-5",
+    "vigencia_desde": "2015-05-26",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "cancelacion_hipoteca",
+    "codigo": "cancelacion_registro_dos_meses_intereses_ley_223_231",
+    "condicion_json": {
+      "acto_sujeto_impuesto_registro": true,
+      "registro_presentado_despues_de_meses": 2
+    },
+    "efecto": "advertir_intereses_moratorios",
+    "severidad": "WARN",
+    "mensaje": "C1: la advertencia de dos meses e intereses se ancla al art. 231 Ley 223/1995, no a Ley 1579/2012.",
+    "norma_slug": "ley-223-1995-art-231",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "cancelacion_hipoteca",
+    "codigo": "cancelacion_acto_sin_cuantia_vivienda",
+    "condicion_json": {
+      "credito_vivienda_largo_plazo": true
+    },
+    "efecto": "liquidar_como_acto_sin_cuantia",
+    "severidad": "REVIEW",
+    "mensaje": "La cancelación de gravamen hipotecario de crédito de vivienda se considera acto sin cuantía.",
+    "norma_slug": "ley-546-1999-art-23",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "transversal",
+    "codigo": "transversal_identidad_sexo_cuatro_variables_decreto_0732",
+    "condicion_json": {
+      "persona_sexo": {
+        "allowed": [
+          "F",
+          "M",
+          "NB",
+          "T"
+        ]
+      }
+    },
+    "efecto": "capturar_variable_y_ajustar_redaccion",
+    "severidad": "REVIEW",
+    "mensaje": "C5: el Decreto 0732/2026 modifica el DUR 1069/2015 y exige soportar F/M/NB/T en la redacción.",
+    "norma_slug": "decreto-0732-2026",
+    "vigencia_desde": "2026-07-01",
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_varios_inmuebles_identificacion_individual",
+    "condicion_json": {
+      "inmuebles_con_identificacion_incompleta": true
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "Cada inmueble del instrumento debe tener matrícula inmobiliaria y linderos propios.",
+    "norma_slug": "ley-1579-2012-art-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_varios_inmuebles_clausula_enumera_folios",
+    "condicion_json": {
+      "varios_inmuebles": true
+    },
+    "efecto": "insertar_clausula_varios_inmuebles",
+    "severidad": "REVIEW",
+    "mensaje": "El objeto debe enumerar cada inmueble con folio, linderos, cédula catastral y NUPRE.",
+    "norma_slug": "ley-1579-2012-art-8",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_estado_folio_especial_advertencia_1579",
+    "condicion_json": {
+      "folio_estado_especial": true
+    },
+    "efecto": "insertar_advertencia_estado_folio",
+    "severidad": "WARN",
+    "mensaje": "El estado especial del folio exige revisar tracto, cabida, linderos y antecedentes registrales.",
+    "norma_slug": "ley-1579-2012-art-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_falsa_tradicion_advertencia_saneamiento",
+    "condicion_json": {
+      "folio_falsa_tradicion": true
+    },
+    "efecto": "insertar_advertencia_falsa_tradicion",
+    "severidad": "WARN",
+    "mensaje": "El folio con falsa tradición requiere revisar saneamiento; la compraventa no sanea por sí sola el dominio.",
+    "norma_slug": "ley-1561-2012",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_cancelacion_hipoteca_previa",
+    "condicion_json": {
+      "encadenamiento_cancelacion_hipoteca_previa": true
+    },
+    "efecto": "insertar_acto_previo_cancelacion_hipoteca",
+    "severidad": "REVIEW",
+    "mensaje": "La cancelación de hipoteca previa debe redactarse como acto previo e identificar el gravamen a cancelar.",
+    "norma_slug": "ley-1579-2012-art-4",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_cancelacion_patrimonio_familia",
+    "condicion_json": {
+      "encadenamiento_cancelacion_patrimonio_familia": true
+    },
+    "efecto": "insertar_acto_previo_cancelacion_patrimonio",
+    "severidad": "REVIEW",
+    "mensaje": "La cancelación de patrimonio de familia se redacta antes de la transferencia y exige validar comparecientes/autorización aplicable.",
+    "norma_slug": "ley-70-1931-ley-495-1999-patrimonio-familia",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_encadena_afectacion_vivienda_familiar",
+    "condicion_json": {
+      "encadenamiento_afectacion_vivienda_familiar": true
+    },
+    "efecto": "insertar_acto_posterior_afectacion_vivienda",
+    "severidad": "REVIEW",
+    "mensaje": "La afectación a vivienda familiar se redacta como acto posterior a la compraventa y queda sujeta a validación humana.",
+    "norma_slug": "ley-258-1996-art-6",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_extranjero_no_residente_identificacion",
+    "condicion_json": {
+      "parte_extranjera_no_residente": true
+    },
+    "efecto": "verificar_identificacion_y_apostilla",
+    "severidad": "REVIEW",
+    "mensaje": "La parte extranjera/no residente debe quedar identificada con pasaporte, cédula de extranjería o PPT; si obra por poder del exterior, verificar apostilla/legalización.",
+    "norma_slug": "decreto-1068-2015-regimen-cambiario",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_divisas_declaracion_cambio_banrep",
+    "condicion_json": {
+      "pago_divisas": true
+    },
+    "efecto": "insertar_clausula_declaracion_cambio",
+    "severidad": "REVIEW",
+    "mensaje": "El pago en divisas debe soportarse con declaración de cambio y trazabilidad de origen de fondos.",
+    "norma_slug": "circular-dcin-banrep-regimen-cambiario",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_divisas_canalizacion_mercado_cambiario",
+    "condicion_json": {
+      "pago_divisas": true,
+      "canalizacion_mercado_cambiario": false
+    },
+    "efecto": "advertir_canalizacion_mercado_cambiario",
+    "severidad": "WARN",
+    "mensaje": "Debe verificarse la canalización del pago por el mercado cambiario cuando corresponda.",
+    "norma_slug": "ley-9-1991-regimen-cambiario",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_extranjero_no_residente_registro_inversion",
+    "condicion_json": {
+      "parte_extranjera_no_residente": true,
+      "registro_inversion_extranjera": false
+    },
+    "efecto": "advertir_registro_inversion_extranjera",
+    "severidad": "WARN",
+    "mensaje": "Cuando la adquisición configure inversión extranjera, debe registrarse ante el Banco de la República.",
+    "norma_slug": "resolucion-externa-jdbr-1-2018-regimen-cambiario",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_rural_predio_identificacion_sin_ph",
+    "condicion_json": {
+      "predio_rural": true
+    },
+    "efecto": "insertar_clausula_predio_rural",
+    "severidad": "REVIEW",
+    "mensaje": "El predio rural debe individualizarse sin régimen de propiedad horizontal, con cabida, linderos y UAF de referencia.",
+    "norma_slug": "ley-160-1994-art-72",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_rural_supera_uaf_sin_autorizacion",
+    "condicion_json": {
+      "supera_uaf": true,
+      "autorizacion_ant": false
+    },
+    "efecto": "bloquear_otorgamiento",
+    "severidad": "BLOCK",
+    "mensaje": "El predio rural supera la UAF y no hay autorización o habilitación ANT acreditada.",
+    "norma_slug": "ley-160-1994-art-72",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_rural_baldio_restriccion_temporal",
+    "condicion_json": {
+      "baldio_restriccion_temporal": true
+    },
+    "efecto": "advertir_restriccion_enajenacion_baldio",
+    "severidad": "WARN",
+    "mensaje": "El baldío adjudicado puede tener restricción temporal de enajenación/acumulación o derecho de preferencia.",
+    "norma_slug": "ley-160-1994-art-39",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_rural_derecho_preferencia_ant",
+    "condicion_json": {
+      "derecho_preferencia_agrario": true
+    },
+    "efecto": "advertir_derecho_preferencia",
+    "severidad": "WARN",
+    "mensaje": "Debe revisarse si procede derecho de preferencia o autorización de la Agencia Nacional de Tierras.",
+    "norma_slug": "ley-160-1994-art-39",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_venta_bien_menor_autorizacion",
+    "condicion_json": {
+      "venta_bien_menor": true,
+      "autorizacion_venta_menor": false
+    },
+    "efecto": "advertir_autorizacion_representado",
+    "severidad": "WARN",
+    "mensaje": "La venta de bien de persona menor de edad o representada exige autorización judicial/notarial vigente y protocolizada.",
+    "norma_slug": "decreto-1429-2020-apoyos",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_apoyos_acreditados_ley_1996",
+    "condicion_json": {
+      "discapacidad_con_apoyos": true,
+      "apoyo_acreditado": false
+    },
+    "efecto": "advertir_acreditacion_apoyos",
+    "severidad": "WARN",
+    "mensaje": "La persona con discapacidad conserva capacidad legal plena; si usa apoyos, debe acreditarse acuerdo o adjudicación vigente.",
+    "norma_slug": "ley-1996-2019-art-15-16",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  }
+]

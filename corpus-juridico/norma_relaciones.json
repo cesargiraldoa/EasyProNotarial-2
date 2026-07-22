@@ -1,0 +1,50 @@
+[
+  {
+    "norma_origen_slug": "decreto-2148-1983-art-12",
+    "norma_destino_slug": "decreto-1069-2015-art-2-2-6-1-2-1-5",
+    "tipo": "compila",
+    "articulo_afectado": "art. 12 Decreto 2148/1983",
+    "fecha_efecto": "2015-05-26",
+    "notas": "C2: el artículo vigente para firma fuera de sede es el art. 2.2.6.1.2.1.5 del Decreto 1069/2015."
+  },
+  {
+    "norma_origen_slug": "decreto-0732-2026",
+    "norma_destino_slug": "decreto-1069-2015-dur-sector-justicia",
+    "tipo": "modifica",
+    "articulo_afectado": "DUR 1069/2015",
+    "fecha_efecto": "2026-07-01",
+    "notas": "C5: modifica el Decreto Único 1069/2015; no se registra como derogatoria del Decreto 1227/2015."
+  },
+  {
+    "norma_origen_slug": "ley-2277-2022-art-31",
+    "norma_destino_slug": "estatuto-tributario-art-311-1",
+    "tipo": "modifica",
+    "articulo_afectado": "art. 311-1 E.T.",
+    "fecha_efecto": "2022-12-13",
+    "notas": "C4: reduce la exención de casa de habitación a 5.000 UVT y exige cuenta AFC o destino a otra vivienda/crédito hipotecario."
+  },
+  {
+    "norma_origen_slug": "ley-2277-2022-art-31",
+    "norma_destino_slug": "estatuto-tributario-art-313",
+    "tipo": "modifica",
+    "articulo_afectado": "art. 313 E.T.",
+    "fecha_efecto": "2022-12-13",
+    "notas": "Ganancia ocasional del 15% según verificación."
+  },
+  {
+    "norma_origen_slug": "ley-2277-2022-art-31",
+    "norma_destino_slug": "estatuto-tributario-art-300",
+    "tipo": "modifica",
+    "articulo_afectado": "art. 300 E.T.",
+    "fecha_efecto": "2022-12-13",
+    "notas": "Marco de ganancia ocasional para activo fijo poseído dos años o más."
+  },
+  {
+    "norma_origen_slug": "decreto-906-2025",
+    "norma_destino_slug": "ley-160-1994-art-72",
+    "tipo": "desarrolla",
+    "articulo_afectado": "copias digitales ANT y donaciones agrarias",
+    "fecha_efecto": "2025-01-01",
+    "notas": "Alcance acotado según verificación; no es exención general."
+  }
+]

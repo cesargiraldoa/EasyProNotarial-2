@@ -1,0 +1,827 @@
+<title>Wizard interactivo — Compraventa (Ecosistema Notarial)</title>
+<style>
+  :root{
+    --paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;
+    --chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;
+    --accent:#31456E;--accent-tint:#EEF1F7;
+    --ins:#B23A2E;--ins-tint:#FBEEEC;
+    --ok:#2E7D53;--ok-tint:#E7F2EC;--teal:#2A6E77;--teal-tint:#E2F0F1;
+    --warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;
+    --hl:#FCE96A;--hl-ink:#5A1712;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ins:#E8776A;--ins-tint:#2C1E1C;--ok:#6CC08C;--ok-tint:#16241C;--teal:#5FB6BF;--teal-tint:#12262A;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;--shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);}}
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--ins:#B23A2E;--ins-tint:#FBEEEC;--ok:#2E7D53;--ok-tint:#E7F2EC;--teal:#2A6E77;--teal-tint:#E2F0F1;--warn:#B0781A;--warn-tint:#F7EEDB;--crit:#B23B3B;--crit-tint:#F7E7E7;--grey:#6C7079;--grey-tint:#ECEAE4;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--ins:#E8776A;--ins-tint:#2C1E1C;--ok:#6CC08C;--ok-tint:#16241C;--teal:#5FB6BF;--teal-tint:#12262A;--warn:#D6A648;--warn-tint:#2A2313;--crit:#E07C7C;--crit-tint:#2A1818;--grey:#9BA0A9;--grey-tint:#24262B;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .top{background:var(--chrome);color:#EDEFF4;padding:26px 20px 22px;}
+  .top-inner{max-width:1300px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#F4D9CE;background:rgba(178,58,46,.22);border:1px solid rgba(232,119,106,.4);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(22px,3.4vw,30px);margin:13px 0 5px;letter-spacing:-.01em;}
+  .top p{margin:0;color:#B9C1D4;max-width:74ch;font-size:14px;}
+
+  .app{max-width:1300px;margin:20px auto;padding:0 20px 70px;display:grid;grid-template-columns:410px 1fr;gap:20px;align-items:start;}
+  @media (max-width:960px){.app{grid-template-columns:1fr;}}
+  .panel{background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);}
+  .form{padding:6px 18px 18px;position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;}
+  @media (max-width:960px){.form{position:static;max-height:none;}}
+  fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:15px 0 4px;}
+  fieldset:first-of-type{border-top:0;}
+  legend{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding:0;display:flex;align-items:center;gap:8px;}
+  legend .bn{font-family:var(--mono);font-size:10px;background:var(--accent);color:var(--paper);width:18px;height:18px;border-radius:5px;display:grid;place-items:center;}
+  .field{margin-top:11px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;font-weight:500;}
+  input[type=text],input[type=number],select,textarea{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:9px;padding:8px 10px;}
+  textarea{resize:vertical;min-height:48px;line-height:1.4;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .chk{display:flex;align-items:center;gap:9px;margin-top:10px;font-size:13px;color:var(--ink);cursor:pointer;}
+  .chk input{width:16px;height:16px;accent-color:var(--accent);flex:none;}
+  .anexos{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-top:8px;}
+  .hint{font-size:11.5px;color:var(--ink-faint);margin-top:4px;}
+  .sub-group{margin-top:8px;padding:10px 12px;border-left:2px solid var(--accent);background:var(--accent-tint);border-radius:0 9px 9px 0;}
+  [hidden]{display:none !important;}
+  .pcard{border:1px solid var(--line);border-radius:11px;padding:8px 12px 12px;margin-top:10px;background:var(--paper);}
+  .pcard-h{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--accent);font-weight:700;padding-top:2px;}
+  .pcard-h .rm{background:none;border:1px solid var(--line-strong);color:var(--ink-faint);font-size:11px;padding:2px 9px;border-radius:6px;cursor:pointer;}
+  .pcard-h .rm:hover{color:var(--crit);border-color:var(--crit);}
+  .addbtn{margin-top:11px;width:100%;background:var(--accent-tint);border:1px dashed var(--accent);color:var(--accent);font-size:12.5px;font-weight:600;padding:9px;border-radius:9px;cursor:pointer;}
+  .addbtn:hover{background:color-mix(in srgb,var(--accent) 15%,transparent);}
+
+  .out{display:flex;flex-direction:column;gap:16px;min-width:0;}
+  .estado{border-radius:12px;padding:13px 16px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;border:1px solid;}
+  .estado .ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:13px;flex:none;}
+  .estado.ok{background:var(--ok-tint);border-color:color-mix(in srgb,var(--ok) 35%,transparent);color:var(--ok);} .estado.ok .ic{background:var(--ok);}
+  .estado.bloq{background:var(--crit-tint);border-color:color-mix(in srgb,var(--crit) 40%,transparent);color:var(--crit);} .estado.bloq .ic{background:var(--crit);}
+
+  .sheet{background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow);padding:clamp(20px,3vw,42px);font-family:var(--serif);font-size:14px;line-height:1.72;position:relative;overflow:hidden;}
+  .sheet::before{content:"DEMO · DATOS FICTICIOS";position:absolute;top:20px;right:-46px;transform:rotate(45deg);background:var(--ins);color:#fff;font-family:var(--sans);font-size:9.5px;font-weight:700;letter-spacing:.1em;padding:4px 54px;opacity:.9;z-index:2;}
+  .calif{border:1.5px solid var(--ink);padding:13px 15px;margin-bottom:22px;font-family:var(--sans);font-size:12px;line-height:1.5;}
+  .calif h4{font-size:11px;text-align:center;margin:0 0 9px;letter-spacing:.05em;text-transform:uppercase;}
+  .calif .r{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;}
+  .calif .k{color:var(--ink-soft);text-transform:uppercase;font-size:10.5px;}
+  .calif table{width:100%;border-collapse:collapse;margin-top:7px;font-variant-numeric:tabular-nums;}
+  .calif td{border-top:1px solid var(--line-strong);padding:3px 5px;} .calif td:last-child{text-align:right;}
+  .cl{margin:0 0 13px;text-align:justify;} .clh{font-weight:700;}
+  .para{margin:8px 0 0;padding-left:15px;text-align:justify;} .para .clh{font-weight:600;font-style:italic;}
+  .ins{color:var(--ins);font-weight:600;} .rulec{color:var(--ins);}
+  .cite{font-family:var(--sans);font-size:9.5px;font-weight:700;vertical-align:.2em;color:var(--ins);background:var(--ins-tint);border:1px solid color-mix(in srgb,var(--ins) 30%,transparent);padding:1px 5px;border-radius:5px;margin-left:3px;white-space:nowrap;}
+  .fill{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;color:var(--line-strong);user-select:none;letter-spacing:.05em;}
+  [data-sec],[data-f],#cumplimiento{scroll-margin-top:16px;}
+  .hl{background:var(--hl) !important;color:var(--hl-ink) !important;border-radius:3px;box-shadow:0 0 0 2px var(--hl);padding:0 1px;}
+  .hl-sec{background:color-mix(in srgb,var(--hl) 45%,transparent);border-radius:5px;box-shadow:0 0 0 4px color-mix(in srgb,var(--hl) 45%,transparent);}
+  .flash{animation:flashk 1.5s ease;}
+  @keyframes flashk{0%,20%{background-color:color-mix(in srgb,var(--hl) 55%,transparent);}100%{background-color:transparent;}}
+  @media (prefers-reduced-motion:reduce){.flash{animation:none;}}
+  .cite.tip,.tag.tip{cursor:help;text-decoration:underline dotted;text-underline-offset:2px;}
+  #tip{position:fixed;z-index:9999;max-width:360px;background:var(--paper);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 10px 34px rgba(0,0,0,.24);padding:14px 16px;font-family:var(--sans);opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s;pointer-events:none;}
+  #tip.show{opacity:1;transform:none;pointer-events:auto;}
+  #tip .tt{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--accent);display:flex;justify-content:space-between;gap:10px;align-items:center;}
+  #tip .est{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--ok-tint);color:var(--ok);white-space:nowrap;}
+  #tip h5{font-family:var(--serif);font-size:14.5px;margin:7px 0 7px;font-weight:600;color:var(--ink);}
+  #tip .txt{font-size:12.5px;line-height:1.55;color:var(--ink);max-height:210px;overflow:auto;border-left:3px solid var(--accent);padding:2px 0 2px 11px;white-space:pre-line;}
+  #tip .src{font-size:10.5px;color:var(--ink-faint);margin-top:9px;font-family:var(--mono);}
+  #tip .dis{font-size:10px;color:var(--warn);margin-top:5px;}
+
+  .cmp{padding:18px;}
+  .cmp h3{font-family:var(--serif);font-size:18px;margin:0 0 14px;font-weight:600;}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  .tile{border:1px solid var(--line);border-radius:11px;padding:11px 13px;text-align:center;}
+  .tile .num{font-family:var(--serif);font-size:26px;font-weight:600;line-height:1;}
+  .tile .lbl{font-size:11px;color:var(--ink-soft);margin-top:5px;}
+  .tile.ok .num{color:var(--ok)} .tile.warn .num{color:var(--warn)} .tile.crit .num{color:var(--crit)}
+  .chk-item{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;padding:12px 2px;border-top:1px solid var(--line);}
+  .chk-item:first-child{border-top:0;}
+  .chip{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:6px;white-space:nowrap;align-self:start;height:fit-content;}
+  .chip.ok{color:var(--ok);background:var(--ok-tint);} .chip.obl{color:var(--ins);background:var(--ins-tint);} .chip.warn{color:var(--warn);background:var(--warn-tint);} .chip.crit{color:var(--crit);background:var(--crit-tint);}
+  .chk-item h4{margin:0 0 2px;font-size:13.5px;font-weight:600;} .chk-item p{margin:0;font-size:12.5px;color:var(--ink-soft);}
+  .chk-item .tag{grid-column:2;margin-top:5px;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);}
+  .metrics{font-size:11.5px;color:var(--ink-faint);margin-top:10px;text-align:right;font-family:var(--mono);}
+
+  .liq{padding:18px;}
+  .liq h3{font-family:var(--serif);font-size:18px;margin:0 0 4px;font-weight:600;}
+  .liq .resline{font-size:11px;color:var(--ink-faint);margin:0 0 14px;font-family:var(--mono);line-height:1.5;}
+  .liq .tblw{overflow-x:auto;}
+  .liq table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;min-width:420px;}
+  .liq th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line);}
+  .liq td{padding:8px;border-bottom:1px solid var(--line);}
+  .liq td.n{text-align:right;}
+  .liq tr.tot td{font-weight:700;border-top:2px solid var(--line-strong);border-bottom:0;font-size:14px;padding-top:10px;}
+  .liq .who{font-size:11px;color:var(--ink-faint);}
+  .liq .split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+  .liq .box{border:1px solid var(--line);border-radius:11px;padding:11px 13px;}
+  .liq .box .l{font-size:11px;color:var(--ink-soft);} .liq .box .v{font-family:var(--serif);font-size:20px;font-weight:600;margin-top:3px;}
+  .liq .note{font-size:11px;color:var(--warn);margin-top:12px;line-height:1.5;}
+
+  footer{max-width:1300px;margin:0 auto;padding:10px 20px 60px;color:var(--ink-faint);font-size:12px;line-height:1.6;}
+  footer b{color:var(--ink-soft);}
+</style>
+
+<div class="top"><div class="top-inner">
+  <span class="flag">▶ Wizard dinámico · Ecosistema Notarial</span>
+  <h1>Compraventa — intervinientes ilimitados</h1>
+  <p>Agrega los vendedores y compradores que necesites, cada uno persona natural o jurídica, con su cuota de proindiviso. La escritura completa, el cumplimiento y la liquidación 2026 se recalculan en vivo; al cambiar un campo salta y resalta el dato en la escritura, y las citas muestran el artículo de la norma.</p>
+</div></div>
+
+<div class="app">
+  <form class="panel form" id="form" autocomplete="off">
+    <fieldset>
+      <legend><span class="bn">0</span> Acto</legend>
+      <div class="field"><label>Derecho que se transfiere</label><select id="derecho"><option value="dominio" selected>Pleno dominio</option><option value="nuda">Nuda propiedad (reserva de usufructo)</option></select></div>
+      <label class="chk"><input type="checkbox" id="credito" checked> La parte compradora paga con crédito hipotecario</label>
+      <div id="wrap-banco">
+        <div class="field"><label>Banco acreedor / NIT</label><div class="row2"><input type="text" id="banco" value="BANCO DAVIVIENDA S.A."><input type="text" id="bancoNit" value="860.034.313-7"></div></div>
+        <div class="row2"><div class="field"><label>Plazo (años)</label><input type="number" id="plazoAnios" value="20"></div><div class="field"><label>N.º de cuotas</label><input type="number" id="numCuotas" value="240"></div></div>
+        <div class="field"><label>Apoderado(a) del banco</label><input type="text" id="apoderadoBanco" value="CLAUDIA HELENA MAZO ARBOLEDA"></div>
+        <div class="row2"><div class="field"><label>Poder del banco — E.P.</label><input type="text" id="poderBancoEP" value="1.245 del 12-02-2024"></div><div class="field"><label>Notaría del poder</label><input type="text" id="poderBancoNot" value="Notaría 20 de Medellín"></div></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">1</span> Parte vendedora</legend>
+      <label class="chk"><input type="checkbox" id="apoderado"> Comparece por apoderado</label>
+      <div class="sub-group" id="wrap-apod" hidden>
+        <div class="field"><label>Apoderado — nombre</label><input type="text" id="apodNombre" value="CARLOS MARIO GÓMEZ RÚA"></div>
+        <div class="field"><label>Poder (E.P., fecha, notaría)</label><input type="text" id="apodPoder" value="E.P. 812 del 2 de julio de 2026, Notaría 8 de Medellín"></div>
+      </div>
+      <div id="vend-list"></div>
+      <button type="button" class="addbtn" id="add-vend">+ Agregar vendedor</button>
+      <div class="field" id="wrap-afect"><label>¿El inmueble está afectado a vivienda familiar?</label><select id="afectada"><option value="no" selected>No (se declara)</option><option value="si">Sí</option><option value="nosabe">No se sabe</option></select><p class="hint">Aplica si algún vendedor natural es casado o en unión marital (Ley 258/1996).</p></div>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">1b</span> Parte compradora</legend>
+      <div id="comp-list"></div>
+      <button type="button" class="addbtn" id="add-comp">+ Agregar comprador</button>
+      <p class="hint">Con dos o más compradores, adquieren en común y proindiviso según su cuota (deben sumar 100%).</p>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">2</span> Inmueble</legend>
+      <div class="field"><label>Descripción y área</label><textarea id="inmdesc">APARTAMENTO NRO. 1402 de la Torre 3 del Conjunto Residencial Miravalle — Propiedad Horizontal, situado en la Calle 30 Sur #27-45 del municipio de Envigado (Antioquia), destinado a vivienda, con un área privada aproximada de 68,40 m²</textarea></div>
+      <div class="field"><label>Linderos</label><textarea id="linderos">Su área y linderos están determinados por el perímetro comprendido entre los puntos 1 al 28 y 1, punto de partida, de la planta del piso 14 de la Torre 3, plano RPH-19</textarea></div>
+      <div class="row2"><div class="field"><label>Matrícula inmobiliaria</label><input type="text" id="matricula" value="001-1502334"></div><div class="field"><label>Cédula catastral</label><input type="text" id="catastral" value="05266010300030014020"></div></div>
+      <div class="row2"><div class="field"><label>Avalúo catastral ($)</label><input type="number" id="avaluoCatastral" value="121923000"></div><div class="field"><label>NUPRE</label><input type="text" id="nupre" value="AAB0071ONED"></div></div>
+      <label class="chk"><input type="checkbox" id="ph" checked> Sometido a propiedad horizontal</label>
+      <div class="field" id="wrap-ph"><label>Reglamento de P.H. (E.P., fecha, notaría)</label><input type="text" id="phReg" value="E.P. 1.982 del 3 de mayo de 2019, Notaría 12 de Medellín"></div>
+      <div class="field"><label>¿Vivienda de interés social (VIS)?</label><select id="vis"><option value="no" selected>No</option><option value="sfve">Sí — subsidio 100% en especie</option><option value="otra">Sí — otra modalidad</option></select></div>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">3</span> Título y estado jurídico</legend>
+      <div class="row2"><div class="field"><label>Título — Nro. escritura</label><input type="text" id="tituloNum" value="2.410"></div><div class="field"><label>Título — fecha</label><input type="date" id="tituloFecha" value="2019-06-18"></div></div>
+      <div class="field"><label>Título — notaría de origen</label><input type="text" id="tituloNotaria" value="Notaría 12 de Medellín"></div>
+      <p class="hint" id="titulohint"></p>
+      <div class="field"><label>Gravámenes / limitaciones</label><select id="gravamen"><option value="libre" selected>Libre de gravámenes</option><option value="hipoteca_previa">Hipoteca previa (se cancela)</option><option value="patrimonio">Patrimonio de familia constituido</option><option value="usufructo">Usufructo vigente</option><option value="servidumbre">Servidumbre</option><option value="leasing">Leasing habitacional</option><option value="embargo">Embargo / demanda</option></select></div>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">5</span> Acto avanzado</legend>
+      <div class="field"><label>Tipo de negocio</label><select id="tipoNegocio">
+        <option value="compraventa" selected>Compraventa</option>
+        <option value="permuta">Permuta</option>
+        <option value="dacion">Dación en pago</option>
+        <option value="retroventa">Compraventa con pacto de retroventa</option>
+        <option value="reserva">Compraventa con reserva de dominio</option>
+      </select></div>
+      <div class="field"><label>Título de adquisición del vendedor (tipo)</label><select id="tituloTipo">
+        <option value="compraventa" selected>Compraventa anterior</option>
+        <option value="sucesion">Sucesión / adjudicación</option>
+        <option value="donacion">Donación</option>
+        <option value="remate">Adjudicación en remate</option>
+        <option value="prescripcion">Prescripción (sentencia de pertenencia)</option>
+      </select></div>
+      <label class="chk"><input type="checkbox" id="subsidio"> Pago con subsidio de vivienda</label>
+      <div class="field" id="wrap-subsidio" hidden><label>Entidad del subsidio</label><input type="text" id="subsidioEnt" value="Caja de Compensación COMFAMA"></div>
+      <label class="chk"><input type="checkbox" id="posesion2" checked> El vendedor poseyó el inmueble 2 años o más</label>
+      <label class="chk"><input type="checkbox" id="firmaRuego"> Un otorgante firma a ruego (no sabe/no puede firmar)</label>
+      <div class="sub-group" id="wrap-ruego" hidden>
+        <div id="ruego-list"></div>
+        <p class="hint">La firma a ruego exige la concurrencia de dos testigos instrumentales (art. 39 Dcto 960/1970).</p>
+      </div>
+      <label class="chk"><input type="checkbox" id="interprete"> Requiere intérprete / traductor</label>
+      <label class="chk"><input type="checkbox" id="pep"> Alguna parte es PEP (persona expuesta políticamente)</label>
+      <label class="chk"><input type="checkbox" id="cuentaTercero"> Alguna parte actúa por cuenta de un tercero (beneficiario final)</label>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">4</span> Precio</legend>
+      <div class="field"><label>Precio total ($)</label><input type="number" id="total" value="420000000"></div>
+      <div class="row2"><div class="field"><label>Cuota inicial ($)</label><input type="number" id="inicial" value="120000000"></div><div class="field"><label>Saldo con crédito ($)</label><input type="number" id="saldo" value="300000000"></div></div>
+      <p class="hint" id="cuadre"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">7</span> Anexos aportados</legend>
+      <div class="anexos">
+        <label class="chk"><input type="checkbox" id="ax_tradicion"> Cert. tradición</label>
+        <label class="chk"><input type="checkbox" id="ax_predial" checked> Paz y salvo predial</label>
+        <label class="chk"><input type="checkbox" id="ax_admin"> Paz y salvo admón</label>
+        <label class="chk"><input type="checkbox" id="ax_cedulas" checked> Cédulas</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend><span class="bn">6</span> Otorgamiento y firmas</legend>
+      <div class="row2"><div class="field"><label>Número de escritura</label><input type="text" id="numEscritura" value="2.847"></div><div class="field"><label>Hoja de papel notarial (Nro. inicial)</label><input type="text" id="hojaInicial" value="Aa-112942941"></div></div>
+      <div class="field"><label>Fecha de otorgamiento</label><input type="date" id="fechaOtorg" value="2026-08-14"><p class="hint" id="fechahint"></p></div>
+      <label class="chk"><input type="checkbox" id="huella" checked> Se toma impresión dactilar de los otorgantes</label>
+      <label class="chk"><input type="checkbox" id="testigos"> Concurren testigos instrumentales</label>
+      <div class="sub-group" id="wrap-testigos" hidden>
+        <div id="tg-list"></div>
+        <p class="hint">Los testigos instrumentales firman y se identifican en el pliego de firmas.</p>
+      </div>
+      <p class="hint">Cierre del instrumento: lectura, protocolización, constancias fiscales, firmas y autorización notarial — las cuatro fases del art. 13 del Decreto 960/1970.</p>
+    </fieldset>
+  </form>
+
+  <div class="out">
+    <div class="estado" id="estado"></div>
+    <div style="margin:10px 0 4px"><button type="button" id="btnEditor" class="addbtn" style="width:100%;background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600">✎ Abrir en el editor del protocolista →</button><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">Pasa este borrador —con los campos ya vinculados— al editor para rematar (texto libre, biblioteca, control de cambios).</div></div>
+    <article class="sheet" id="escritura"></article>
+    <div class="panel cmp" id="cumplimiento"></div>
+    <div class="panel liq" id="liquidacion"></div>
+  </div>
+</div>
+
+<footer>
+  <b>Prototipo de reglas — datos ficticios.</b> No es una escritura real ni un documento de la Notaría 16. Reproduce la estructura y el clausulado típicos de una compraventa para demostrar el motor de cláusulas, el informe de cumplimiento y la liquidación. En producción la IA (Gari) redacta el estilo y la verificación se hace contra fuentes oficiales. Citas del normograma verificado; validación jurídica final a cargo del notario.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  /* ---------- datos dinámicos ---------- */
+  var data={
+    vendedores:[
+      {tipo:'natural',genero:'M',tipoDoc:'CC',nombre:'RODRIGO ELÍAS CASTAÑO MEJÍA',id:'71.555.201',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50,direccion:'Calle 10 Sur # 22-14',telefono:'315 6620114',correo:'rcastano@correo.com',ocupacion:'Comerciante',notiElec:true,pep:false},
+      {tipo:'natural',genero:'F',tipoDoc:'CC',nombre:'MARTA LUCÍA ARANGO POSADA',id:'43.220.118',ciudad:'Medellín',estado:'casado_sc',repr:'',cuota:50,direccion:'Calle 10 Sur # 22-14',telefono:'315 6620115',correo:'marango@correo.com',ocupacion:'Docente',notiElec:true,pep:false}
+    ],
+    compradores:[
+      {tipo:'natural',genero:'F',tipoDoc:'CC',nombre:'LAURA XIMENA ORTIZ VÉLEZ',id:'1.017.884.330',ciudad:'Envigado',estado:'soltero',repr:'',cuota:100,direccion:'Cra 43A # 30 Sur-90',telefono:'304 5512090',correo:'lortiz@correo.com',ocupacion:'Ingeniera',notiElec:true,pep:false}
+    ],
+    testigos:[
+      {tipoDoc:'CC',nombre:'SEBASTIÁN RÍOS MEJÍA',id:'1.036.640.220',ciudad:'Medellín',direccion:'',telefono:'',correo:'',ocupacion:''},
+      {tipoDoc:'CC',nombre:'VALENTINA GÓMEZ LOAIZA',id:'1.128.445.117',ciudad:'Medellín',direccion:'',telefono:'',correo:'',ocupacion:''}
+    ],
+    ruego:{tipoDoc:'CC',nombre:'GLORIA PATRICIA MEJÍA RÚA',id:'32.556.101',ciudad:'Medellín',direccion:'',telefono:'',correo:'',ocupacion:''}
+  };
+
+  /* ---------- helpers de número ---------- */
+  var UNI=['','UNO','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE','VEINTE','VEINTIUNO','VEINTIDÓS','VEINTITRÉS','VEINTICUATRO','VEINTICINCO','VEINTISÉIS','VEINTISIETE','VEINTIOCHO','VEINTINUEVE'];
+  var DEC=['','','','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+  var CEN=['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'];
+  function dos(n){ if(n<30) return UNI[n]; var d=Math.floor(n/10),u=n%10; return DEC[d]+(u?' Y '+UNI[u]:''); }
+  function tres(n){ if(n===100) return 'CIEN'; var c=Math.floor(n/100),r=n%100; return (c?CEN[c]:'')+(c&&r?' ':'')+(r?dos(r):''); }
+  function enLetras(n){ n=Math.floor(n); if(n===0) return 'CERO'; var mill=Math.floor(n/1000000),mil=Math.floor((n%1000000)/1000),cen=n%1000,o='';
+    if(mill) o+=(mill===1?'UN MILLÓN':enLetras(mill)+' MILLONES');
+    if(mil) o+=(o?' ':'')+(mil===1?'MIL':tres(mil)+' MIL');
+    if(cen) o+=(o?' ':'')+tres(cen); return o.trim(); }
+  function pts(n){ return (n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+  function money(n){ return enLetras(n)+' PESOS MONEDA LEGAL COLOMBIANA ($'+pts(n)+')'; }
+  var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  function diaTexto(d){ var w=enLetras(d).toLowerCase(); if(w==='uno') w='un'; else if(w.slice(-9)==='veintiuno') w=w.slice(0,-9)+'veintiún'; else if(w.slice(-4)===' uno') w=w.slice(0,-4)+' un'; return w; }
+  function fechaText(v){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); if(!m) return v||'____'; var y=+m[1],mo=+m[2],d=+m[3]; if(mo<1||mo>12||d<1||d>31) return v; return diaTexto(d)+' ('+d+') '+(d===1?'día':'días')+' del mes de '+MESES[mo-1]+' del año '+enLetras(y).toLowerCase()+' ('+y+')'; }
+  function fechaCorta(v){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); if(!m) return v||'____'; return (+m[3])+' de '+MESES[+m[2]-1]+' de '+m[1]; }
+  function esc(s){ return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function attr(s){ return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  function fmt(n){ return '$'+pts(n); }
+  function I(s){ return '<span class="ins">'+esc(s)+'</span>'; }
+  function IF(id,s){ return '<span class="ins" data-f="'+id+'">'+esc(s)+'</span>'; }
+  function R(s,cite){ return '<span class="rulec">'+s+'</span><span class="cite">'+cite+'</span>'; }
+  function D(cite){ return '<span class="cite">'+cite+'</span>'; }
+  function g(id){ return document.getElementById(id); }
+  /* Concordancia de género — componente "sexo" (4 categorías, Decreto 0732 de 2026 · Sent. T-033/2022): M, F, No Binario, Transgénero.
+     Terminación gramatical: M→o, F→a, NB/T→e (lenguaje incluyente). */
+  function genEnding(g){ return g==='F'?'a':(g==='NB'||g==='T')?'e':'o'; }
+  function genArt(g){ return g==='F'?'la':(g==='NB'||g==='T')?'le':'el'; }
+  var GENEROS=[['M','Masculino'],['F','Femenino'],['NB','No binario'],['T','Transgénero']];
+  function generoOpts(sel){ return GENEROS.map(function(o){return '<option value="'+o[0]+'"'+((sel||'M')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join(''); }
+  function labelEstado(e,genero){ var x=genEnding(genero);
+    return {soltero:'solter'+x,casado_sc:'casad'+x+' con sociedad conyugal vigente',union:'en unión marital de hecho',divorciado:'divorciad'+x,viudo:'viud'+x}[e]||e; }
+
+  /* ---------- estado global (campos fijos) ---------- */
+  function G(){ var num=function(id){return parseInt(g(id).value,10)||0;};
+    return { derecho:g('derecho').value, credito:g('credito').checked, banco:g('banco').value, bancoNit:g('bancoNit').value,
+      plazoAnios:num('plazoAnios'), numCuotas:num('numCuotas'), apoderadoBanco:g('apoderadoBanco').value, poderBancoEP:g('poderBancoEP').value, poderBancoNot:g('poderBancoNot').value,
+      avaluoCatastral:num('avaluoCatastral'), nupre:g('nupre').value,
+      apod:g('apoderado').checked, apodN:g('apodNombre').value, apodP:g('apodPoder').value, afect:g('afectada').value,
+      inmdesc:g('inmdesc').value, linderos:g('linderos').value, matricula:g('matricula').value, catastral:g('catastral').value,
+      ph:g('ph').checked, phReg:g('phReg').value, vis:g('vis').value, tituloNum:g('tituloNum').value, tituloFecha:g('tituloFecha').value, tituloNotaria:g('tituloNotaria').value, gravamen:g('gravamen').value,
+      tipoNegocio:g('tipoNegocio').value, tituloTipo:g('tituloTipo').value, subsidio:g('subsidio').checked, subsidioEnt:g('subsidioEnt').value, posesion2:g('posesion2').checked, firmaRuego:g('firmaRuego').checked, interprete:g('interprete').checked, pep:g('pep').checked, cuentaTercero:g('cuentaTercero').checked,
+      numEscritura:g('numEscritura').value, fechaOtorg:g('fechaOtorg').value, huella:g('huella').checked, testigosOn:g('testigos').checked,
+      hojaInicial:g('hojaInicial').value, pepAny:(g('pep').checked||data.vendedores.concat(data.compradores).some(function(p){return p.pep;})),
+      testigos:data.testigos, ruego:data.ruego,
+      total:num('total'), inicial:num('inicial'), saldo:num('saldo'),
+      ax:{tradicion:g('ax_tradicion').checked, predial:g('ax_predial').checked, admin:g('ax_admin').checked, cedulas:g('ax_cedulas').checked},
+      V:data.vendedores, C:data.compradores };
+  }
+  function casadoOUnion(list){ return list.some(function(p){ return p.tipo!=='juridica'&&(p.estado==='casado_sc'||p.estado==='union'); }); }
+  function anyNatural(list){ return list.some(function(p){ return p.tipo!=='juridica'; }); }
+  function anyJuridica(s){ return s.V.concat(s.C).some(function(p){ return p.tipo==='juridica'; }); }
+  function sumaCuotas(list){ return list.reduce(function(a,p){return a+(p.cuota||0);},0); }
+
+  /* ---------- formulario dinámico ---------- */
+  function estadoOpts(sel){ var o=[['soltero','Soltero(a)'],['casado_sc','Casado(a) c/ soc. conyugal'],['union','Unión marital'],['divorciado','Divorciado(a)'],['viudo','Viudo(a)']];
+    return o.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===sel?' selected':'')+'>'+x[1]+'</option>';}).join(''); }
+  /* ---------- tipo de documento (no se asume C.C.) ---------- */
+  var TIPODOC={CC:'C.C.',CE:'C.E.',PA:'Pasaporte',TI:'T.I.',RC:'R.C.',PPT:'PPT',NIT:'NIT'};
+  var DOCFRASE={CC:'la cédula de ciudadanía',CE:'la cédula de extranjería',PA:'el pasaporte',TI:'la tarjeta de identidad',RC:'el registro civil',PPT:'el permiso por protección temporal (PPT)'};
+  function docLabel(c){ return TIPODOC[c]||'C.C.'; }
+  function docFrase(c){ return DOCFRASE[c]||DOCFRASE.CC; }
+  function docOpts(sel){ var o=[['CC','Cédula de ciudadanía'],['CE','Cédula de extranjería'],['PA','Pasaporte'],['TI','Tarjeta de identidad'],['RC','Registro civil'],['PPT','PPT / Permiso']];
+    return o.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===sel?' selected':'')+'>'+x[1]+'</option>';}).join(''); }
+  function partyCard(side,i,p,label){
+    var arr=side==='v'?data.vendedores:data.compradores;
+    var da='data-side="'+side+'" data-idx="'+i+'"';
+    var h='<div class="pcard"><div class="pcard-h"><span>'+label+' '+(i+1)+'</span>'+(arr.length>1?'<button type="button" class="rm" '+da+'>quitar</button>':'')+'</div>';
+    h+='<div class="field"><label>Naturaleza</label><select '+da+' data-key="tipo"><option value="natural"'+(p.tipo==='natural'?' selected':'')+'>Persona natural</option><option value="juridica"'+(p.tipo==='juridica'?' selected':'')+'>Persona jurídica</option></select></div>';
+    h+='<div class="field"><label>Nombre / Razón social</label><input type="text" '+da+' data-key="nombre" value="'+attr(p.nombre)+'"></div>';
+    if(p.tipo==='juridica'){
+      h+='<div class="row2"><div class="field"><label>NIT</label><input type="text" '+da+' data-key="id" value="'+attr(p.id)+'"></div><div class="field"><label>Cuota %</label><input type="number" '+da+' data-key="cuota" value="'+p.cuota+'"></div></div>';
+      h+='<div class="field"><label>Domicilio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div>';
+      h+='<div class="field"><label>Representante legal</label><input type="text" '+da+' data-key="repr" value="'+attr(p.repr)+'"></div>';
+    } else {
+      h+='<div class="field"><label>Tipo de documento</label><select '+da+' data-key="tipoDoc">'+docOpts(p.tipoDoc)+'</select></div>';
+      h+='<div class="row2"><div class="field"><label>Número de documento</label><input type="text" '+da+' data-key="id" value="'+attr(p.id)+'"></div><div class="field"><label>Cuota %</label><input type="number" '+da+' data-key="cuota" value="'+p.cuota+'"></div></div>';
+      h+='<div class="row2"><div class="field"><label>Domicilio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div><div class="field"><label>Género — sexo (Dcto 0732/2026)</label><select '+da+' data-key="genero">'+generoOpts(p.genero)+'</select></div></div>';
+      h+='<div class="field"><label>Estado civil</label><select '+da+' data-key="estado">'+estadoOpts(p.estado)+'</select></div>';
+    }
+    h+='<div class="sub-group" style="margin-top:8px"><div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:2px">Datos para la firma</div>';
+    h+='<div class="field"><label>Dirección</label><input type="text" '+da+' data-key="direccion" value="'+attr(p.direccion)+'"></div>';
+    h+='<div class="row2"><div class="field"><label>Teléfono</label><input type="text" '+da+' data-key="telefono" value="'+attr(p.telefono)+'"></div><div class="field"><label>'+(p.tipo==='juridica'?'Actividad económica':'Profesión u ocupación')+'</label><input type="text" '+da+' data-key="ocupacion" value="'+attr(p.ocupacion)+'"></div></div>';
+    h+='<div class="field"><label>Correo electrónico</label><input type="text" '+da+' data-key="correo" value="'+attr(p.correo)+'"></div>';
+    h+='<label class="chk"><input type="checkbox" '+da+' data-key="notiElec"'+(p.notiElec?' checked':'')+'> Autoriza notificaciones electrónicas</label>';
+    h+='<label class="chk"><input type="checkbox" '+da+' data-key="pep"'+(p.pep?' checked':'')+'> Persona Expuesta Políticamente (PEP)</label>';
+    h+='</div>';
+    return h+'</div>';
+  }
+  function renderParties(){
+    g('vend-list').innerHTML=data.vendedores.map(function(p,i){return partyCard('v',i,p,'Vendedor');}).join('');
+    g('comp-list').innerHTML=data.compradores.map(function(p,i){return partyCard('c',i,p,'Comprador');}).join('');
+  }
+  /* ficha de firma (testigos, firmante a ruego): mismos campos que un otorgante */
+  function firmaCard(scope,i,p,label){
+    var da='data-scope="'+scope+'" data-idx="'+i+'"';
+    var h='<div class="pcard"><div class="pcard-h"><span>'+label+'</span></div>';
+    h+='<div class="field"><label>Nombre</label><input type="text" '+da+' data-key="nombre" value="'+attr(p.nombre)+'"></div>';
+    h+='<div class="field"><label>Tipo de documento</label><select '+da+' data-key="tipoDoc">'+docOpts(p.tipoDoc)+'</select></div>';
+    h+='<div class="row2"><div class="field"><label>Número de documento</label><input type="text" '+da+' data-key="id" value="'+attr(p.id)+'"></div><div class="field"><label>Municipio</label><input type="text" '+da+' data-key="ciudad" value="'+attr(p.ciudad)+'"></div></div>';
+    h+='<div class="field"><label>Dirección</label><input type="text" '+da+' data-key="direccion" value="'+attr(p.direccion)+'"></div>';
+    h+='<div class="row2"><div class="field"><label>Teléfono</label><input type="text" '+da+' data-key="telefono" value="'+attr(p.telefono)+'"></div><div class="field"><label>Profesión u ocupación</label><input type="text" '+da+' data-key="ocupacion" value="'+attr(p.ocupacion)+'"></div></div>';
+    h+='<div class="field"><label>Correo electrónico</label><input type="text" '+da+' data-key="correo" value="'+attr(p.correo)+'"></div>';
+    return h+'</div>';
+  }
+  function renderFirmantes(){
+    g('tg-list').innerHTML=data.testigos.map(function(p,i){return firmaCard('tg',i,p,'Testigo '+(i+1));}).join('');
+    g('ruego-list').innerHTML=firmaCard('ruego',0,data.ruego,'Firmante a ruego');
+  }
+  function nueva(){ return {tipo:'natural',genero:'M',tipoDoc:'CC',nombre:'',id:'',ciudad:'Medellín',estado:'soltero',repr:'',cuota:0,direccion:'',telefono:'',correo:'',ocupacion:'',notiElec:true,pep:false}; }
+  function equalizar(side){ var arr=side==='v'?data.vendedores:data.compradores; var n=arr.length; if(!n) return; var base=Math.floor(100/n); arr.forEach(function(p){p.cuota=base;}); arr[n-1].cuota=100-base*(n-1); }
+
+  /* ---------- normas (popups) ---------- */
+  var NORMAS={
+    'art. 6 · Ley 258/1996':{norma:'Ley 258/1996 (mod. Ley 854/2003)',estado:'Vigente',art:'Artículo 6 — Deber del notario',texto:'En toda escritura de enajenación o gravamen de un inmueble destinado a vivienda, el Notario indagará al propietario si tiene sociedad conyugal, matrimonio o unión marital de hecho vigente y si el inmueble se encuentra afectado a vivienda familiar. La respuesta se dará bajo la gravedad del juramento y se dejará constancia en la escritura.',fuente:'Gestor Normativo i=10794'},
+    'art. 3 · Ley 258/1996':{norma:'Ley 258/1996',estado:'Vigente',art:'Artículo 3 — Consentimiento de ambos',texto:'Los inmuebles afectados a vivienda familiar solo podrán enajenarse, gravarse o constituir sobre ellos derecho real, con el consentimiento libre de ambos cónyuges, expresado con su firma. La falta de este requisito genera la nulidad del acto.',fuente:'Gestor Normativo i=10794'},
+    'art. 90 E.T.':{norma:'Estatuto Tributario (mod. art. 61 Ley 2010/2019)',estado:'Vigente',art:'Artículo 90 — Declaración de valor real',texto:'En la escritura de enajenación las partes declararán, bajo la gravedad del juramento, que el precio incluido es real y no ha sido objeto de pactos privados con valor diferente; de existir, deberán informar el precio convenido. Si se omite esta declaración, la renta, la ganancia ocasional, el impuesto de registro y los derechos notariales se liquidan sobre una base de cuatro (4) veces el valor incluido en la escritura.',fuente:'Senado — E.T.; Gestor i=159687'},
+    'art. 61 Ley 2010/2019 (art. 90 E.T.)':{norma:'Estatuto Tributario (mod. art. 61 Ley 2010/2019)',estado:'Vigente',art:'Artículo 90 — Declaración de valor real',texto:'En la escritura de enajenación las partes declararán, bajo la gravedad del juramento, que el precio incluido es real y no ha sido objeto de pactos privados con valor diferente; de existir, deberán informar el precio convenido. Si se omite esta declaración, la renta, la ganancia ocasional, el impuesto de registro y los derechos notariales se liquidan sobre una base de cuatro (4) veces el valor incluido en la escritura.',fuente:'Senado — E.T.; Gestor i=159687'},
+    'art. 398 E.T.':{norma:'Estatuto Tributario',estado:'Vigente',art:'Artículo 398 — Retención en la fuente',texto:'La enajenación de activos fijos de una persona natural está sometida a una retención en la fuente del uno por ciento (1%) del valor de la enajenación. Tratándose de bienes inmuebles, la retención se efectúa ante el notario, que actúa como agente retenedor y debe recaudarla previamente a la enajenación.',fuente:'DIAN — E.T.; Oficios 4860 y 6547 de 2019'},
+    'art. 29 · Ley 675/2001':{norma:'Ley 675/2001 (mod. Ley 2079/2021)',estado:'Vigente',art:'Artículo 29 — Expensas y paz y salvo',texto:'Cada propietario participa en las expensas comunes según su coeficiente. En la transferencia del dominio, el Notario exige el paz y salvo de expensas comunes expedido por el representante legal de la copropiedad; de no obtenerse, se deja constancia en la escritura y el nuevo propietario responde solidariamente por las deudas pendientes.',fuente:'Gestor i=4162'},
+    'arts. 25–26 · Ley 675/2001':{norma:'Ley 675/2001',estado:'Vigente',art:'Artículos 25 y 26 — Coeficientes',texto:'Art. 25. El reglamento señalará los coeficientes de copropiedad de los bienes de dominio particular.\nArt. 26. Los coeficientes se calcularán con base en el área privada construida de cada bien respecto del área privada construida total del edificio o conjunto.',fuente:'Gestor i=4162'},
+    'Ley 675/2001':{norma:'Ley 675 de 2001 — Propiedad horizontal',estado:'Vigente (mod. 2079/2021)',art:'Régimen de propiedad horizontal',texto:'Regula la propiedad horizontal: bienes privados y comunes, coeficientes de copropiedad, administración y expensas. El derecho sobre los bienes comunes es inseparable del bien privado y se transfiere con él.',fuente:'Gestor i=4162'},
+    'art. 13 · Ley 2079/2021':{norma:'Ley 2079 de 2021 — Vivienda y hábitat',estado:'Vigente',art:'Artículo 13 — Restricción VIS',texto:'La vivienda de interés social adquirida con subsidio familiar de vivienda 100% en especie (SFVE) no puede transferirse durante cinco (5) años contados desde la transferencia del dominio, salvo autorización de la entidad otorgante; el subsidio es restituible si el beneficiario transfiere derechos reales o deja de residir antes del término. Se elimina la restricción para las demás modalidades (antes eran 10 años).',fuente:'Gestor i=160946; Minvivienda ER0015805/2021'},
+    'art. 230 Ley 223/1995':{norma:'Ley 223 de 1995 — Impuesto de registro',estado:'Vigente',art:'Artículo 230 — Tarifas',texto:'Las asambleas departamentales fijan las tarifas del impuesto de registro. Para actos con cuantía sujetos a registro en las oficinas de registro de instrumentos públicos, la tarifa está entre el 0,5% y el 1% (1% en Antioquia). La base no puede ser inferior al avalúo catastral o autoavalúo.',fuente:'Gestor i=6968'},
+    'art. 16 · Ley 1579/2012':{norma:'Ley 1579 de 2012 — Estatuto de Registro',estado:'Vigente',art:'Artículo 16 — Calificación',texto:'La calificación es el análisis jurídico y la verificación de que el título reúne los requisitos legales para su inscripción. No procede el registro si el inmueble no está plenamente identificado (matrícula, nomenclatura, linderos y área en sistema métrico) y las partes por su documento de identidad; en tal caso se inadmite mediante nota de devolución.',fuente:'Gestor i=49731'},
+    'art. 8 · Ley 1579/2012':{norma:'Ley 1579 de 2012 — Estatuto de Registro',estado:'Vigente',art:'Artículo 8 — Matrícula inmobiliaria',texto:'La matrícula inmobiliaria es un folio destinado a la inscripción de los actos referentes a un bien inmueble, distinguido con un código alfanumérico. Señala la oficina de registro, el departamento y el municipio, el número predial o cédula catastral, si el inmueble es urbano o rural, y lo describe por su número o dirección, sus linderos, perímetro y cabida.',fuente:'Gestor i=49731'},
+    'Ley 1579/2012':{norma:'Ley 1579 de 2012 — Estatuto de Registro',estado:'Vigente',art:'Registro de instrumentos públicos',texto:'Regula el registro de los documentos que afectan bienes inmuebles: radicación, calificación, inscripción, matrícula, títulos sujetos a registro y causales de devolución.',fuente:'Gestor i=49731'},
+    'Ley 70/1931 · 495/1999':{norma:'Ley 70 de 1931 y Ley 495 de 1999',estado:'Vigente',art:'Patrimonio de familia inembargable',texto:'La Ley 495 de 1999 permite constituir el patrimonio de familia por escritura pública (tope 250 SMLMV; dominio pleno, sin proindiviso ni hipoteca). Se cancela de la misma forma en que se constituyó: por escritura con ambos cónyuges o judicialmente; con menores, autorización judicial. Mientras exista, el inmueble no puede venderse libremente.',fuente:'Gestor i=39265, i=38938'},
+    'art. 1546 C.C.':{norma:'Código Civil',estado:'Vigente',art:'Artículo 1546 — Condición resolutoria tácita',texto:'En los contratos bilaterales va envuelta la condición resolutoria en caso de no cumplirse por uno de los contratantes lo pactado. En tal caso, el otro contratante podrá pedir a su arbitrio la resolución o el cumplimiento del contrato, con indemnización de perjuicios.',fuente:'Código Civil'},
+    'arts. 1893, 1914 C.C.':{norma:'Código Civil — Saneamiento',estado:'Vigente',art:'Artículos 1893 y 1914',texto:'Art. 1893. El vendedor está obligado a sanear al comprador todas las evicciones que tengan una causa anterior a la venta.\nArt. 1914. La acción redhibitoria permite al comprador rescindir la venta o rebajar el precio por los vicios ocultos de la cosa vendida.',fuente:'Código Civil'},
+    'arts. 2445–2446 C.C.':{norma:'Código Civil — Hipoteca',estado:'Vigente',art:'Artículos 2445 y 2446 — Extensión',texto:'Art. 2445. La hipoteca sobre bienes raíces afecta los muebles que por accesión se reputan inmuebles.\nArt. 2446. La hipoteca se extiende a todos los aumentos y mejoras que reciba la cosa hipotecada.',fuente:'Código Civil'},
+    'Dcto 960/1970':{norma:'Decreto-Ley 960 de 1970 — Estatuto del Notariado',estado:'Vigente (mod.)',art:'Artículo 13 — Otorgamiento',texto:'La escritura pública se perfecciona en cuatro fases: recepción (el notario percibe las declaraciones), extensión (versión escrita del instrumento), otorgamiento (asentimiento expreso de los comparecientes) y autorización (fe que imprime el notario verificados los requisitos legales).',fuente:'Gestor i=149249'},
+    'Dcto 1069/2015':{norma:'Decreto 1069 de 2015 — DUR Sector Justicia',estado:'Vigente',art:'Reglamentación notarial (ex Dcto 2148/1983)',texto:'Compila la reglamentación notarial: protocolización de documentos habilitantes, requisitos de los poderes y la identificación del inmueble en los poderes especiales para enajenar. Sustituye como norma vigente al Decreto 2148 de 1983.',fuente:'Gestor i=74174'},
+    'C. Comercio':{norma:'Código de Comercio',estado:'Vigente',art:'Representación de personas jurídicas',texto:'La sociedad comparece por su representante legal, cuya calidad y facultades constan en el certificado de existencia y representación de la Cámara de Comercio. Cuando los estatutos o la cuantía del acto lo exijan, se requiere autorización del órgano social competente (junta o asamblea), que se protocoliza con la escritura.',fuente:'Código de Comercio'},
+    'art. 1939 C.C.':{norma:'Código Civil',estado:'Vigente',art:'Artículo 1939 — Pacto de retroventa',texto:'Por el pacto de retroventa el vendedor se reserva la facultad de recobrar la cosa vendida reembolsando al comprador el precio; el plazo no puede pasar de cuatro (4) años. Se inscribe para su oponibilidad frente a terceros.',fuente:'Código Civil'},
+    'art. 1935 C.C.':{norma:'Código Civil',estado:'Vigente',art:'Reserva de dominio',texto:'La reserva de dominio subordina la transferencia del dominio al pago del precio. En bienes inmuebles su eficacia es discutida y la doctrina la asimila a una condición resolutoria por incumplimiento (el registro transfiere el dominio). Validar en cada caso.',fuente:'Código Civil'},
+    'art. 313 E.T.':{norma:'Estatuto Tributario (mod. Ley 2277/2022)',estado:'Vigente',art:'Ganancia ocasional',texto:'La utilidad en la venta de un activo fijo poseído dos (2) años o más se grava como ganancia ocasional a la tarifa del quince por ciento (15%). Si la posesión es inferior a dos años, la utilidad tributa como renta ordinaria. La venta de la casa de habitación tiene exención hasta 5.000 UVT (art. 311-1).',fuente:'E.T. arts. 300, 311-1, 313'},
+    'Ley 3ª/1991':{norma:'Ley 3 de 1991 y Decreto 1077/2015',estado:'Vigente',art:'Subsidio familiar de vivienda',texto:'El subsidio familiar de vivienda se acredita con el acto de asignación de la entidad otorgante (Fonvivienda, cajas de compensación, entes territoriales). Suele conllevar la constitución de patrimonio de familia inembargable y restricciones de enajenación.',fuente:'Ley 3ª/1991; Dcto 1077/2015'},
+    'Ley 795/2003':{norma:'Ley 795 de 2003; Dcto 1787/2004',estado:'Vigente',art:'Leasing habitacional',texto:'En el leasing habitacional la entidad financiera es la propietaria del inmueble durante el contrato y solo lo transfiere al locatario cuando este ejerce la opción de compra. Para vender a un tercero debe terminarse previamente el contrato de leasing.',fuente:'Ley 795/2003; Dcto 1787/2004'},
+    'Dcto 830/2021':{norma:'Decreto 830 de 2021 (LA/FT)',estado:'Vigente',art:'Beneficiario final y PEP',texto:'Impone identificar al beneficiario final (persona natural que en último término posee o controla) y aplicar debida diligencia reforzada a las Personas Expuestas Políticamente (PEP), con verificación de la fuente de riqueza y aprobación de instancia superior.',fuente:'Dcto 830/2021'},
+    'art. 38 · Dcto 960/70':{norma:'Decreto-Ley 960 de 1970',estado:'Vigente',art:'Artículo 38 — Intérprete',texto:'Cuando alguno de los otorgantes no conozca el idioma castellano, el notario exigirá la intervención de un intérprete que traduzca el instrumento; los documentos en idioma extranjero se acompañan de traducción oficial.',fuente:'Dcto 960/1970'},
+    'art. 39 · Dcto 960/70':{norma:'Decreto-Ley 960 de 1970',estado:'Vigente',art:'Artículo 39 — Firma a ruego',texto:'Cuando el otorgante no sepa o no pueda firmar, lo hará por él otra persona a su ruego, en presencia de dos testigos que también firmarán; se tomará la impresión de la huella dactilar del otorgante.',fuente:'Dcto 960/1970'},
+    'Ley 2195/2022 · SIPLAFT':{norma:'Ley 2195/2022 + SIPLAFT notarial',estado:'Vigente',art:'Prevención de lavado (LA/FT)',texto:'La Ley 2195 de 2022 refuerza la prevención de lavado de activos y el registro de beneficiarios finales. En notarías rige el SIPLAFT (Circular SNR 1536/2013 e Instrucciones 17/2016 y 08/2017): debida diligencia, conocimiento del cliente, declaración de origen lícito de fondos y reporte de operaciones sospechosas a la UIAF.',fuente:'Gestor i=175606; UIAF/SNR'},
+    'Ley 2195/2022':{norma:'Ley 2195/2022 + SIPLAFT notarial',estado:'Vigente',art:'Prevención de lavado (LA/FT)',texto:'La Ley 2195 de 2022 refuerza la prevención de lavado de activos y el registro de beneficiarios finales. En notarías rige el SIPLAFT: debida diligencia, conocimiento del cliente, declaración de origen lícito de fondos y reporte de operaciones sospechosas a la UIAF.',fuente:'Gestor i=175606; UIAF/SNR'},
+    'RES-2026-000964-6':{norma:'Superintendencia de Notariado y Registro',estado:'Vigente 2026',art:'Resolución RES-2026-000964-6 — Tarifas notariales 2026',texto:'Fija las tarifas por el ejercicio de la función notarial para 2026 (vigentes desde el 1 de febrero de 2026; ajuste IPC 5,10%). Actos con cuantía igual o inferior a $189.700: $22.500; sobre el excedente, tarifa única del tres por mil (3‰). Las VIS/VIP tienen 50% de descuento en derechos notariales.',fuente:'Supernotariado; asuntoslegales.co'}
+  };
+
+  /* ---------- TARIFAS DEL AÑO (se reemplaza cada año) ---------- */
+  var TARIFAS={ anio:2026, resNotarial:'RES-2026-000964-6', resRegistral:'RES-2026-001726-6', ipc:'5,10%',
+    cuantiaMin:189700, derNotarialBase:22500, derNotarialPorMil:0.003, iva:0.19, impuestoRegistro:0.01, retencion:0.01, visDesc:0.5 };
+
+  /* ---------- construcción de la escritura ---------- */
+  function pers(p,side,i){
+    var f=side+i;
+    var gn = genEnding(p.genero);
+    var dom = p.ciudad ? ', domiciliad'+(p.tipo==='juridica'?'a':gn)+' en '+IF(f+'ciudad',p.ciudad) : '';
+    if(p.tipo==='juridica') return IF(f+'nombre',p.nombre)+', persona jurídica identificada con NIT '+IF(f+'id',p.id)+dom+', representada legalmente por '+IF(f+'repr',p.repr)+', quien acredita su existencia y representación con el certificado que se protocoliza con este instrumento';
+    return IF(f+'nombre',p.nombre)+', mayor de edad'+dom+', identificad'+gn+' con '+IF(f+'tipoDoc',docFrase(p.tipoDoc))+' número '+IF(f+'id',p.id)+', de estado civil '+IF(f+'estado',labelEstado(p.estado,p.genero));
+  }
+  function persList(list,side){ return list.map(function(p,i){return pers(p,side,i);}).join('; y '); }
+  function buyersFavor(C){
+    if(C.length===1) return IF('c0nombre',C[0].nombre);
+    var eq=C.every(function(p){return p.cuota===C[0].cuota;});
+    var names=C.map(function(p,i){ return IF('c'+i+'nombre',p.nombre)+(eq?'':' (en un '+IF('c'+i+'cuota',p.cuota+'%')+')'); }).join(' y ');
+    return names+(eq?', en común y proindiviso y por partes iguales,':', en común y proindiviso en las proporciones indicadas,');
+  }
+
+  function renderEscritura(s){
+    var V=s.V, C=s.C;
+    var vpl=V.length>1, VEND=vpl?'LOS VENDEDORES':'EL VENDEDOR', vend=vpl?'los vendedores':'el vendedor', tf=vpl?'n':'', adq=vpl?'eron':'ó';
+    var cpl=C.length>1, COMPRA=cpl?'LOS COMPRADORES':'LA PARTE COMPRADORA', cManif=cpl?'manifestaron':'manifestó', cAcept=cpl?'aceptan':'acepta', cAdq=cpl?'adquieren':'adquiere';
+    var HIP=cpl?'LOS HIPOTECANTES':'LA HIPOTECANTE', hN=cpl?'n':'';
+    var natBuyer=anyNatural(C);
+    var mat=s.matricula||'________';
+    var NEG={compraventa:'compraventa',permuta:'permuta',dacion:'dación en pago',retroventa:'compraventa con pacto de retroventa',reserva:'compraventa con reserva de dominio'};
+    var negTit=NEG[s.tipoNegocio]||'compraventa';
+    var negCod={compraventa:'0125 — COMPRAVENTA',permuta:'0126 — PERMUTA',dacion:'0157 — DACIÓN EN PAGO',retroventa:'0125 — COMPRAVENTA (RETROVENTA)',reserva:'0125 — COMPRAVENTA (RESERVA DE DOMINIO)'}[s.tipoNegocio]||'0125 — COMPRAVENTA';
+    var TMODO={compraventa:'compraventa mediante ',sucesion:'adjudicación en la sucesión de su causante, según ',donacion:'donación, según ',remate:'adjudicación en remate, según ',prescripcion:'sentencia de pertenencia (prescripción adquisitiva), según '};
+    var tmodo=TMODO[s.tituloTipo]||'';
+    var h='';
+
+    h+='<div class="calif"><h4>Superintendencia de Notariado y Registro · Formato de Calificación</h4><div class="r">'
+      +'<span class="k">Folio matrícula</span><span>'+IF('matricula',s.matricula||'—')+'</span>'
+      +'<span class="k">Cód. catastral</span><span>'+IF('catastral',s.catastral||'—')+'</span>'
+      +'<span class="k">Ubicación</span><span>'+IF('inmdesc',s.inmdesc.slice(0,80)+(s.inmdesc.length>80?'…':''))+'</span></div>'
+      +'<table><tr><td>CÓD. '+negCod+(s.derecho==='nuda'?' (NUDA PROPIEDAD)':'')+'</td><td>'+IF('total','$'+pts(s.total))+'</td></tr>'
+      +(s.credito?'<tr><td>CÓD. 0219 — HIPOTECA ABIERTA SIN LÍMITE</td><td>'+IF('saldo','$'+pts(s.saldo))+'</td></tr>':'')+'</table></div>';
+
+    h+='<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los '+IF('fechaOtorg',fechaText(s.fechaOtorg))+', ante el Notario Dieciséis del Círculo Notarial de Medellín, ';
+    if(s.apod){ h+='compareció '+IF('apodNombre',s.apodN)+', mayor de edad, quien obra en nombre y representación de '+persList(V,'v')+', en virtud del poder conferido por '+IF('apodPoder',s.apodP)+', que se protocoliza '+D('Dcto 1069/2015')+', y en adelante la parte representada se denominará '+VEND+', y por su conducto manifest'+adq+':'; }
+    else { h+='se presentó'+(vpl?'ron':'')+' '+persList(V,'v')+'; quien'+(vpl?'es':'')+' obra'+tf+' en su propio nombre, y en el texto de este instrumento se llamará'+tf+' '+VEND+', y manifest'+adq+':'; }
+    h+='<span class="fill"></span></p>';
+
+    var derechoTxt = s.derecho==='nuda' ? 'la nuda propiedad, reservándose el usufructo vitalicio,' : 'el derecho de dominio y la posesión';
+    h+='<p class="cl" data-sec="objeto"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE.</span> Por medio del presente instrumento transfiere'+tf+' a título de '+negTit+' en favor de '+buyersFavor(C)+' '+derechoTxt+' sobre el siguiente bien inmueble: '+IF('inmdesc',s.inmdesc)+'. FOLIO DE MATRÍCULA INMOBILIARIA NRO. '+IF('matricula',mat)+'. Cuyos linderos generales son: '+IF('linderos',s.linderos)+'.<span class="fill"></span></p>';
+    h+='<p class="para"><span class="clh">Parágrafo primero.</span> No obstante la mención de la cabida, área y linderos, el inmueble se transfiere como cuerpo cierto.</p>';
+    if(s.ph){
+      h+='<p class="para" data-sec="ph"><span class="clh">Parágrafo segundo — Régimen de propiedad horizontal.</span> '+R('El inmueble hace parte integrante del conjunto sometido al régimen de propiedad horizontal, cuyo reglamento fue elevado a '+IF('phReg',s.phReg)+', debidamente inscrito en el respectivo folio de matrícula.','Ley 675/2001')+'</p>';
+      h+='<p class="para"><span class="clh">Parágrafo tercero.</span> '+R('La transferencia comprende además el derecho de copropiedad en el coeficiente señalado para el inmueble en el respectivo reglamento.','arts. 25–26 · Ley 675/2001')+'</p>';
+    }
+
+    h+='<p class="cl" data-sec="titulo"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Que '+vend+' adquiri'+(vpl?'eron':'ó')+' el inmueble por '+tmodo+'la Escritura Pública número '+IF('tituloNum',s.tituloNum)+' del '+IF('tituloFecha',fechaCorta(s.tituloFecha))+' de la '+IF('tituloNotaria',s.tituloNotaria)+', registrada bajo el folio de matrícula inmobiliaria número '+IF('matricula',mat)+'.<span class="fill"></span></p>';
+    if(s.tipoNegocio==='retroventa') h+='<p class="para"><span class="clh">Parágrafo — Pacto de retroventa.</span> '+R('El vendedor se reserva la facultad de recobrar el inmueble reembolsando el precio, dentro del término máximo de cuatro (4) años; se inscribe para su oponibilidad.','art. 1939 C.C.')+'</p>';
+    if(s.tipoNegocio==='reserva') h+='<p class="para"><span class="clh">Parágrafo — Reserva de dominio.</span> '+R('El vendedor se reserva el dominio hasta el pago total del precio (nota: en inmuebles su eficacia se asimila a condición resolutoria por incumplimiento).','art. 1935 C.C.')+'</p>';
+    if(s.tipoNegocio==='dacion') h+='<p class="para"><span class="clh">Parágrafo — Dación en pago.</span> La transferencia se hace para extinguir la obligación preexistente que se identifica en este instrumento.</p>';
+
+    h+='<p class="cl" data-sec="saneamiento"><span class="clh">TERCERO: SANEAMIENTO Y LIMITACIONES AL DOMINIO.</span> Garantiza'+tf+' '+vend+' la absoluta propiedad del inmueble, que se encuentra libre de gravámenes y limitaciones tales como hipoteca, embargo, demanda civil, condiciones resolutorias, uso o usufructo y medidas cautelares, obligándose al saneamiento por evicción o vicios redhibitorios '+D('arts. 1893, 1914 C.C.')+'.<span class="fill"></span></p>';
+    if(s.gravamen==='hipoteca_previa') h+='<p class="para"><span class="clh">Parágrafo primero.</span> En cuanto a hipotecas, el inmueble soporta una hipoteca previa constituida por '+vend+', que se pagará con parte del crédito y se cancelará con posterioridad al registro.</p>';
+    if(casadoOUnion(V)){
+      var decl = s.afect==='si' ? 'que el inmueble SÍ se encuentra afectado a vivienda familiar' : (s.afect==='nosabe' ? 'que no precisan si el inmueble está afectado a vivienda familiar' : 'que el inmueble que ahora enajena'+(vpl?'n':'')+' no está afectado a vivienda familiar');
+      h+='<p class="para" data-sec="ley258"><span class="clh">Parágrafo — Efectos de la Ley 258 de 1996.</span> '+R('Advertido'+(vpl?'s':'')+' del Artículo 6.º de la Ley 258 de 1996, modificada por la Ley 854 de 2003, e indagado'+(vpl?'s':'')+' expresamente, '+vend+' manifest'+adq+' bajo juramento '+decl+'.','art. 6 · Ley 258/1996')+'</p>';
+    }
+
+    h+='<p class="cl" data-sec="precio"><span class="clh">CUARTO: PRECIO DE VENTA.</span> El precio de la compraventa lo constituye la suma de '+IF('total',money(s.total))+', que '+COMPRA+' cancelará así:<span class="fill"></span></p>';
+    h+='<p class="para"><span class="clh">a)</span> La suma de '+IF('inicial',money(s.inicial))+', con recursos propios, que '+vend+' declara'+tf+' recibida a satisfacción.</p>';
+    if(s.credito) h+='<p class="para"><span class="clh">b)</span> Y el saldo de '+IF('saldo',money(s.saldo))+', que '+COMPRA+' entregará con el producto de un préstamo que tramita ante el '+IF('banco',s.banco)+', desembolsable al registro de la hipoteca que constituye a su favor; de no aprobarse el crédito, se obliga a cancelar el saldo con recursos propios.</p>';
+    if(s.subsidio) h+='<p class="para"><span class="clh">c)</span> '+R('Parte del precio se cubre con el subsidio familiar de vivienda otorgado por '+esc(s.subsidioEnt)+', cuyo acto de asignación se protocoliza; se advierte la eventual constitución de patrimonio de familia y las restricciones inherentes al subsidio.','Ley 3ª/1991')+'</p>';
+    h+='<p class="para"><span class="clh">Parágrafo primero — Renuncia a la condición resolutoria.</span> No obstante la forma de pago, la parte vendedora renuncia a la acción resolutoria y otorga el título firme e irresoluble '+D('art. 1546 C.C.')+'.</p>';
+    h+='<p class="para"><span class="clh">Parágrafo segundo — Valor real.</span> '+R('Las partes declaran bajo la gravedad del juramento que el valor y precio expresado es real, no inferior al costo, y que no existen sumas convenidas por fuera de este instrumento público.','art. 61 Ley 2010/2019 (art. 90 E.T.)')+'</p>';
+    h+='<p class="para"><span class="clh">Parágrafo tercero — Origen de los ingresos.</span> '+R('La parte compradora declara que los recursos provienen de actividades lícitas y que no figura en listados de prevención de lavado de activos (OFAC u otros).','Ley 2195/2022 · SIPLAFT')+'</p>';
+    if(s.vis==='sfve') h+='<p class="para" data-sec="vis"><span class="clh">Parágrafo cuarto — Vivienda de interés social.</span> '+R('Se advierte la prohibición de enajenar el inmueble por el término de cinco (5) años y la condición resolutoria a favor de la entidad otorgante del subsidio en caso de revocatoria.','art. 13 · Ley 2079/2021')+'</p>';
+
+    h+='<p class="cl"><span class="clh">QUINTO: ENTREGA.</span> La entrega real y material se realizará '+(s.credito?'al desembolso del crédito':'a la firma de esta escritura')+', a satisfacción de la parte compradora, con sus usos y servidumbres.<span class="fill"></span></p>';
+    h+='<p class="cl"><span class="clh">SEXTO: GASTOS.</span> Los gastos notariales e impuesto de registro se cubren por partes iguales '+D('art. 230 Ley 223/1995')+'; la retención en la fuente del 1%, recaudada por el Notario, es de cargo de '+vend+' '+D('art. 398 E.T.')+'.<span class="fill"></span></p>';
+
+    h+='<p class="cl" data-sec="aceptacion">Presente '+COMPRA+', '+persList(C,'c')+', obrando en su propio nombre, '+cManif+':<span class="fill"></span></p>';
+    h+='<p class="para"><span class="clh">A)</span> Que '+cAcept+' la presente escritura y las declaraciones en ella contenidas.</p>';
+    h+='<p class="para"><span class="clh">B)</span> Que '+cAcept+' que la entrega se haga en la forma del numeral quinto.</p>';
+    if(s.ph) h+='<p class="para"><span class="clh">C)</span> Que '+(cpl?'manifiestan':'manifiesta')+' conocer y acatar el reglamento de propiedad horizontal al que se somete el inmueble que '+cAdq+'.</p>';
+    if(natBuyer) h+='<p class="cl">'+R('EFECTOS DE LA LEY 258 DE 1996: Compareciendo nuevamente '+COMPRA+', '+cManif+' que el inmueble que '+cAdq+' '+(s.vis==='sfve'?'SÍ queda afectado a vivienda familiar':'NO queda afectado a vivienda familiar')+'.','art. 6 · Ley 258/1996')+'<span class="fill"></span></p>';
+
+    if(s.credito){
+      var hipNames=C.map(function(p,i){return IF('c'+i+'nombre',p.nombre);}).join(' y ');
+      h+='<div class="sech" data-sec="hipoteca" style="text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:22px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)">HIPOTECA ABIERTA CON CUANTÍA INDETERMINADA</div>';
+      var ACR='EL ACREEDOR', monto=money(s.saldo);
+      h+='<p class="cl">Compareci'+(cpl?'eron':'ó')+' '+hipNames+', de las condiciones civiles indicadas, quien'+(cpl?'es':'')+' obra'+hN+' en su propio nombre y en adelante se denominará'+hN+' '+HIP+', y '+(cpl?'manifestaron':'manifestó')+':<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">PRIMERO: OBJETO — CONSTITUCIÓN DE HIPOTECA.</span> Que '+HIP+' constituye'+hN+' HIPOTECA ABIERTA, DE PRIMER GRADO Y SIN LÍMITE DE CUANTÍA a favor del '+IF('banco',s.banco)+', establecimiento de crédito con domicilio en Medellín, con NIT '+IF('bancoNit',s.bancoNit)+', quien en adelante se denominará '+ACR+', sobre el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. '+IF('matricula',mat)+', anteriormente descrito y alinderado, '+R('conforme con los artículos 2432 y siguientes del Código Civil.','arts. 2432 ss · C.C.')+'<span class="fill"></span></p>';
+      h+='<p class="para"><span class="clh">Parágrafo.</span> La hipoteca se extiende al inmueble con todas sus mejoras, anexidades y construcciones presentes o futuras, frutos pendientes, rentas y cánones, y a las indemnizaciones de seguros y de expropiación '+D('arts. 2445–2446 C.C.')+'.</p>';
+
+      if(cpl) h+='<p class="cl"><span class="clh">SEGUNDO: SOLIDARIDAD.</span> '+HIP+', en su condición de constituyentes del gravamen, se obligan solidariamente frente a '+ACR+' respecto de la totalidad de las obligaciones garantizadas.<span class="fill"></span></p>';
+      var nT=cpl?'TERCERO':'SEGUNDO', nO=cpl?'CUARTO':'TERCERO', nV=cpl?'QUINTO':'CUARTO', nSx=cpl?'SEXTO':'QUINTO', nSp=cpl?'SÉPTIMO':'SEXTO', nOc=cpl?'OCTAVO':'SÉPTIMO', nNv=cpl?'NOVENO':'OCTAVO', nDx=cpl?'DÉCIMO':'NOVENO', nD1=cpl?'DÉCIMO PRIMERO':'DÉCIMO';
+
+      h+='<p class="cl"><span class="clh">'+nT+': TÍTULO DE ADQUISICIÓN DEL HIPOTECANTE.</span> El inmueble que se hipoteca fue adquirido por '+HIP+' a título de compraventa, según consta en este mismo instrumento.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nO+': OBLIGACIONES GARANTIZADAS.</span> Con la presente hipoteca se garantiza el Crédito Hipotecario de Vivienda Individual a Largo Plazo aprobado por '+ACR+' a '+HIP+' por la suma de '+IF('saldo',monto)+', que será pagada dentro del plazo de '+IF('plazoAnios',s.plazoAnios+' años')+' en '+IF('numCuotas',s.numCuotas+' cuotas')+' mensuales sucesivas, mes vencido, la primera un mes después del desembolso.<span class="fill"></span></p>';
+      h+='<p class="para"><span class="clh">Parágrafo — Hipoteca abierta.</span> Por ser hipoteca abierta y sin límite de cuantía, garantiza además toda clase de obligaciones, en moneda legal o en UVR, presentes o futuras, directas o indirectas, que '+HIP+' haya contraído o llegue'+hN+' a contraer a favor de '+ACR+' —préstamos, descuentos, avales, garantías, tarjetas de crédito, sobregiros—, con sus intereses remuneratorios y moratorios, costas y gastos de cobranza; no se extingue por prorrogarse, cambiarse o renovarse las obligaciones garantizadas.</p>';
+
+      h+='<p class="cl"><span class="clh">'+nV+': VALOR DEL ACTO.</span> Para efectos exclusivos de la liquidación de derechos notariales y de registro se fija la suma de '+IF('saldo',monto)+'. '+R('Se protocoliza la carta de aprobación del crédito expedida por '+ACR+', sin que ello implique modificación del carácter de hipoteca abierta sin límite de cuantía; '+HIP+' declara'+hN+' no haber recibido desembolsos anteriores.','art. 58 · Ley 788/2002')+'<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nSx+': DECLARACIONES DEL HIPOTECANTE.</span> '+HIP+' declara'+hN+': a) que el inmueble es de su exclusiva propiedad y está libre de gravámenes distintos de esta hipoteca; b) que la garantía se extiende a mejoras e indemnizaciones; c) que entregará a '+ACR+' la primera copia con mérito ejecutivo dentro de los treinta (30) días siguientes al registro; d) que notificará a '+ACR+' cualquier enajenación o gravamen posterior; e) que atenderá las obligaciones urbanísticas y de conservación del inmueble.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nSp+': SEGUROS.</span> '+HIP+' se obliga'+hN+' a amparar el inmueble contra incendio y terremoto, y su propia vida (deudor), con compañía aceptada por '+ACR+', cediéndole el derecho sobre las indemnizaciones hasta concurrencia de la deuda; en su defecto, '+ACR+' podrá —sin estar obligado— contratar los seguros con cargo a '+HIP+' '+D('art. 1101 C.Com.')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nOc+': EXTINCIÓN DEL PLAZO (ACELERACIÓN).</span> '+ACR+' podrá declarar vencidos los plazos y exigir el pago total: a) por mora en el pago de cualquier obligación; b) si '+HIP+' enajena'+hN+' o grava'+hN+' el inmueble sin autorización; c) por embargo o acción judicial que afecte el inmueble; d) por falsedad en la información suministrada; e) por destinación del crédito distinta de la pactada; f) por no contratar o mantener los seguros; g) por demérito de la garantía según avalúo de perito de Lonja.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nNv+': VIGENCIA Y AUSENCIA DE NOVACIÓN.</span> La hipoteca permanecerá vigente mientras exista alguna obligación pendiente a favor de '+ACR+'. Las prórrogas, novaciones o modificaciones de las obligaciones no extinguen la garantía '+D('art. 2457 C.C.')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nDx+': CESIÓN.</span> '+ACR+' podrá ceder total o parcialmente el crédito y la garantía sin necesidad de nueva comparecencia de '+HIP+', quien desde ahora acepta'+hN+' la cesión '+D('art. 24 · Ley 546/1999')+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl"><span class="clh">'+nD1+': GASTOS.</span> Los gastos, derechos notariales e impuesto de registro que genere esta hipoteca son de cargo de '+HIP+'.<span class="fill"></span></p>';
+
+      h+='<p class="cl" data-sec="acreedor">Presente '+IF('apoderadoBanco',s.apoderadoBanco)+', mayor de edad, en su condición de Apoderado(a) Especial de '+IF('banco',s.banco)+', según poder conferido por Escritura Pública '+IF('poderBancoEP',s.poderBancoEP)+' de la '+IF('poderBancoNot',s.poderBancoNot)+', manifestó: Que en nombre de '+ACR+' ACEPTA la hipoteca y las declaraciones contenidas en este instrumento, por hallarse a entera satisfacción.<span class="fill"></span></p>';
+
+      if(casadoOUnion(C)) h+='<p class="cl">'+R('EFECTOS DE LA LEY 258 DE 1996: Compareciendo nuevamente '+HIP+', manifiesta'+hN+' que la afectación a vivienda familiar constituida en este mismo instrumento no será oponible a la presente hipoteca, la cual acepta'+hN+' y ratifica'+hN+'.','art. 6 · Ley 258/1996')+'<span class="fill"></span></p>';
+    }
+
+    if(s.interprete) h+='<p class="cl">'+R('Comparece un intérprete que tradujo íntegramente el instrumento a el (los) otorgante(s) que no domina(n) el idioma; se deja constancia de su comprensión y aprobación.','art. 38 · Dcto 960/70')+'<span class="fill"></span></p>';
+    if(s.firmaRuego) h+='<p class="cl">'+R('Manifestando uno de los otorgantes no saber o no poder firmar, firma por él a su ruego un tercero, en presencia de dos testigos hábiles que también suscriben; se toma su impresión dactilar.','art. 39 · Dcto 960/70')+'<span class="fill"></span></p>';
+    if(s.pepAny||s.cuentaTercero) h+='<p class="para"><span class="clh">Parágrafo — Debida diligencia.</span> '+R((s.cuentaTercero?'Se identifica al beneficiario final por cuya cuenta se actúa. ':'')+(s.pepAny?'Se deja constancia de la condición de Persona Expuesta Políticamente y de la debida diligencia reforzada aplicada.':''),'Dcto 830/2021')+'</p>';
+    h+=otorgamiento(s);
+    return h;
+  }
+
+  /* ---------- otorgamiento, protocolización, constancias fiscales, autorización y firmas ---------- */
+  function otorgamiento(s){
+    var V=s.V, C=s.C, vpl=V.length>1;
+    var vend=vpl?'los vendedores':'el vendedor';
+    var L=liquidar(s);
+    var derNot=L.items[0].v, iva=L.items[1].v, impReg=L.items[2].v, ret=L.items[3].v;
+    var sech='text-align:center;font-weight:700;font-family:var(--sans);font-size:12px;letter-spacing:.06em;margin:24px 0 14px;padding:6px 0;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);color:var(--accent)';
+    var h='<div class="sech" data-sec="otorgamiento" style="'+sech+'">OTORGAMIENTO Y AUTORIZACIÓN</div>';
+
+    h+='<p class="cl"><span class="clh">LECTURA Y OTORGAMIENTO.</span> '+R('Leído el presente instrumento por los comparecientes, advertidos del derecho a revisarlo y de la responsabilidad penal por faltar a la verdad, y enterados de su contenido, alcance y efectos legales, lo aprobaron y firman en un mismo acto ante el Notario que autoriza, con lo cual queda perfeccionado el otorgamiento.','Dcto 960/1970')+'<span class="fill"></span></p>';
+
+    var docs=[];
+    if(s.apod) docs.push('el poder que acredita la representación de la parte vendedora');
+    if(anyJuridica(s)) docs.push('el certificado de existencia y representación legal');
+    if(s.ax.tradicion) docs.push('el certificado de tradición y libertad del inmueble');
+    if(s.ax.predial) docs.push('el paz y salvo del impuesto predial');
+    if(s.ph&&s.ax.admin) docs.push('el paz y salvo de expensas de la copropiedad');
+    if(s.subsidio) docs.push('el acto de asignación del subsidio de vivienda');
+    if(docs.length) h+='<p class="cl" data-sec="protocolizacion"><span class="clh">DOCUMENTOS QUE SE PROTOCOLIZAN.</span> '+R('Se agregan al protocolo, como parte integrante de esta escritura, los siguientes documentos habilitantes: '+docs.join('; ')+'.','Dcto 1069/2015')+'<span class="fill"></span></p>';
+
+    h+='<p class="cl" data-sec="fiscal"><span class="clh">CONSTANCIAS FISCALES.</span> El Notario deja constancia de que, actuando como agente retenedor, recaudó la retención en la fuente a cargo de '+vend+' por '+I(fmt(ret))+' '+D('art. 398 E.T.')+'; que los derechos notariales de esta escritura ascienden a '+I(fmt(derNot))+' más IVA de '+I(fmt(iva))+'; y que el impuesto de registro liquidado es de '+I(fmt(impReg))+' '+D('RES-2026-000964-6')+'.<span class="fill"></span></p>';
+
+    /* ---- Notas y constancias finales (estándar Notaría 16) ---- */
+    var cpl=C.length>1, cDecl=cpl?'los compradores declaran':'la parte compradora declara';
+    h+='<div class="sech" data-sec="notas" style="'+sech+'">NOTAS Y CONSTANCIAS FINALES</div>';
+    var nn=0, nota=function(t){ nn++; return '<p class="para"><span class="clh">NOTA '+nn+'.</span> '+t+'</p>'; };
+    if(s.credito){
+      h+=nota('El valor base para la liquidación de derechos corresponde a la suma indicada por la entidad crediticia en la carta de aprobación que se protocoliza con este instrumento.');
+      h+=nota(R('El (la) apoderado(a) de '+esc(s.banco)+' suscribe fuera del despacho notarial, conforme al artículo 12 del Decreto 2148 de 1983 (compilado en el Decreto 1069 de 2015).','art. 12 · Dcto 2148/1983'));
+      h+=nota(R('La presente escritura debe registrarse dentro de los noventa (90) días siguientes; transcurridos dos (2) meses causará intereses moratorios.','Ley 1579/2012'));
+    }
+    h+=nota('El (los) compareciente(s) hace(n) constar que ha(n) verificado cuidadosamente su nombre completo, número de documento de identidad y demás datos personales consignados.');
+    h+=nota(R('AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES: los comparecientes autorizan a la Notaría, como responsable, a almacenar y tratar sus datos. STRADATA SEARCH: en cumplimiento de la Circular 1536 del 17 de septiembre de 2013 de la S.N.R. y del artículo 17 de la Ley 1581 de 2012, se consultó la información de los intervinientes.','Circular SNR 1536/2013 · Ley 1581/2012'));
+    if(anyNatural(C)) h+=nota(R('REDAM: ante la indisponibilidad de la base de datos del Registro de Deudores Alimentarios Morosos, '+cDecl+' bajo juramento no tener obligaciones alimentarias en mora superiores a tres (3) meses.','Ley 2097/2021 · Dcto 1310/2022'));
+    if(s.ph) h+=nota(R('PAZ Y SALVO DE EXPENSAS: se '+(s.ax.admin?'protocoliza el paz y salvo de las expensas comunes de la copropiedad':'deja constancia de que no existe administración ni se causan expensas comunes, y el comprador se hace solidario por las que llegaren a existir')+'.','art. 29 · Ley 675/2001'));
+    h+=nota(R('IDENTIFICACIÓN BIOMÉTRICA: la identidad de los comparecientes se verificó mediante autenticación biométrica.','art. 18 · Dcto Ley 019/2012'));
+    h+=nota('NOTIFICACIONES ELECTRÓNICAS: cada otorgante manifestó su consentimiento según se indica en su respectiva ficha de firma.');
+
+    var anx=[];
+    if(s.ax.tradicion) anx.push('certificado de tradición y libertad');
+    if(s.ax.predial) anx.push('paz y salvo del impuesto predial y de valorización');
+    if(s.ph&&s.ax.admin) anx.push('paz y salvo de expensas comunes');
+    if(anx.length) h+='<p class="para"><span class="clh">ANEXOS.</span> Se presentaron y se agregan: '+anx.join('; ')+'.</p>';
+    h+='<p class="para"><span class="clh">AVALÚO CATASTRAL DEL INMUEBLE.</span> '+IF('avaluoCatastral',money(s.avaluoCatastral))+'. NUPRE: '+IF('nupre',s.nupre)+'.</p>';
+
+    h+='<p class="cl"><span class="clh">AUTORIZACIÓN.</span> '+R('El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número '+esc(s.numEscritura)+'—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.','Dcto 960/1970')+'<span class="fill"></span></p>';
+
+    var blank='<span style="color:var(--line-strong)">____________________</span>';
+    function fld(label,val){ return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-soft);margin-top:1px"><span style="color:var(--ink-faint)">'+label+':</span> '+(val?'<span style="color:var(--ink)">'+val+'</span>':blank)+'</div>'; }
+    function chk(label,val){ var box=function(on){return '<span style="color:'+(on?'var(--ins)':'var(--line-strong)')+';font-weight:700">'+(on?'☒':'▢')+'</span>';};
+      return '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">'+label+' &nbsp;Sí '+box(val===true)+'&nbsp; No '+box(val===false)+'</div>'; }
+    /* ficha de firma al estilo Notaría 16: cada otorgante con sus campos */
+    function firmante(nombre,ident,o){ o=o||{};
+      return '<div style="margin-top:22px;break-inside:avoid"><div style="border-top:1px solid var(--ink);margin-bottom:4px"></div>'
+        +'<div style="font-family:var(--serif);font-weight:600;font-size:12px;line-height:1.3">'+nombre+'</div>'
+        +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink)">'+ident+'</div>'
+        +fld('Dirección',o.direccion||'')+fld('Municipio',o.muni||'')+fld('Teléfono',o.telefono||'')+fld('Correo electrónico',o.correo||'')
+        +fld('Profesión u ocupación',o.ocupacion||'')+(o.estado?fld('Estado civil',o.estado):'')
+        +chk('Autoriza notificaciones electrónicas:',o.noti)
+        +chk('Persona Expuesta Políticamente (Decreto 1674 de 2016):',o.pep)
+        +'<div style="font-family:var(--sans);font-size:10px;color:var(--ink-faint);margin-top:1px">Biometría: <span style="color:var(--line-strong)">___________</span></div>'
+        +(o.apoderaDe?'<div style="font-family:var(--sans);font-size:10px;color:var(--ink);margin-top:2px"><b>Apoderado(a) especial de:</b> '+o.apoderaDe+'</div>':'')
+        +'</div>'; }
+    function ficha(p,base){ var estado=p.tipo==='juridica'?'':labelEstado(p.estado,p.genero);
+      return firmante(esc(p.nombre),(p.tipo==='juridica'?'NIT '+esc(p.id)+(p.repr?' — Rep. legal '+esc(p.repr):''):docLabel(p.tipoDoc)+' '+esc(p.id)),
+        {muni:esc(p.ciudad),estado:estado,direccion:esc(p.direccion),telefono:esc(p.telefono),correo:esc(p.correo),ocupacion:esc(p.ocupacion),noti:!!p.notiElec,pep:!!p.pep}); }
+    function fichaAux(p,role){ return firmante(p.nombre?esc(p.nombre):'____________________________', docLabel(p.tipoDoc)+' '+(p.id?esc(p.id):'____________')+' · '+role,
+      {muni:esc(p.ciudad),direccion:esc(p.direccion),telefono:esc(p.telefono),correo:esc(p.correo),ocupacion:esc(p.ocupacion)}); }
+    var sigs='';
+    if(s.apod){ var pd=V.map(function(p){return esc(p.nombre)+' — C.C. '+esc(p.id);}).join('; '); sigs+=firmante(esc(s.apodN),'C.C. ____________',{apoderaDe:pd}); }
+    else V.forEach(function(p){ sigs+=ficha(p,'Vendedor'); });
+    C.forEach(function(p){ sigs+=ficha(p,'Comprador'); });
+    if(s.credito) sigs+=firmante(s.apoderadoBanco?esc(s.apoderadoBanco):'____________________________','Apoderado(a) especial · C.C. ____________',{apoderaDe:esc(s.banco)+' — NIT '+esc(s.bancoNit)});
+    if(s.interprete) sigs+=firmante('____________________________','Intérprete oficial · art. 38 Dcto 960/1970');
+    if(s.firmaRuego) sigs+=fichaAux(s.ruego,'Firma a ruego del otorgante que no puede firmar · art. 39');
+    if(s.firmaRuego||s.testigosOn){ s.testigos.forEach(function(p){ sigs+=fichaAux(p,'Testigo instrumental'); }); }
+
+    h+='<p class="cl"><span class="clh">HOJAS DE PAPEL NOTARIAL.</span> Se extendió en las hojas de papel notarial números '+IF('hojaInicial',s.hojaInicial)+' y siguientes.<span class="fill"></span></p>';
+    h+='<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. '+IF('hojaInicial',s.hojaInicial)+' DE LA ESCRITURA PÚBLICA NÚMERO '+esc(s.numEscritura)+' DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>'
+      +'<div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">'+sigs+'</div>';
+    h+='<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">JUAN CAMILO OROZCO GAVIRIA</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Notario Dieciséis Encargado de Medellín · Autoriza — Escritura Nro. '+esc(s.numEscritura)+'</div></div></div>';
+    return h;
+  }
+
+  /* ---------- cumplimiento ---------- */
+  function evaluar(s){
+    var it=[], V=s.V, C=s.C;
+    if(!s.matricula.trim()) it.push({t:'crit',h:'Inmueble no plenamente identificado',p:'Falta la matrícula inmobiliaria: el registro devolvería el título.',n:'art. 16 · Ley 1579/2012'});
+    if(!s.linderos.trim()) it.push({t:'crit',h:'Faltan los linderos',p:'Sin linderos, cabida y área el inmueble no queda individualizado para el registro.',n:'art. 8 · Ley 1579/2012'});
+    if(s.inicial+s.saldo!==s.total) it.push({t:'crit',h:'Descuadre en el precio',p:'La suma de los pagos ('+pts(s.inicial+s.saldo)+') no coincide con el total ('+pts(s.total)+').',n:'art. 90 E.T.'});
+    var sc=sumaCuotas(C); if(C.length>1 && sc!==100) it.push({t:'crit',h:'Las cuotas de los compradores no suman 100%',p:'Suman '+sc+'%. El proindiviso debe cubrir el 100% del derecho transferido.',n:''});
+    var sv=sumaCuotas(V); if(V.length>1 && sv!==100) it.push({t:'warn',h:'Las cuotas de los vendedores no suman 100%',p:'Suman '+sv+'%. Verificar las participaciones que cada vendedor transfiere.',n:''});
+    if(s.gravamen==='patrimonio') it.push({t:'crit',h:'Patrimonio de familia sin cancelar',p:'Debe cancelarse antes de vender (escritura con ambos cónyuges; con menores, autorización judicial).',n:'Ley 70/1931 · 495/1999'});
+    if(s.gravamen==='embargo') it.push({t:'crit',h:'Medida cautelar vigente',p:'El embargo o la demanda debe levantarse para poder transferir.',n:'art. 16 · Ley 1579/2012'});
+    if(casadoOUnion(V)&&s.afect==='si') it.push({t:'crit',h:'Requiere consentimiento del cónyuge',p:'Bien afectado a vivienda familiar: exige firma de ambos cónyuges/compañeros so pena de nulidad.',n:'art. 3 · Ley 258/1996'});
+    if(s.apod) it.push({t:'warn',h:'Vigencia del poder',p:'La parte vendedora comparece por apoderado: verificar poder vigente con facultades expresas para enajenar.',n:'Dcto 1069/2015'});
+    it.push({t:'obl',h:'Declaración de valor real',p:'Declaración juramentada incluida — evita la base de 4×.',n:'art. 90 E.T.'});
+    it.push({t:'obl',h:'Declaración de origen de fondos',p:'Cláusula SIPLAFT presente para la parte compradora.',n:'Ley 2195/2022'});
+    it.push({t:'obl',h:'Retención en la fuente del 1%',p:'Constancia de recaudo por el Notario incluida.',n:'art. 398 E.T.'});
+    if(casadoOUnion(V)){
+      if(s.afect==='no') it.push({t:'ok',h:'Afectación a vivienda familiar',p:'Indagación y declaración juramentada de no afectación incluidas.',n:'art. 6 · Ley 258/1996'});
+      else if(s.afect==='nosabe') it.push({t:'warn',h:'Afectación a vivienda familiar sin definir',p:'El vendedor no precisó la afectación: verificar contra el folio antes de otorgar.',n:'art. 6 · Ley 258/1996'});
+    }
+    if(s.ph){ if(s.ax.admin) it.push({t:'ok',h:'Paz y salvo de administración',p:'Aportado y relacionado en anexos.',n:'art. 29 · Ley 675/2001'});
+      else it.push({t:'warn',h:'Paz y salvo de administración faltante',p:'En PH conviene aportarlo; sin él, constancia + solidaridad del comprador por expensas.',n:'art. 29 · Ley 675/2001'}); }
+    if(!s.ax.tradicion) it.push({t:'warn',h:'Certificado de tradición no aportado',p:'Sin folio vigente no se pueden verificar gravámenes ni la libertad del bien.',n:'Ley 1579/2012'});
+    if(s.vis==='sfve') it.push({t:'obl',h:'Advertencias VIS incluidas',p:'Prohibición de enajenar 5 años + condición resolutoria; constituir patrimonio de familia.',n:'art. 13 · Ley 2079/2021'});
+    if(s.gravamen==='hipoteca_previa') it.push({t:'warn',h:'Hipoteca previa a cancelar',p:'Cláusula de cancelación incluida; confirmar paz y salvo del acreedor anterior.',n:''});
+    if(s.credito) it.push({t:'ok',h:'Sección de hipoteca completa',p:C.length>1?'Los compradores figuran como hipotecantes.':'Constitución, objeto de la garantía y aceleración de plazos ensambladas.',n:''});
+    if(C.length>1) it.push({t:'ok',h:'Adquisición en común y proindiviso',p:C.length+' compradores con cuotas que suman '+sc+'%.',n:''});
+    if(anyJuridica(s)){
+      it.push({t:'obl',h:'Existencia y representación de la persona jurídica',p:'Certificado de existencia y representación legal vigente (menos de 30 días) y facultades del representante.',n:'C. Comercio'});
+      it.push({t:'warn',h:'Autorización del órgano social',p:'Si los estatutos o la cuantía lo exigen, protocolizar el acta de junta o asamblea que autoriza el negocio.',n:'C. Comercio'});
+    }
+    if(s.gravamen==='leasing') it.push({t:'crit',h:'Leasing habitacional vigente',p:'Durante el contrato la entidad es la propietaria: debe terminarse el leasing (o ejercerse la opción) antes de transferir.',n:'Ley 795/2003'});
+    if(s.gravamen==='usufructo') it.push({t:'warn',h:'Usufructo vigente',p:'Se vende la nuda propiedad o el usufructuario debe comparecer renunciando/consolidando.',n:'C.C. 823'});
+    if(s.gravamen==='servidumbre') it.push({t:'ok',h:'Servidumbre relacionada',p:'Se describe y el comprador la respeta (activa se transfiere, pasiva grava).',n:'C.C. 879'});
+    if(s.tipoNegocio==='reserva') it.push({t:'warn',h:'Reserva de dominio sobre inmueble',p:'Su eficacia real es discutida; en inmuebles se asimila a condición resolutoria. Validar con el notario.',n:'C.C. 1935'});
+    if(s.tipoNegocio==='retroventa') it.push({t:'obl',h:'Pacto de retroventa',p:'Plazo máximo de 4 años; se inscribe para oponibilidad y limita la disposición del comprador.',n:'art. 1939 C.C.'});
+    if(s.tipoNegocio==='dacion') it.push({t:'warn',h:'Dación en pago',p:'Identificar la obligación que se extingue; efectos tributarios propios.',n:'C.C. 1627'});
+    if(s.tituloTipo==='sucesion') it.push({t:'warn',h:'Título por sucesión',p:'Verificar partición registrada e impuestos sucesorales al día.',n:'CGP'});
+    if(s.tituloTipo==='donacion') it.push({t:'warn',h:'Título por donación',p:'Verificar insinuación (si superó 50 SMLMV) y posibles cargas/revocación.',n:'C.C. 1458'});
+    if(s.subsidio) it.push({t:'obl',h:'Subsidio de vivienda',p:'Protocolizar el acto de asignación; verificar patrimonio de familia y restricciones del subsidio.',n:'Ley 3ª/1991'});
+    if(s.firmaRuego) it.push({t:'obl',h:'Firma a ruego con testigos',p:'Firma un tercero a ruego + dos testigos hábiles; huella del compareciente.',n:'art. 39 · Dcto 960/70'});
+    if(s.interprete) it.push({t:'obl',h:'Intérprete / traductor',p:'Comparece intérprete; documentos en otro idioma traducidos oficialmente.',n:'art. 38 · Dcto 960/70'});
+    if(s.pepAny) it.push({t:'warn',h:'PEP — debida diligencia reforzada',p:'Persona Expuesta Políticamente: declaración y verificación de fuente de riqueza.',n:'Dcto 830/2021'});
+    if(s.cuentaTercero) it.push({t:'warn',h:'Beneficiario final',p:'Actúa por cuenta de tercero: identificar y registrar el beneficiario final.',n:'Dcto 830/2021'});
+    it.push(s.posesion2?{t:'ok',h:'Ganancia ocasional (15%)',p:'Posesión ≥ 2 años: la utilidad grava como ganancia ocasional al 15% (se liquida en renta, no en notaría).',n:'art. 313 E.T.'}:{t:'warn',h:'Utilidad como renta ordinaria',p:'Posesión < 2 años: la utilidad tributa como renta ordinaria (tarifa marginal), no como ganancia ocasional.',n:'E.T. 300'});
+    it.push({t:'ok',h:'Otorgamiento en unidad de acto',p:'Lectura, aprobación y firma de los comparecientes ante el notario — las cuatro fases del art. 13.',n:'Dcto 960/1970'});
+    it.push({t:'obl',h:'Protocolización de documentos habilitantes',p:'Los soportes del acto (poder, certificados, paz y salvos, subsidio) se agregan al protocolo.',n:'Dcto 1069/2015'});
+    it.push({t:'obl',h:'Autorización notarial',p:'Constancia de autorización de la Escritura Nro. '+esc(s.numEscritura)+' e imposición de la fe pública, con las constancias fiscales de retención, derechos e impuesto de registro.',n:'Dcto 960/1970'});
+    if(!s.numEscritura.trim()) it.push({t:'warn',h:'Falta el número de escritura',p:'La autorización y las copias requieren el número de instrumento del protocolo.',n:'Dcto 960/1970'});
+    return it;
+  }
+  var LBL={ok:'Cumple',obl:'Obligatoria ✓',warn:'Advertencia',crit:'Bloqueante'};
+  function renderCumplimiento(items){
+    var nOk=0,nWarn=0,nCrit=0; items.forEach(function(i){ if(i.t==='crit')nCrit++; else if(i.t==='warn')nWarn++; else nOk++; });
+    var h='<h3>Informe de cumplimiento</h3><div class="tiles"><div class="tile ok"><div class="num">'+nOk+'</div><div class="lbl">Cumple</div></div><div class="tile warn"><div class="num">'+nWarn+'</div><div class="lbl">Advertencia</div></div><div class="tile crit"><div class="num">'+nCrit+'</div><div class="lbl">Bloqueante</div></div></div>';
+    var order={crit:0,warn:1,obl:2,ok:3}; items.sort(function(a,b){return order[a.t]-order[b.t];});
+    items.forEach(function(i){ h+='<div class="chk-item"><span class="chip '+i.t+'">'+LBL[i.t]+'</span><div><h4>'+esc(i.h)+'</h4><p>'+esc(i.p)+'</p></div>'+(i.n?'<span class="tag">'+esc(i.n)+'</span>':'')+'</div>'; });
+    return {html:h, crit:nCrit};
+  }
+
+  /* ---------- liquidación ---------- */
+  function liquidar(s){
+    var v=s.total||0;
+    var derNot = v<=TARIFAS.cuantiaMin ? TARIFAS.derNotarialBase : Math.round(TARIFAS.derNotarialBase+(v-TARIFAS.cuantiaMin)*TARIFAS.derNotarialPorMil);
+    var vis = s.vis!=='no'; if(vis) derNot=Math.round(derNot*(1-TARIFAS.visDesc));
+    var iva=Math.round(derNot*TARIFAS.iva), impReg=Math.round(v*TARIFAS.impuestoRegistro), ret=Math.round(v*TARIFAS.retencion);
+    var shared=derNot+iva+impReg, comp=Math.round(shared/2);
+    return { items:[
+        {c:'Derechos notariales'+(vis?' (−50% VIS)':''), t:'3‰ · mín. '+fmt(TARIFAS.derNotarialBase), v:derNot, cargo:'Partes iguales', tip:'RES-2026-000964-6'},
+        {c:'IVA', t:'19% sobre derechos notariales', v:iva, cargo:'Partes iguales', tip:''},
+        {c:'Impuesto de registro', t:'1% del valor (Antioquia)', v:impReg, cargo:'Partes iguales', tip:'art. 230 Ley 223/1995'},
+        {c:'Retención en la fuente', t:'1% del valor', v:ret, cargo:'Vendedor', tip:'art. 398 E.T.'}
+      ], totalGastos:shared, comprador:comp, vendedor:(shared-comp)+ret };
+  }
+  function renderLiquidacion(s){
+    var L=liquidar(s);
+    var h='<h3>Liquidación de gastos y tributos</h3><div class="resline">Tarifas '+TARIFAS.anio+' · Notarial '+esc(TARIFAS.resNotarial)+' · Registral '+esc(TARIFAS.resRegistral)+'<br>Vigentes desde feb-'+TARIFAS.anio+' · ajuste IPC '+TARIFAS.ipc+'</div><div class="tblw"><table><thead><tr><th>Concepto</th><th>Tarifa</th><th class="n">Valor</th><th>A cargo</th></tr></thead><tbody>';
+    L.items.forEach(function(i){ h+='<tr><td>'+esc(i.c)+(i.tip?' <span class="cite">'+esc(i.tip)+'</span>':'')+'</td><td class="who">'+esc(i.t)+'</td><td class="n">'+fmt(i.v)+'</td><td class="who">'+esc(i.cargo)+'</td></tr>'; });
+    h+='<tr class="tot"><td colspan="2">Total gastos e impuestos (sin retención)</td><td class="n">'+fmt(L.totalGastos)+'</td><td></td></tr></tbody></table></div>';
+    h+='<div class="split"><div class="box"><div class="l">A cargo de la parte compradora</div><div class="v">'+fmt(L.comprador)+'</div></div><div class="box"><div class="l">A cargo del vendedor <span class="who">(incl. retención)</span></div><div class="v">'+fmt(L.vendedor)+'</div></div></div>';
+    h+='<div class="note">Cifras con las resoluciones '+TARIFAS.anio+'. Cada año se actualiza reemplazando un solo bloque de configuración. Derechos de registro nacionales (SNR) y tarifas de otros departamentos se parametrizan aparte. Validar contra la resolución oficial.</div>';
+    return h;
+  }
+
+  /* ---------- popups ---------- */
+  var tip=document.createElement('div'); tip.id='tip'; document.body.appendChild(tip); var tipTimer=null;
+  function showTip(el){ var d=NORMAS[el.textContent.trim()]; if(!d) return;
+    tip.innerHTML='<div class="tt"><span>'+esc(d.norma)+'</span>'+(d.estado?'<span class="est">'+esc(d.estado)+'</span>':'')+'</div><h5>'+esc(d.art)+'</h5><div class="txt">'+esc(d.texto)+'</div>'+(d.fuente?'<div class="src">Fuente: '+esc(d.fuente)+'</div>':'')+'<div class="dis">Texto de referencia — validar contra fuente oficial.</div>';
+    tip.classList.add('show'); var r=el.getBoundingClientRect(), tw=tip.offsetWidth, th=tip.offsetHeight;
+    var left=Math.min(Math.max(8,r.left),window.innerWidth-tw-8); var top=r.top-th-8; if(top<8) top=r.bottom+8; tip.style.left=left+'px'; tip.style.top=top+'px'; }
+  function hideTip(){ tip.classList.remove('show'); }
+  function markTips(){ var els=document.querySelectorAll('#escritura .cite, #cumplimiento .tag, #liquidacion .cite'); for(var i=0;i<els.length;i++){ if(NORMAS[els[i].textContent.trim()]){ els[i].classList.add('tip'); els[i].setAttribute('tabindex','0'); } } }
+  function tippable(t){ return t&&t.closest?t.closest('.cite.tip,.tag.tip'):null; }
+  document.addEventListener('mouseover',function(e){ var el=tippable(e.target); if(el){ clearTimeout(tipTimer); showTip(el);} });
+  document.addEventListener('mouseout',function(e){ if(tippable(e.target)){ tipTimer=setTimeout(hideTip,140);} });
+  document.addEventListener('focusin',function(e){ var el=tippable(e.target); if(el) showTip(el); });
+  document.addEventListener('focusout',function(e){ if(tippable(e.target)) hideTip(); });
+  document.addEventListener('click',function(e){ var el=tippable(e.target); if(el){ e.preventDefault(); tip.classList.contains('show')?hideTip():showTip(el);} else if(!e.target.closest('#tip')) hideTip(); });
+  tip.addEventListener('mouseover',function(){ clearTimeout(tipTimer); }); tip.addEventListener('mouseout',function(){ tipTimer=setTimeout(hideTip,140); });
+  window.addEventListener('scroll',hideTip,true);
+
+  /* ---------- resaltado y navegación ---------- */
+  var FIELD_SEC={derecho:'objeto',credito:'hipoteca',banco:'hipoteca',bancoNit:'hipoteca',plazoAnios:'hipoteca',numCuotas:'hipoteca',apoderadoBanco:'acreedor',poderBancoEP:'acreedor',poderBancoNot:'acreedor',avaluoCatastral:'notas',nupre:'notas',apoderado:'comparecencia',apodNombre:'comparecencia',apodPoder:'comparecencia',afectada:'ley258',inmdesc:'objeto',linderos:'objeto',matricula:'objeto',catastral:'objeto',ph:'ph',phReg:'ph',vis:'vis',tituloNum:'titulo',tituloFecha:'titulo',tituloNotaria:'titulo',gravamen:'saneamiento',total:'precio',inicial:'precio',saldo:'precio',ax_tradicion:'compliance',ax_predial:'compliance',ax_admin:'compliance',ax_cedulas:'compliance',tipoNegocio:'objeto',tituloTipo:'titulo',subsidio:'precio',subsidioEnt:'precio',posesion2:'compliance',firmaRuego:'firmas',interprete:'firmas',pep:'compliance',cuentaTercero:'compliance',numEscritura:'otorgamiento',fechaOtorg:'comparecencia',huella:'firmas',testigos:'firmas',hojaInicial:'firmas'};
+  var FALLBACK={hipoteca:'precio',ph:'objeto',vis:'precio',ley258:'saneamiento'};
+  var lastId=null;
+  function secForId(id){ if(!id) return null; if(id==='firmas') return 'firmas'; if(FIELD_SEC[id]) return FIELD_SEC[id];
+    if(/^[vc]\d+(direccion|telefono|correo|ocupacion|pep|notiElec)$/.test(id)) return 'firmas';
+    if(/^v\d/.test(id)) return 'comparecencia'; if(/^c\d/.test(id)) return 'aceptacion'; return null; }
+  function applyHL(){ if(!lastId) return;
+    var spans=g('escritura').querySelectorAll('[data-f="'+lastId+'"]'); if(spans.length){ for(var i=0;i<spans.length;i++) spans[i].classList.add('hl'); return; }
+    var key=secForId(lastId); if(key&&key!=='compliance'){ var sec=g('escritura').querySelector('[data-sec="'+key+'"]')||(FALLBACK[key]?g('escritura').querySelector('[data-sec="'+FALLBACK[key]+'"]'):null); if(sec) sec.classList.add('hl-sec'); } }
+  function flash(el){ if(!el) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(function(){el.classList.remove('flash');},1600); }
+  function scrollToId(id){ if(!id) return;
+    var spans=g('escritura').querySelectorAll('[data-f="'+id+'"]'), target=null;
+    if(spans.length){ target=spans[0].closest('[data-sec]')||spans[0]; }
+    else { var key=secForId(id); if(!key) return; if(key==='compliance'){ target=g('cumplimiento'); } else { target=g('escritura').querySelector('[data-sec="'+key+'"]')||(FALLBACK[key]?g('escritura').querySelector('[data-sec="'+FALLBACK[key]+'"]'):null)||g('escritura'); } }
+    if(target){ target.scrollIntoView({behavior:'smooth',block:'center'}); flash(target); } }
+  function scrollToKey(key){ var t=g('escritura').querySelector('[data-sec="'+key+'"]'); if(t){ t.scrollIntoView({behavior:'smooth',block:'center'}); flash(t);} }
+
+  /* ---------- render de salida ---------- */
+  /* guiones de relleno: rellenan la línea hasta el margen derecho (line-leader) para impedir intercalar texto */
+  var LEADER='—'.repeat(400);
+  function fillLeaders(){
+    var box=g('escritura'); if(!box) return;
+    var spans=box.querySelectorAll('.fill');
+    for(var i=0;i<spans.length;i++){
+      var f=spans[i];
+      f.textContent=LEADER; f.style.width='0px';               // colapsa para medir el fin del texto
+      var host=f.parentElement;
+      var cs=window.getComputedStyle(host);
+      var right=host.getBoundingClientRect().right-parseFloat(cs.paddingRight||0);
+      var left=f.getBoundingClientRect().left;
+      var w=right-left-2;                                        // espacio restante en la última línea
+      f.style.width=(w>4?w:0)+'px';
+    }
+  }
+  var _leaderRT; window.addEventListener('resize',function(){ clearTimeout(_leaderRT); _leaderRT=setTimeout(fillLeaders,120); });
+
+  function renderOutput(){
+    var s=G();
+    g('wrap-banco').hidden=!s.credito; g('wrap-apod').hidden=!s.apod; g('wrap-ph').hidden=!s.ph; g('wrap-subsidio').hidden=!s.subsidio; g('wrap-afect').hidden=!casadoOUnion(s.V);
+    g('wrap-testigos').hidden=!(s.testigosOn||s.firmaRuego); g('wrap-ruego').hidden=!s.firmaRuego;
+    g('cuadre').innerHTML=(s.inicial+s.saldo===s.total)?'<span style="color:var(--ok)">✓ Los pagos cuadran con el total.</span>':'<span style="color:var(--crit)">× Inicial + saldo = '+pts(s.inicial+s.saldo)+' ≠ total '+pts(s.total)+'.</span>';
+    g('fechahint').innerHTML=s.fechaOtorg?'En la escritura: «a los '+esc(fechaText(s.fechaOtorg))+'».':'<span style="color:var(--crit)">Seleccione la fecha de otorgamiento.</span>';
+    g('titulohint').innerHTML='En la escritura: «…la Escritura Pública número '+esc(s.tituloNum)+' del '+esc(fechaCorta(s.tituloFecha))+' de la '+esc(s.tituloNotaria)+'».';
+    g('escritura').innerHTML=renderEscritura(s); applyHL(); fillLeaders();
+    var items=evaluar(s), c=renderCumplimiento(items);
+    var words=g('escritura').textContent.trim().split(/\s+/).length;
+    g('cumplimiento').innerHTML=c.html+'<div class="metrics">Escritura ~'+words+' palabras · '+items.length+' verificaciones · '+s.V.length+' vendedor(es) · '+s.C.length+' comprador(es)</div>';
+    g('liquidacion').innerHTML=renderLiquidacion(s); markTips();
+    var e=g('estado');
+    if(c.crit>0){ e.className='estado bloq'; e.innerHTML='<span class="ic">×</span> No se puede otorgar aún — '+c.crit+' bloqueante'+(c.crit>1?'s':'')+' por resolver.'; }
+    else { e.className='estado ok'; e.innerHTML='<span class="ic">✓</span> Lista para revisión y firma del notario. Sin bloqueantes.'; }
+  }
+
+  /* ---------- eventos ---------- */
+  function updateParty(t){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; var p=arr[+t.dataset.idx]; if(!p) return; var k=t.dataset.key;
+    if(t.type==='checkbox') p[k]=t.checked; else if(k==='cuota') p[k]=parseFloat(t.value)||0; else p[k]=t.value; }
+  function updateFirmante(t){ var p=t.dataset.scope==='ruego'?data.ruego:data.testigos[+t.dataset.idx]; if(!p) return; p[t.dataset.key]=t.value; }
+  g('form').addEventListener('input',function(e){ var t=e.target;
+    if(t.dataset && t.dataset.side!==undefined && t.dataset.key){ updateParty(t); lastId=t.dataset.side+t.dataset.idx+t.dataset.key; renderOutput(); }
+    else if(t.dataset && t.dataset.scope && t.dataset.key){ updateFirmante(t); lastId='firmas'; renderOutput(); }
+    else if(t.id){ lastId=t.id; renderOutput(); } });
+  g('form').addEventListener('change',function(e){ var t=e.target;
+    if(t.dataset && t.dataset.key==='tipo'){ updateParty(t); renderParties(); renderOutput(); scrollToKey(t.dataset.side==='v'?'comparecencia':'aceptacion'); }
+    else if(t.dataset && t.dataset.side!==undefined){ scrollToId(lastId); }
+    else if(t.id){ lastId=t.id; renderOutput(); scrollToId(t.id); } });
+  g('form').addEventListener('click',function(e){ var t=e.target;
+    if(t.id==='add-vend'){ data.vendedores.push(nueva()); equalizar('v'); renderParties(); renderOutput(); }
+    else if(t.id==='add-comp'){ data.compradores.push(nueva()); equalizar('c'); renderParties(); renderOutput(); }
+    else if(t.classList && t.classList.contains('rm')){ var arr=t.dataset.side==='v'?data.vendedores:data.compradores; arr.splice(+t.dataset.idx,1); equalizar(t.dataset.side); renderParties(); renderOutput(); } });
+
+  /* ---------- handoff al editor del protocolista ---------- */
+  function editorLabels(){
+    var m={matricula:'Matrícula inmobiliaria',total:'Precio total',inicial:'Cuota inicial',saldo:'Saldo / monto hipoteca',banco:'Banco acreedor',bancoNit:'NIT del banco',plazoAnios:'Plazo (años)',numCuotas:'N.º de cuotas',apoderadoBanco:'Apoderado(a) del banco',poderBancoEP:'Poder del banco (E.P.)',poderBancoNot:'Notaría del poder',avaluoCatastral:'Avalúo catastral',nupre:'NUPRE',inmdesc:'Descripción del inmueble',linderos:'Linderos',catastral:'Cédula catastral',tituloNum:'Título — E.P. número',tituloFecha:'Título — fecha',tituloNotaria:'Título — notaría',fechaOtorg:'Fecha de otorgamiento',hojaInicial:'Hoja de papel notarial',phReg:'Reglamento PH',numEscritura:'Número de escritura'};
+    data.vendedores.forEach(function(p,i){ var n='Vendedor '+(i+1); m['v'+i+'nombre']=n+' — nombre'; m['v'+i+'id']=n+' — documento'; m['v'+i+'ciudad']=n+' — domicilio'; m['v'+i+'tipoDoc']=n+' — tipo de documento'; m['v'+i+'estado']=n+' — estado civil'; m['v'+i+'repr']=n+' — representante legal'; });
+    data.compradores.forEach(function(p,i){ var n='Comprador '+(i+1); m['c'+i+'nombre']=n+' — nombre'; m['c'+i+'id']=n+' — documento'; m['c'+i+'ciudad']=n+' — domicilio'; m['c'+i+'cuota']=n+' — cuota'; m['c'+i+'tipoDoc']=n+' — tipo de documento'; m['c'+i+'estado']=n+' — estado civil'; });
+    return m;
+  }
+  function buildHandoff(){
+    var html=renderEscritura(G());
+    html=html.replace(/<span class="ins" data-f="([^"]+)">/g,'<span class="campo" data-field="$1">')
+             .replace(/<span class="rulec">/g,'<span>')
+             .replace(/<span class="cite">[\s\S]*?<\/span>/g,'')
+             .replace(/<span class="fill"><\/span>/g,'')
+             .replace(/<span class="ins">/g,'<span>');
+    return {html:html,labels:editorLabels(),ts:Date.now()};
+  }
+  g('btnEditor').addEventListener('click',function(){
+    var ok=true;
+    try{ localStorage.setItem('easypro_editor_handoff',JSON.stringify(buildHandoff())); }catch(e){ ok=false; }
+    if(ok){ window.open('editor-vinculado.html','_blank'); }
+    else { alert('No se pudo pasar al editor (almacenamiento del navegador no disponible en file://). Ábrelo desde un servidor local o el mismo origen.'); }
+  });
+
+  renderParties(); renderFirmantes(); renderOutput();
+})();
+</script>

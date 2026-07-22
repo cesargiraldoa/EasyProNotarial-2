@@ -1,0 +1,433 @@
+<title>Ecosistema Notarial — Compraventa: árbol de preguntas → escritura → cumplimiento</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --ink:#1B1E23; --ink-soft:#4A5058; --ink-faint:#7A828C;
+    --chrome:#26314B; --line:#E4E1D8; --line-strong:#CFCBBE;
+    --accent:#31456E; --accent-tint:#EEF1F7;
+    --strat:#7A3E12; --strat-tint:#F5EAE0;
+    --ins:#B23A2E; --ins-tint:#FBEEEC;
+    --ok:#2E7D53; --ok-tint:#E7F2EC;
+    --warn:#B0781A; --warn-tint:#F7EEDB;
+    --crit:#B23B3B; --crit-tint:#F7E7E7;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",'Iowan Old Style',serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#181A1E; --ink:#E8E6E0; --ink-soft:#B4B7BD; --ink-faint:#868B93;
+      --chrome:#0F1116; --line:#2B2E35; --line-strong:#3A3E47;
+      --accent:#8FA6D6; --accent-tint:#1D2432;
+      --strat:#D9A066; --strat-tint:#2A2015;
+      --ins:#E8776A; --ins-tint:#2C1E1C;
+      --ok:#6CC08C; --ok-tint:#16241C;
+      --warn:#D6A648; --warn-tint:#2A2313;
+      --crit:#E07C7C; --crit-tint:#2A1818;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#FBFAF7; --ink:#1B1E23; --ink-soft:#4A5058; --ink-faint:#7A828C;
+    --chrome:#26314B; --line:#E4E1D8; --line-strong:#CFCBBE; --accent:#31456E; --accent-tint:#EEF1F7;
+    --strat:#7A3E12; --strat-tint:#F5EAE0;
+    --ins:#B23A2E; --ins-tint:#FBEEEC; --ok:#2E7D53; --ok-tint:#E7F2EC; --warn:#B0781A; --warn-tint:#F7EEDB; --crit:#B23B3B; --crit-tint:#F7E7E7;
+  }
+  :root[data-theme="dark"]{
+    --paper:#181A1E; --ink:#E8E6E0; --ink-soft:#B4B7BD; --ink-faint:#868B93;
+    --chrome:#0F1116; --line:#2B2E35; --line-strong:#3A3E47; --accent:#8FA6D6; --accent-tint:#1D2432;
+    --strat:#D9A066; --strat-tint:#2A2015;
+    --ins:#E8776A; --ins-tint:#2C1E1C; --ok:#6CC08C; --ok-tint:#16241C; --warn:#D6A648; --warn-tint:#2A2313; --crit:#E07C7C; --crit-tint:#2A1818;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 90px;}
+
+  /* header */
+  .top{background:var(--chrome);color:#EDEFF4;margin:0 -20px 0;padding:34px 20px 28px;}
+  .top-inner{max-width:1040px;margin:0 auto;}
+  .demo-flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#F4D9CE;background:rgba(178,58,46,.22);border:1px solid rgba(232,119,106,.4);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(26px,4vw,38px);line-height:1.12;margin:16px 0 8px;text-wrap:balance;letter-spacing:-.01em;}
+  .top p{margin:0;color:#B9C1D4;max-width:66ch;font-size:15px;}
+  .ref{margin-top:18px;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:12.5px;color:#9AA4BC;border-top:1px solid rgba(255,255,255,.1);padding-top:16px;}
+  .ref b{color:#DCE1EC;font-weight:600;}
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);margin:0 -20px 6px;padding:11px 20px;
+    display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;}
+  nav a{color:var(--ink-soft);text-decoration:none;padding:5px 11px;border-radius:8px;border:1px solid transparent;font-weight:500;}
+  nav a:hover{color:var(--accent);border-color:var(--line);}
+  nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  section{margin-top:40px;scroll-margin-top:64px;}
+  .eyebrow{display:flex;align-items:center;gap:12px;font-size:12px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin:0 0 5px;}
+  .eyebrow .n{font-family:var(--mono);font-size:11px;background:var(--accent);color:var(--paper);width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;}
+  h2{font-family:var(--serif);font-weight:600;font-size:23px;margin:0 0 14px;letter-spacing:-.01em;}
+  .lead{color:var(--ink-soft);font-size:14.5px;max-width:72ch;margin:-6px 0 20px;}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:9px 18px;margin:0 0 20px;font-size:12.5px;color:var(--ink-soft);align-items:center;}
+  .legend span{display:inline-flex;align-items:center;gap:7px;}
+  .badge{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:6px;white-space:nowrap;}
+  .badge.strat{color:var(--strat);background:var(--strat-tint);}
+  .badge.dato{color:var(--ink-faint);background:color-mix(in srgb,var(--ink) 8%,transparent);}
+  .sw{width:13px;height:13px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.12);}
+  .sw.blk{background:var(--ink);} .sw.red{background:var(--ins);} .sw.rule{background:var(--ins);outline:2px dotted var(--ins);outline-offset:1px;}
+
+  /* ---- question tree ---- */
+  .block{border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--paper) 100%,var(--ink) 2.5%);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden;}
+  .block-h{display:flex;align-items:center;gap:13px;padding:15px 20px;border-bottom:1px solid var(--line);background:var(--accent-tint);}
+  .block-h .bn{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--paper);background:var(--accent);width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none;}
+  .block-h h3{margin:0;font-size:16px;font-family:var(--sans);font-weight:700;}
+  .block-h .sub{margin:1px 0 0;font-size:12.5px;color:var(--ink-soft);}
+  .block-b{padding:6px 20px 16px;}
+
+  .qn{padding:15px 0 4px;border-top:1px dashed var(--line-strong);}
+  .qn:first-child{border-top:0;}
+  .qhead{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+  .qhead .qt{font-size:14.5px;font-weight:600;color:var(--ink);flex:1;min-width:220px;}
+  .opts{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 2px;}
+  .opt{font-family:var(--mono);font-size:12px;color:var(--accent);background:var(--accent-tint);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);padding:3px 9px;border-radius:7px;}
+  .trig{display:flex;gap:8px;align-items:flex-start;margin:8px 0 2px;font-size:12.5px;color:var(--ink-soft);}
+  .trig .ar{color:var(--ok);font-weight:700;flex:none;} .trig.off .ar{color:var(--ink-faint);}
+  .cite{font-family:var(--sans);font-size:10.5px;font-weight:700;color:var(--ins);background:var(--ins-tint);border:1px solid color-mix(in srgb,var(--ins) 30%,transparent);padding:1px 7px;border-radius:6px;white-space:nowrap;margin-left:2px;display:inline-block;}
+
+  /* conditional branch */
+  .branch{margin:8px 0 2px 6px;padding:4px 0 4px 16px;border-left:2px solid var(--strat);}
+  .branch .cond{font-size:12.5px;color:var(--strat);font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:7px;}
+  .branch .cond::before{content:"⋯ si";font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-faint);}
+  .branch .qn{padding:9px 0 2px;border-top:1px dotted var(--line);}
+  .branch .qt{font-size:13.5px;font-weight:500;}
+
+  .panel{background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:var(--shadow);}
+
+  /* deed sheet */
+  .sheet{background:var(--paper);border:1px solid var(--line-strong);border-radius:6px;box-shadow:var(--shadow);padding:clamp(22px,4vw,52px);font-family:var(--serif);color:var(--ink);font-size:15px;line-height:1.72;position:relative;overflow:hidden;}
+  .sheet::before{content:"DEMOSTRACIÓN · DATOS FICTICIOS";position:absolute;top:26px;right:-52px;transform:rotate(45deg);background:var(--ins);color:#fff;font-family:var(--sans);font-size:10.5px;font-weight:700;letter-spacing:.12em;padding:5px 60px;opacity:.9;}
+  .calif{border:1.5px solid var(--ink);padding:16px 18px;margin-bottom:26px;font-family:var(--sans);font-size:12.5px;line-height:1.5;}
+  .calif h4{font-size:12px;text-align:center;margin:0 0 10px;letter-spacing:.06em;font-weight:700;text-transform:uppercase;}
+  .calif .row{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;}
+  .calif .k{color:var(--ink-soft);text-transform:uppercase;font-size:11px;letter-spacing:.04em;}
+  .calif table{width:100%;border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums;}
+  .calif td{border-top:1px solid var(--line-strong);padding:4px 6px;} .calif td:last-child{text-align:right;}
+  .cl{margin:0 0 15px;text-align:justify;} .clh{font-weight:700;}
+  .para{margin:9px 0 0;padding-left:16px;text-align:justify;} .para .clh{font-weight:600;font-style:italic;}
+  .fill{color:var(--line-strong);letter-spacing:-1px;user-select:none;}
+  .ins{color:var(--ins);font-weight:600;} .rule{color:var(--ins);}
+  .sheet .cite{vertical-align:.15em;}
+  .seg{background:var(--accent-tint);border-left:3px solid var(--accent);padding:10px 14px;margin:16px 0;font-family:var(--sans);font-size:12.5px;color:var(--ink-soft);border-radius:0 8px 8px 0;} .seg b{color:var(--accent);}
+
+  /* compliance */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+  .tile{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--paper);}
+  .tile .num{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;}
+  .tile .lbl{font-size:12px;color:var(--ink-soft);margin-top:6px;display:flex;align-items:center;gap:7px;}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .tile.ok .num{color:var(--ok)} .dot.ok{background:var(--ok)}
+  .tile.warn .num{color:var(--warn)} .dot.warn{background:var(--warn)}
+  .tile.crit .num{color:var(--crit)} .dot.crit{background:var(--crit)}
+  .check{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;padding:15px 4px;border-top:1px solid var(--line);}
+  .check:first-of-type{border-top:0;}
+  .chip{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 9px;border-radius:6px;white-space:nowrap;align-self:start;height:fit-content;}
+  .chip.ok{color:var(--ok);background:var(--ok-tint);} .chip.warn{color:var(--warn);background:var(--warn-tint);} .chip.crit{color:var(--crit);background:var(--crit-tint);}
+  .check .body h4{margin:0 0 3px;font-size:14.5px;font-family:var(--sans);font-weight:600;}
+  .check .body p{margin:0;font-size:13px;color:var(--ink-soft);}
+  .check .meta{grid-column:2;margin-top:7px;display:flex;flex-wrap:wrap;gap:6px;}
+  .tag{font-family:var(--mono);font-size:11px;color:var(--ink-faint);border:1px solid var(--line);padding:2px 8px;border-radius:999px;}
+  .tag.sev{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);}
+
+  footer{margin-top:46px;padding-top:20px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:12.5px;line-height:1.7;}
+  footer b{color:var(--ink-soft);}
+  @media (max-width:560px){ .qhead .qt{min-width:0;} .sheet::before{right:-60px;} }
+  @media (prefers-reduced-motion:no-preference){ section{animation:fade .5s ease both;} @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}} }
+</style>
+
+<div class="top">
+  <div class="top-inner">
+    <span class="demo-flag">◆ Especificación · Ecosistema Notarial</span>
+    <h1>Compraventa: el árbol de preguntas que construye la escritura</h1>
+    <p>Sin marcar campos. El motor recorre este árbol, y cada respuesta ensambla o descarta cláusulas del estilo propio de la notaría, respetando la norma. Al final, verifica el cumplimiento.</p>
+    <div class="ref">
+      <span>Acto: <b>Compraventa de inmueble</b></span>
+      <span>Estilo aprendido de: <b>Notaría 16 · Medellín (1 documento)</b></span>
+      <span>Caso simulado: <b>Venta 2 → 1 con hipoteca</b></span>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <a href="#arbol">① Árbol de preguntas</a>
+  <a href="#escritura">② Escritura construida</a>
+  <a href="#cumplimiento">③ Cumplimiento</a>
+</nav>
+
+<div class="wrap">
+
+  <!-- ============ 1. ÁRBOL ============ -->
+  <section id="arbol">
+    <p class="eyebrow"><span class="n">1</span> El árbol de preguntas</p>
+    <h2>Ocho bloques, del acto al otorgamiento</h2>
+    <p class="lead">El árbol sigue el orden técnico de la escritura. Las preguntas <b>estratégicas</b> cambian la forma jurídica del documento (activan o quitan cláusulas); las de <b>dato</b> solo rellenan. Cada rama muestra la norma que la sustenta.</p>
+    <div class="legend">
+      <span><span class="badge strat">Estratégica</span> cambia el clausulado</span>
+      <span><span class="badge dato">Dato</span> solo rellena</span>
+      <span><span class="cite">Ley 00/0000</span> norma que la exige</span>
+    </div>
+
+    <!-- BLOQUE 0 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">0</span><div><h3>Identificación del acto</h3><p class="sub">Define el esqueleto y qué secciones existirán.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">¿Qué derecho se transfiere?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Pleno dominio</span><span class="opt">Nuda propiedad</span><span class="opt">Usufructo</span><span class="opt">Cuota / derechos y acciones (proindiviso)</span></div>
+          <div class="branch"><div class="cond">Nuda propiedad</div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Se reserva el usufructo el vendedor? ¿vitalicio o a plazo?</span></div>
+              <div class="trig"><span class="ar">→</span><span>Inserta cláusula de reserva de usufructo y su condición <span class="cite">arts. 823 ss. C.C.</span></span></div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿El comprador paga con crédito hipotecario?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Sí</span><span class="opt">No</span></div>
+          <div class="trig"><span class="ar">→</span><span>Si <b>sí</b>: activa el Bloque 6 (hipoteca) y la forma de pago con desembolso condicionado</span></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿Concurren otros actos en el mismo instrumento?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Solo compraventa</span><span class="opt">+ Hipoteca</span><span class="opt">+ Cancelación de hipoteca previa</span><span class="opt">+ Afectación / patrimonio de familia</span></div>
+          <div class="trig"><span class="ar">→</span><span>Cada acto agrega su comparecencia, código de acto y valor en el formato de calificación</span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 1 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">1</span><div><h3>Las partes (intervinientes)</h3><p class="sub">Comparecencia, capacidad y representación — la mayor fuente de ramas.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Por cada VENDEDOR: ¿persona natural o jurídica?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Natural</span><span class="opt">Jurídica</span></div>
+          <div class="branch"><div class="cond">Persona natural</div>
+            <div class="qn"><div class="qhead"><span class="qt">Nombre, tipo y n.º de documento, lugar de expedición, domicilio, nacionalidad</span><span class="badge dato">Dato</span></div></div>
+            <div class="qn"><div class="qhead"><span class="qt">Estado civil</span><span class="badge strat">Estratégica</span></div>
+              <div class="opts"><span class="opt">Soltero</span><span class="opt">Casado c/ soc. conyugal</span><span class="opt">Casado s/ soc. (capitulaciones)</span><span class="opt">Unión marital de hecho</span><span class="opt">Divorciado</span><span class="opt">Viudo</span></div>
+              <div class="trig"><span class="ar">→</span><span><b>Casado c/ sociedad:</b> obliga a indagar afectación a vivienda familiar y consentimiento del cónyuge para enajenar <span class="cite">arts. 3 y 6 · Ley 258/1996</span></span></div>
+              <div class="trig"><span class="ar">→</span><span><b>Unión marital:</b> considerar sociedad patrimonial entre compañeros <span class="cite">Ley 54/1990 · Ley 979/2005</span></span></div></div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Persona con discapacidad que requiera apoyos?</span><span class="badge strat">Estratégica</span></div>
+              <div class="trig"><span class="ar">→</span><span>Verifica acuerdo o adjudicación de apoyos; ya no opera la interdicción <span class="cite">Ley 1996/2019</span></span></div></div></div>
+          <div class="branch"><div class="cond">Persona jurídica</div>
+            <div class="qn"><div class="qhead"><span class="qt">Razón social, NIT, domicilio; representante legal y facultades</span><span class="badge dato">Dato</span></div></div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Los estatutos o la cuantía exigen autorización de junta/asamblea?</span><span class="badge strat">Estratégica</span></div>
+              <div class="trig"><span class="ar">→</span><span>Inserta y protocoliza el acta de autorización del órgano social; exige certificado de existencia y representación vigente <span class="cite">C. Comercio</span></span></div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">¿Alguna parte comparece por apoderado?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">No</span><span class="opt">Sí</span></div>
+          <div class="branch"><div class="cond">Sí</div>
+            <div class="qn"><div class="qhead"><span class="qt">Tipo de poder (general / especial), fecha, notaría, vigencia; facultades expresas</span><span class="badge strat">Estratégica</span></div>
+              <div class="trig"><span class="ar">→</span><span>Cláusula de representación; <b>poder especial inmobiliario</b> debe identificar el inmueble; se anexa/protocoliza <span class="cite">Dcto 2148/1983</span></span></div></div></div></div>
+
+        <div class="qn"><div class="qhead"><span class="qt">COMPRADORES: mismos datos + estado civil</span><span class="badge strat">Estratégica</span></div>
+          <div class="trig"><span class="ar">→</span><span>El estado civil del comprador define si se ofrece constituir o no afectación a vivienda familiar <span class="cite">Ley 258/1996</span></span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 2 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">2</span><div><h3>El inmueble</h3><p class="sub">Individualización jurídica del bien.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Matrícula inmobiliaria, cédula catastral, dirección/nomenclatura, municipio, área privada y construida, linderos</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Alimenta el formato de calificación y la descripción del inmueble <span class="cite">Ley 1579/2012</span></span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Urbano o rural?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Urbano</span><span class="opt">Rural</span></div>
+          <div class="branch"><div class="cond">Rural</div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Unidad Agrícola Familiar / restricciones agrarias / restitución de tierras?</span><span class="badge strat">Estratégica</span></div>
+              <div class="trig"><span class="ar">→</span><span>Advertencias agrarias y verificación de restitución <span class="cite">Ley 1448/2011</span></span></div></div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Sometido a propiedad horizontal?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Sí</span><span class="opt">No</span></div>
+          <div class="branch"><div class="cond">Sí</div>
+            <div class="qn"><div class="qhead"><span class="qt">Reglamento (escritura, notaría, fecha), coeficiente de copropiedad, bienes comunes</span><span class="badge dato">Dato</span></div>
+              <div class="trig"><span class="ar">→</span><span>Inserta el parágrafo de régimen de PH y la transferencia del coeficiente <span class="cite">Ley 675/2001</span></span></div></div></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Es vivienda de interés social (VIS/VIP)?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">No</span><span class="opt">Sí</span></div>
+          <div class="branch"><div class="cond">Sí</div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Se aplicó subsidio familiar de vivienda? ¿hay restricción de transferencia vigente?</span><span class="badge strat">Estratégica</span></div>
+              <div class="trig"><span class="ar">→</span><span>Advertencias VIS, condición de restitución del subsidio y restricción de enajenación <span class="cite">Dcto 1077/2015</span></span></div></div></div>
+          <div class="trig off"><span class="ar">⤫</span><span>Si <b>No</b>: se omiten todas las advertencias VIS</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Hay segregación / englobe / parqueadero o depósito vinculado?</span><span class="badge strat">Estratégica</span></div>
+          <div class="trig"><span class="ar">→</span><span>Identifica predio matriz, áreas segregadas, remanente y matrículas adicionales <span class="cite">Dcto 2148/1983</span></span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 3 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">3</span><div><h3>Título y estado jurídico del bien</h3><p class="sub">Tradición, gravámenes y saneamiento.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Título de adquisición del vendedor: forma, escritura/sentencia, fecha, notaría/juzgado, registro</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Cláusula “Título de adquisición” encadenada a la tradición</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿El inmueble tiene gravámenes o limitaciones vigentes?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Libre</span><span class="opt">Hipoteca</span><span class="opt">Patrimonio de familia</span><span class="opt">Afectación viv. familiar</span><span class="opt">Usufructo / servidumbre</span><span class="opt">Embargo / demanda</span></div>
+          <div class="branch"><div class="cond">Hipoteca previa</div>
+            <div class="qn"><div class="qhead"><span class="qt">¿Se cancela con el pago? ¿acreedor, escritura?</span></div>
+              <div class="trig"><span class="ar">→</span><span>Cláusula de cancelación / compromiso de cancelación de la hipoteca anterior</span></div></div></div>
+          <div class="branch"><div class="cond">Patrimonio de familia / afectación</div>
+            <div class="qn"><div class="qhead"><span class="qt">Causal y tipo de cancelación (voluntaria / por venta)</span></div>
+              <div class="trig"><span class="ar">→</span><span>Inserta acto de cancelación con su causal <span class="cite">Ley 70/1931 · Ley 258/1996</span></span></div></div></div>
+          <div class="trig off"><span class="ar">⤫</span><span>Si <b>Libre</b>: cláusula estándar de saneamiento (evicción y vicios redhibitorios)</span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 4 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">4</span><div><h3>Precio y forma de pago</h3><p class="sub">Con control de coherencia de valores.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Precio total (en letras y números)</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span><b>Regla dura:</b> la suma de los pagos debe cuadrar con el total, y letras = números (evita el descuadre de copy-paste)</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Forma de pago?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Contado</span><span class="opt">Recursos propios + crédito</span><span class="opt">Con subsidio</span><span class="opt">Subrogación</span><span class="opt">Cuotas / plazo</span></div>
+          <div class="trig"><span class="ar">→</span><span>Genera los literales del precio (a, b, c) y, si hay crédito, la condición de desembolso del banco</span></div>
+          <div class="trig"><span class="ar">→</span><span>Cláusula de renuncia a la condición resolutoria derivada de la forma de pago</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Declaración de valor real bajo juramento</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Parágrafo obligatorio de valor real <span class="cite">art. 61 · Ley 2010/2019 (art. 90 E.T.)</span></span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Origen de los fondos del comprador</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Parágrafo de prevención de lavado de activos (LA/FT) <span class="cite">Ley 2195/2022</span></span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Quién asume gastos, impuesto de registro y retención?</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Cláusula de gastos (por partes iguales / a cargo del comprador) y retención a cargo del vendedor</span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 5 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">5</span><div><h3>Entrega</h3><p class="sub">Momento y condición de la tradición material.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">¿Cuándo se entrega el inmueble?</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">A la firma</span><span class="opt">Al desembolso del crédito</span><span class="opt">A plazo</span></div>
+          <div class="trig"><span class="ar">→</span><span>Cláusula de entrega + renuncia a la condición resolutoria derivada de la forma de entrega</span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 6 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">6</span><div><h3>Hipoteca <span style="font-weight:400;color:var(--ink-faint);font-size:13px">— solo si hay crédito</span></h3><p class="sub">Sección completa de garantía, con clausulado del banco.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Acreedor (banco), NIT; tipo (abierta sin límite / cerrada) y grado</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Constitución de hipoteca + objeto de la garantía, cuantía, aceleración de plazos y revocación de cupos</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿El banco comparece por apoderado? ¿destino del crédito (vivienda / libre)?</span><span class="badge strat">Estratégica</span></div>
+          <div class="trig"><span class="ar">→</span><span>Verifica poder y certificado de representación del banco; ajusta el objeto de la garantía</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">¿Obligación en pesos o UVR?</span><span class="badge dato">Dato</span></div></div>
+      </div>
+    </div>
+
+    <!-- BLOQUE 7 -->
+    <div class="block">
+      <div class="block-h"><span class="bn">7</span><div><h3>Anexos, impuestos y otorgamiento</h3><p class="sub">Documentos exigibles y cierre del instrumento.</p></div></div>
+      <div class="block-b">
+        <div class="qn"><div class="qhead"><span class="qt">Anexos aportados</span><span class="badge strat">Estratégica</span></div>
+          <div class="opts"><span class="opt">Certificado de tradición</span><span class="opt">Paz y salvo predial</span><span class="opt">Paz y salvo administración (PH)</span><span class="opt">Cédulas</span><span class="opt">Cert. catastral</span><span class="opt">Cert. existencia y repr.</span><span class="opt">Avalúo</span></div>
+          <div class="trig"><span class="ar">→</span><span>Relaciona cada anexo (emisor, número, fecha, vigencia) y marca los <b>faltantes</b> para el informe de cumplimiento</span></div></div>
+        <div class="qn"><div class="qhead"><span class="qt">Lectura, aprobación y firmas: orden, huella, firma a ruego, testigos, intérprete</span><span class="badge dato">Dato</span></div>
+          <div class="trig"><span class="ar">→</span><span>Constancia de lectura y otorgamiento; advertencia de obligación de registrar <span class="cite">Dcto 960/1970</span></span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. ESCRITURA ============ -->
+  <section id="escritura">
+    <p class="eyebrow"><span class="n">2</span> La escritura construida</p>
+    <h2>El resultado, al estilo de la casa</h2>
+    <p class="lead">Con las respuestas del caso simulado, el motor ensambla el texto. <b>Negro</b> = clausulado propio de la notaría; <span style="color:var(--ins);font-weight:600">rojo</span> = insertado por la IA (dato del caso, o cláusula exigida por norma, con su <b>cita</b>).</p>
+    <div class="legend">
+      <span><i class="sw blk"></i> Texto base de la notaría</span>
+      <span><i class="sw red"></i> Dato del caso</span>
+      <span><i class="sw rule"></i> Cláusula exigida por norma + cita</span>
+    </div>
+
+    <article class="sheet">
+      <div class="calif">
+        <h4>Superintendencia de Notariado y Registro · Formato de Calificación</h4>
+        <div class="row">
+          <span class="k">Folio matrícula</span><span><span class="ins">001-1502334</span></span>
+          <span class="k">Dirección</span><span><span class="ins">Apto. 1402, Torre 3, Conjunto Miravalle P.H. — Calle 30 Sur #27-45, Envigado (Ant.) — predio urbano</span></span>
+          <span class="k">Código catastral</span><span><span class="ins">05266010300030014020</span></span>
+        </div>
+        <table>
+          <tr><td>CÓD. <span class="ins">0125</span> — COMPRAVENTA</td><td><span class="ins">$420.000.000</span></td></tr>
+          <tr><td>CÓD. <span class="ins">0219</span> — HIPOTECA ABIERTA SIN LÍMITE</td><td><span class="ins">$300.000.000</span></td></tr>
+        </table>
+      </div>
+
+      <p class="cl">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los <span class="ins">catorce (14) días del mes de agosto del año dos mil veintiséis (2026)</span>, en la NOTARÍA DIECISÉIS DEL CÍRCULO NOTARIAL DE MEDELLÍN, se presentaron los señores <span class="ins">RODRIGO ELÍAS CASTAÑO MEJÍA</span>, mayor de edad, domiciliado en <span class="ins">Medellín</span>, identificado con la cédula de ciudadanía número <span class="ins">71.555.201</span>, de estado civil <span class="ins">casado con sociedad conyugal vigente</span>; y <span class="ins">MARTA LUCÍA ARANGO POSADA</span>, mayor de edad, identificada con la cédula de ciudadanía número <span class="ins">43.220.118</span>, de estado civil <span class="ins">casada con sociedad conyugal vigente</span>; quienes obran en su propio nombre y en el texto de este instrumento se llamarán LOS VENDEDORES y manifestaron:<span class="fill"> ————</span></p>
+
+      <p class="cl"><span class="clh">PRIMERO: OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE.</span> Por medio del presente instrumento transfieren a título de compraventa en favor de la señora <span class="ins">LAURA XIMENA ORTIZ VÉLEZ</span>, el derecho de dominio y la posesión sobre el siguiente bien inmueble: <span class="ins">APARTAMENTO NRO. 1402 de la Torre 3 del Conjunto Residencial Miravalle — Propiedad Horizontal, ubicado en la Calle 30 Sur #27-45 del municipio de Envigado (Antioquia), destinado a vivienda, con área privada aproximada de 68,40 m².</span> FOLIO DE MATRÍCULA INMOBILIARIA NRO. <span class="ins">001-1502334</span>.<span class="fill"> ——</span></p>
+
+      <p class="para"><span class="clh">Parágrafo — Régimen de propiedad horizontal.</span> <span class="rule">El inmueble hace parte del CONJUNTO RESIDENCIAL MIRAVALLE — Propiedad Horizontal, sometido al régimen de propiedad horizontal y su reglamento elevado a Escritura Pública número 1.982 del 3 de mayo de 2019 de la Notaría Doce del Círculo de Medellín; la transferencia comprende el derecho de copropiedad en el coeficiente señalado en el reglamento.</span><span class="cite">Ley 675/2001</span></p>
+
+      <p class="cl"><span class="clh">SEGUNDO: TÍTULO DE ADQUISICIÓN.</span> Los vendedores adquirieron el inmueble por compraventa mediante la <span class="ins">Escritura Pública número 2.410 del 18 de junio de 2019 de la Notaría Doce del Círculo Notarial de Medellín, registrada bajo el folio de matrícula inmobiliaria número 001-1502334</span>.<span class="fill"> ————</span></p>
+
+      <p class="cl"><span class="clh">TERCERO: SANEAMIENTO Y LIMITACIONES AL DOMINIO.</span> Garantizan los vendedores la absoluta propiedad del inmueble que transfieren, el cual no ha sido gravado en forma alguna ni su dominio se encuentra en pleito, y que se encuentra libre de gravámenes y limitaciones al dominio tales como hipoteca, embargo, demanda civil, condiciones resolutorias, usufructo o medidas cautelares.<span class="fill"> ——</span></p>
+
+      <p class="para"><span class="clh">Parágrafo — Afectación a vivienda familiar.</span> <span class="rule">Advertidos del contenido del Artículo 6.º de la Ley 258 de 1996 e indagados expresamente, los vendedores —de estado civil casados con sociedad conyugal vigente— manifestaron que el inmueble que ahora enajenan no está afectado a vivienda familiar.</span><span class="cite">art. 6 · Ley 258/1996</span></p>
+
+      <p class="cl"><span class="clh">CUARTO: PRECIO DE VENTA.</span> El precio de la compraventa lo constituye la suma de <span class="ins">CUATROCIENTOS VEINTE MILLONES DE PESOS M/L ($420.000.000)</span>, que la compradora cancelará así:<span class="fill"> —</span></p>
+      <p class="para"><span class="clh">a)</span> La suma de <span class="ins">CIENTO VEINTE MILLONES DE PESOS M/L ($120.000.000)</span>, cancelada con recursos propios, que los vendedores declaran recibida a satisfacción.</p>
+      <p class="para"><span class="clh">b)</span> El saldo de <span class="ins">TRESCIENTOS MILLONES DE PESOS M/L ($300.000.000)</span>, que la compradora entregará con el producto de un préstamo que tramita ante el <span class="ins">BANCO DAVIVIENDA S.A.</span>, cuyo desembolso se hará una vez registrada la escritura de hipoteca que la compradora constituye a favor del banco.</p>
+
+      <p class="para"><span class="clh">Parágrafo — Valor real.</span> <span class="rule">Las partes declaran bajo la gravedad del juramento que el precio expresado es real, no inferior al costo, y que no existen sumas convenidas por fuera de este instrumento.</span><span class="cite">art. 61 · Ley 2010/2019 (art. 90 E.T.)</span></p>
+
+      <p class="para"><span class="clh">Parágrafo — Origen de fondos.</span> <span class="rule">La compradora declara que los recursos con los que adquiere el inmueble provienen de actividades lícitas y que no se encuentra en listados de prevención de lavado de activos (OFAC u otros), conforme al régimen de prevención LA/FT.</span><span class="cite">Ley 2195/2022 · SARLAFT</span></p>
+
+      <p class="cl"><span class="clh">QUINTO: ENTREGA.</span> La entrega real y material del inmueble se realizará al desembolso del crédito, con todos sus usos y servidumbres, y los vendedores se obligan a salir al saneamiento por evicción o vicios redhibitorios.<span class="fill"> ————</span></p>
+
+      <p class="cl"><span class="clh">SEXTO: GASTOS.</span> Los gastos notariales e impuesto de registro se cubrirán por partes iguales; la retención en la fuente será de cargo exclusivo de los vendedores.<span class="fill"> ——</span></p>
+
+      <p class="cl"><span class="clh">Presente la COMPRADORA</span>, señora <span class="ins">LAURA XIMENA ORTIZ VÉLEZ</span>, mayor de edad, domiciliada en <span class="ins">Envigado</span>, identificada con la cédula de ciudadanía número <span class="ins">1.017.884.330</span>, de estado civil <span class="ins">soltera</span>, manifestó que acepta la presente escritura y las declaraciones en ella contenidas, y que conoce y acata el reglamento de propiedad horizontal al que se somete el inmueble que adquiere.<span class="fill"> ——</span></p>
+
+      <div class="seg"><b>+ Sección de hipoteca (construida, resumida aquí):</b> HIPOTECA ABIERTA DE PRIMER GRADO SIN LÍMITE DE CUANTÍA a favor del Banco Davivienda S.A. — con objeto de la garantía, cuantía, aceleración de plazos y revocación de cupos, ensamblada del mismo estilo de la casa.</div>
+    </article>
+  </section>
+
+  <!-- ============ 3. CUMPLIMIENTO ============ -->
+  <section id="cumplimiento">
+    <p class="eyebrow"><span class="n">3</span> Informe de cumplimiento normativo</p>
+    <h2>Qué cumple, qué falta y dónde hay riesgo</h2>
+    <p class="lead">El motor revisa la escritura contra las reglas del acto antes de la revisión humana. No reemplaza la fe pública del notario: la asiste señalando exactamente qué verificar.</p>
+
+    <div class="tiles">
+      <div class="tile ok"><div class="num">4</div><div class="lbl"><span class="dot ok"></span>Cumple</div></div>
+      <div class="tile warn"><div class="num">3</div><div class="lbl"><span class="dot warn"></span>Advertencia / riesgo</div></div>
+      <div class="tile crit"><div class="num">1</div><div class="lbl"><span class="dot crit"></span>Requiere verificación</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="check"><span class="chip ok">Cumple</span>
+        <div class="body"><h4>Precio en letras y números coherente</h4>
+          <p>$120.000.000 + $300.000.000 = $420.000.000. El motor cuadró el total con la suma de los pagos y evitó el descuadre típico de copy-paste.</p></div>
+        <div class="meta"><span class="tag">valor real</span><span class="tag">Ley 2010/2019</span></div></div>
+      <div class="check"><span class="chip ok">Cumple</span>
+        <div class="body"><h4>Declaración de origen de fondos incluida</h4>
+          <p>Cláusula de prevención de lavado de activos presente para la compradora.</p></div>
+        <div class="meta"><span class="tag">Ley 2195/2022</span><span class="tag">SARLAFT</span></div></div>
+      <div class="check"><span class="chip ok">Cumple</span>
+        <div class="body"><h4>Advertencia de afectación a vivienda familiar</h4>
+          <p>Insertada por el estado civil casado de los vendedores, con la constancia de no afectación.</p></div>
+        <div class="meta"><span class="tag">art. 6 · Ley 258/1996</span></div></div>
+      <div class="check"><span class="chip ok">Cumple</span>
+        <div class="body"><h4>Parágrafo de propiedad horizontal</h4>
+          <p>Régimen y coeficiente de copropiedad referenciados conforme al reglamento del conjunto.</p></div>
+        <div class="meta"><span class="tag">Ley 675/2001</span></div></div>
+      <div class="check"><span class="chip warn">Riesgo</span>
+        <div class="body"><h4>Certificado de tradición y libertad no aportado</h4>
+          <p>No se pudo verificar automáticamente la libertad de gravámenes ni la hipoteca previa declarada. Requiere folio vigente (menos de 30 días) para confirmar el estado jurídico del bien.</p></div>
+        <div class="meta"><span class="tag sev">Severidad: devolución en registro</span><span class="tag">Ley 1579/2012</span></div></div>
+      <div class="check"><span class="chip warn">Advertencia</span>
+        <div class="body"><h4>Paz y salvo de administración no relacionado</h4>
+          <p>Tratándose de propiedad horizontal, conviene relacionar el paz y salvo de la administración entre los anexos.</p></div>
+        <div class="meta"><span class="tag">Ley 675/2001</span></div></div>
+      <div class="check"><span class="chip warn">Advertencia</span>
+        <div class="body"><h4>Vigencia del representante del banco</h4>
+          <p>Si el Banco Davivienda comparece por apoderado, verificar poder vigente y certificado de existencia y representación (menos de 30 días).</p></div>
+        <div class="meta"><span class="tag">representación</span></div></div>
+      <div class="check"><span class="chip crit">Verificar</span>
+        <div class="body"><h4>Consentimiento del cónyuge de los vendedores</h4>
+          <p>Se declaró que el bien <b>no</b> está afectado a vivienda familiar. Si el folio mostrara la afectación, se requeriría el consentimiento del cónyuge para enajenar. El motor no puede confirmarlo sin el certificado de tradición: <b>decisión reservada al notario</b>.</p></div>
+        <div class="meta"><span class="tag sev">Severidad: impide otorgar si aplica</span><span class="tag">art. 3 · Ley 258/1996</span></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>Demostración con datos ficticios</b> — no es una escritura real ni un documento de la Notaría 16. Personas, cédulas, matrículas y valores son inventados para ilustrar el flujo <b>preguntas → construcción → verificación</b> a partir de un único documento de referencia.</p>
+    <p>El estilo (voz, ordinales, formato de calificación, cláusulas propias) se aprende del documento; los <b>datos siempre vienen del caso</b>, nunca del documento de referencia. Las citas normativas son ilustrativas y deben validarse contra fuente oficial en el normograma.</p>
+  </footer>
+</div>

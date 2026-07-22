@@ -1,0 +1,289 @@
+<title>Editor del protocolista — vincular, biblioteca y control de cambios (Ecosistema Notarial)</title>
+<style>
+  :root{
+    --paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;
+    --chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;
+    --accent:#31456E;--accent-tint:#EEF1F7;
+    --hl:#FCE96A;--hl-ink:#5A1712;--hl-line:#C9A400;
+    --ins:#1E7A44;--ins-bg:rgba(46,125,83,.14);--del:#B23B3B;--del-bg:rgba(178,59,59,.12);
+    --ok:#2E7D53;--free:#8A9AB8;
+    --shadow:0 1px 2px rgba(20,22,26,.05),0 12px 32px rgba(20,22,26,.08);
+    --serif:Georgia,"Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--hl:#F2DE52;--hl-ink:#2A0E0A;--hl-line:#B79A18;--ins:#7FD3A0;--ins-bg:rgba(108,192,140,.16);--del:#E58A8A;--del-bg:rgba(224,124,124,.16);--ok:#6CC08C;--free:#6E7C97;--shadow:0 1px 2px rgba(0,0,0,.3),0 14px 40px rgba(0,0,0,.45);}}
+  :root[data-theme="light"]{--paper:#FBFAF7;--ink:#1B1E23;--ink-soft:#4A5058;--ink-faint:#7A828C;--chrome:#26314B;--line:#E4E1D8;--line-strong:#CFCBBE;--accent:#31456E;--accent-tint:#EEF1F7;--hl:#FCE96A;--hl-ink:#5A1712;--hl-line:#C9A400;--ins:#1E7A44;--ins-bg:rgba(46,125,83,.14);--del:#B23B3B;--del-bg:rgba(178,59,59,.12);--ok:#2E7D53;--free:#8A9AB8;}
+  :root[data-theme="dark"]{--paper:#181A1E;--ink:#E8E6E0;--ink-soft:#B4B7BD;--ink-faint:#868B93;--chrome:#0F1116;--line:#2B2E35;--line-strong:#3A3E47;--accent:#8FA6D6;--accent-tint:#1D2432;--hl:#F2DE52;--hl-ink:#2A0E0A;--hl-line:#B79A18;--ins:#7FD3A0;--ins-bg:rgba(108,192,140,.16);--del:#E58A8A;--del-bg:rgba(224,124,124,.16);--ok:#6CC08C;--free:#6E7C97;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .top{background:var(--chrome);color:#EDEFF4;padding:22px 20px;}
+  .top-inner{max-width:1320px;margin:0 auto;}
+  .flag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#F4D9CE;background:rgba(178,58,46,.22);border:1px solid rgba(232,119,106,.4);padding:5px 11px;border-radius:999px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(21px,3vw,28px);margin:12px 0 5px;}
+  .top p{margin:0;color:#B9C1D4;max-width:82ch;font-size:13.5px;}
+
+  .app{max-width:1320px;margin:16px auto;padding:0 20px 70px;display:grid;grid-template-columns:1fr 330px;gap:18px;align-items:start;}
+  @media (max-width:960px){.app{grid-template-columns:1fr;}}
+
+  .toolbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 90%,var(--ink) 4%);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:11px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;box-shadow:var(--shadow);margin-bottom:14px;}
+  .tb-btn{font-family:var(--sans);font-size:13px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer;min-width:32px;}
+  .tb-btn:hover{background:var(--accent-tint);border-color:var(--accent);}
+  .tb-btn b,.tb-btn i,.tb-btn u{font-family:Georgia,serif;}
+  .tb-btn.link{border-color:var(--hl-line);color:var(--hl-ink);background:color-mix(in srgb,var(--hl) 45%,transparent);}
+  #btnTrack.on{background:var(--del);border-color:var(--del);color:#fff;}
+  .tb-sep{width:1px;height:22px;background:var(--line-strong);margin:0 3px;}
+  #trackActions{display:flex;gap:6px;}
+  .tb-note{font-size:11.5px;color:var(--ink-faint);margin-left:auto;}
+
+  .sheet{background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow);padding:clamp(20px,3vw,40px);font-family:var(--serif);font-size:15px;line-height:1.9;}
+  .sheet:focus{outline:none;}
+  .sheet h4{font-family:var(--sans);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);text-align:center;margin:0 0 18px;font-weight:700;}
+  .sheet p{margin:0 0 14px;text-align:justify;}
+  .clh{font-weight:700;}
+  .campo{background:var(--hl);color:var(--hl-ink);border-bottom:2px solid var(--hl-line);border-radius:3px;padding:0 3px;font-weight:600;white-space:pre-wrap;}
+  .campo:focus{outline:2px solid var(--hl-line);outline-offset:1px;}
+  .campo.flash{animation:fl 1.1s ease;}
+  @keyframes fl{0%,30%{box-shadow:0 0 0 4px color-mix(in srgb,var(--hl) 60%,transparent);}100%{box-shadow:none;}}
+  ins.track{text-decoration:none;color:var(--ins);background:var(--ins-bg);border-radius:2px;padding:0 1px;}
+  del.track{color:var(--del);background:var(--del-bg);border-radius:2px;padding:0 1px;}
+  @media (prefers-reduced-motion:reduce){.campo.flash{animation:none;}}
+
+  .side{position:sticky;top:14px;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 20px);overflow:auto;}
+  .panel{background:color-mix(in srgb,var(--paper) 100%,var(--ink) 3%);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:15px 16px;}
+  .panel h3{font-family:var(--serif);font-size:15px;margin:0 0 3px;font-weight:600;}
+  .panel .sub{font-size:11.5px;color:var(--ink-faint);margin:0 0 12px;}
+  .fld{margin-bottom:9px;}
+  .fld label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .fld input{width:100%;font-family:var(--sans);font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;padding:6px 9px;}
+  .fld input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .fld .cnt{font-size:10px;color:var(--ink-faint);margin-top:2px;font-family:var(--mono);}
+  .bib-btn{display:block;width:100%;text-align:left;font-family:var(--sans);font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;cursor:pointer;margin-bottom:6px;}
+  .bib-btn:hover{background:var(--accent-tint);border-color:var(--accent);}
+  .bib-btn small{display:block;color:var(--ink-faint);font-size:10.5px;margin-top:1px;}
+  .legend{font-size:12px;color:var(--ink-soft);line-height:1.75;}
+  .legend .sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px;}
+  .legend .swy{background:var(--hl);border-bottom:2px solid var(--hl-line);}
+  .legend .swi{background:var(--ins-bg);border-bottom:1px solid var(--ins);}
+  .legend .swd{background:var(--del-bg);border-bottom:1px solid var(--del);}
+  pre.json{background:var(--chrome);color:#D8E0F0;font-family:var(--mono);font-size:11px;line-height:1.5;border-radius:9px;padding:12px;overflow:auto;margin:0;max-height:170px;}
+  .status{font-size:12px;color:var(--ok);font-weight:600;min-height:16px;margin-top:4px;}
+  footer{max-width:1320px;margin:0 auto;padding:8px 20px 60px;color:var(--ink-faint);font-size:12px;line-height:1.6;}
+</style>
+
+<div class="top"><div class="top-inner">
+  <span class="flag">✎ Prueba de concepto · zona de trabajo del protocolista</span>
+  <h1>Editor: vincular, biblioteca y control de cambios</h1>
+  <p>Documento editable como Word. <b>Selecciona texto y 🔗 Vincula</b> para convertirlo en campo que cascadea. <b>Inserta cláusulas</b> aprobadas desde la biblioteca. Activa <b>🔴 Control de cambios</b> y todo lo que escribas o borres queda en rojo/verde para que el notario revise, con <b>Aceptar/Rechazar</b>.</p>
+</div></div>
+
+<div class="app">
+  <div>
+    <div class="toolbar" id="toolbar">
+      <button class="tb-btn" data-cmd="bold" title="Negrita"><b>B</b></button>
+      <button class="tb-btn" data-cmd="italic" title="Cursiva"><i>I</i></button>
+      <button class="tb-btn" data-cmd="underline" title="Subrayado"><u>U</u></button>
+      <button class="tb-btn" data-cmd="insertUnorderedList" title="Lista">•</button>
+      <button class="tb-btn" data-cmd="undo" title="Deshacer">↶</button>
+      <button class="tb-btn" data-cmd="redo" title="Rehacer">↷</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn link" data-act="vincular" title="Vincular la selección como campo">🔗 Vincular</button>
+      <button class="tb-btn" data-act="desvincular" title="Convertir el campo del cursor en texto libre">🔓 Desvincular</button>
+      <span class="tb-sep"></span>
+      <button class="tb-btn" id="btnTrack" data-act="track" title="Activar/desactivar control de cambios">🔴 Control de cambios</button>
+      <span id="trackActions" hidden>
+        <button class="tb-btn" data-act="accept" title="Aceptar todos los cambios">✓ Aceptar</button>
+        <button class="tb-btn" data-act="reject" title="Rechazar todos los cambios">✕ Rechazar</button>
+      </span>
+      <span class="tb-note" id="note">Selecciona y aplica · o edita libremente</span>
+    </div>
+
+    <article class="sheet" id="editor" contenteditable="true" spellcheck="false">
+      <h4>Escritura pública — Compraventa (fragmento de demostración)</h4>
+      <p>En la ciudad de Medellín, Departamento de Antioquia, a los catorce (14) días del mes de agosto de dos mil veintiséis (2026), ante el Notario Dieciséis del Círculo de Medellín, compareció <span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span>, mayor de edad, identificada con la cédula de ciudadanía número <span class="campo" data-field="cedula">1.017.884.330</span>, quien manifestó:</p>
+      <p><span class="clh">PRIMERO: OBJETO.</span> Que adquiere a título de compraventa el inmueble con FOLIO DE MATRÍCULA INMOBILIARIA NRO. <span class="campo" data-field="matricula">001-1502334</span>, ubicado en la Calle 30 Sur #27-45 de Envigado.</p>
+      <p><span class="clh">CUARTO: PRECIO.</span> El precio de la venta es la suma de <span class="campo" data-field="precio">CUATROCIENTOS VEINTE MILLONES DE PESOS ($420.000.000)</span>, que se cancela en la forma prevista en la cláusula siguiente.</p>
+      <p><span class="clh">QUINTO: FORMA DE PAGO.</span> El precio se cancela así: la suma de CIENTO VEINTE MILLONES DE PESOS ($120.000.000) que la compradora entrega con la redención de un CDT que se hará efectivo el 30 de septiembre de 2026; y el saldo con el desembolso de un crédito hipotecario, condicionado a la venta previa del inmueble de matrícula 050-987654 de propiedad de la compradora.</p>
+      <p style="margin-top:30px;text-align:center">_______________________________<br><span class="campo" data-field="comprador">LAURA XIMENA ORTIZ VÉLEZ</span><br><span style="font-family:var(--sans);font-size:11px;color:var(--ink-soft)">C.C. <span class="campo" data-field="cedula">1.017.884.330</span> — Compradora</span></p>
+    </article>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h3>Datos del caso (vinculados)</h3>
+      <p class="sub">Editar aquí actualiza el documento; editar en el documento actualiza aquí.</p>
+      <div id="vinculados"></div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="panel">
+      <h3>📚 Biblioteca de la notaría</h3>
+      <p class="sub">Cláusulas aprobadas. Se insertan donde está el cursor, con sus campos ya marcados.</p>
+      <div id="biblioteca"></div>
+    </div>
+    <div class="panel">
+      <h3>Leyenda</h3>
+      <p class="legend"><span class="sw swy"></span><b>Campo vinculado</b> — cascadea al caso.<br><span class="sw swi"></span><b>Inserción</b> (control de cambios).<br><span class="sw swd"></span><b>Eliminación</b> (control de cambios).</p>
+    </div>
+    <div class="panel">
+      <h3>Lo que se guarda</h3>
+      <pre class="json" id="json"></pre>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <b>Prueba de concepto — datos ficticios.</b> Reproduce la zona de trabajo del protocolista al estilo <b>OnlyOffice</b>: content controls (campos ligados al caso), texto enriquecido, biblioteca por notaría e <b>control de cambios</b>. Aquí el tracked-changes es una demostración simplificada (inserciones/eliminaciones y aceptar/rechazar); en producción lo provee OnlyOffice de forma robusta. No re-renderiza el documento: parcha solo lo que cambia.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var editor=document.getElementById('editor');
+  var state={}, fieldSeq=0, track=false, statusT=null;
+  var fieldMeta={comprador:{label:'Compradora — nombre'},cedula:{label:'Cédula'},matricula:{label:'Matrícula inmobiliaria'},precio:{label:'Precio (texto)'},inicial:{label:'Cuota inicial'},saldo:{label:'Saldo con crédito'},banco:{label:'Banco acreedor'},servidumbre:{label:'Servidumbre'}};
+  function g(s,r){return (r||document).querySelector(s);}
+  function all(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+  function esc(s){return (s==null?'':''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function escA(s){return esc(s).replace(/"/g,'&quot;');}
+  function say(m){ g('#status').textContent=m; clearTimeout(statusT); statusT=setTimeout(function(){g('#status').textContent='';},1800); }
+  function flash(el){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(function(){el.classList.remove('flash');},1100); }
+
+  function docFields(){ var seen={},out=[]; all('#editor .campo').forEach(function(el){ var f=el.dataset.field; if(!seen[f]){seen[f]=1;out.push(f);} }); return out; }
+  function copies(f){ return all('#editor .campo[data-field="'+f+'"]'); }
+  function snapshot(){ state={}; docFields().forEach(function(f){ var e=g('#editor .campo[data-field="'+f+'"]'); state[f]=e?e.textContent:''; }); }
+
+  /* ---------- cascada ---------- */
+  function cascade(field,value,source){
+    copies(field).forEach(function(el){ if(el!==source && el.textContent!==value){ el.textContent=value; flash(el);} });
+    var inp=g('#vinculados input[data-field="'+field+'"]');
+    if(inp){ if(inp!==document.activeElement && inp.value!==value) inp.value=value; var c=inp.parentNode.querySelector('.cnt'); if(c) c.textContent=value.length+' car. · '+copies(field).length+' copia(s)'; }
+    state[field]=value; dumpJSON();
+  }
+  function rebuildPanel(){
+    var fs=docFields(), h='';
+    fs.forEach(function(f){ var e=g('#editor .campo[data-field="'+f+'"]'), v=e?e.textContent:''; var lab=(fieldMeta[f]&&fieldMeta[f].label)||f;
+      h+='<div class="fld"><label>'+esc(lab)+'</label><input data-field="'+escA(f)+'" value="'+escA(v)+'"><div class="cnt">'+v.length+' car. · '+copies(f).length+' copia(s)</div></div>'; });
+    if(!fs.length) h='<p class="sub">No hay campos vinculados. Selecciona texto y pulsa 🔗 Vincular.</p>';
+    g('#vinculados').innerHTML=h; dumpJSON();
+  }
+  function dumpJSON(){ var o={}; docFields().forEach(function(f){ var e=g('#editor .campo[data-field="'+f+'"]'); o[f]=e?e.textContent:''; }); g('#json').textContent=JSON.stringify(o,null,2); }
+
+  g('#vinculados').addEventListener('input',function(e){ var t=e.target; if(t.matches&&t.matches('input[data-field]')){ cascade(t.dataset.field,t.value,null); say('Documento actualizado desde el panel'); } });
+
+  /* edición directa en el documento (sin control de cambios) */
+  editor.addEventListener('input',function(){
+    if(track){ snapshot(); rebuildPanel(); return; }
+    var ch=false;
+    docFields().forEach(function(f){ var els=copies(f); for(var i=0;i<els.length;i++){ if(els[i].textContent!==state[f]){ cascade(f,els[i].textContent,els[i]); ch=true; break; } } });
+    if(!ch) dumpJSON();
+  });
+
+  /* ---------- vincular / desvincular ---------- */
+  function vincular(){
+    var sel=window.getSelection(); if(!sel.rangeCount||sel.isCollapsed){ say('Selecciona primero el texto a vincular'); return; }
+    var range=sel.getRangeAt(0);
+    if(!editor.contains(range.commonAncestorContainer)){ say('Selecciona dentro del documento'); return; }
+    if(range.cloneContents().querySelector('.campo')){ say('La selección ya incluye un campo'); return; }
+    var text=range.toString(); if(!text.trim()){ return; }
+    var id='campo'+(++fieldSeq);
+    var span=document.createElement('span'); span.className='campo'; span.setAttribute('data-field',id); span.textContent=text;
+    fieldMeta[id]={label:'Vinculado '+fieldSeq};
+    range.deleteContents(); range.insertNode(span);
+    var r=document.createRange(); r.setStartAfter(span); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+    snapshot(); rebuildPanel(); flash(span); say('Texto vinculado — ahora cascadea');
+  }
+  function desvincular(){
+    var sel=window.getSelection(); if(!sel.rangeCount) return;
+    var n=sel.anchorNode; n=n&&n.nodeType===3?n.parentElement:n;
+    var campo=n&&n.closest?n.closest('.campo'):null;
+    if(!campo){ say('Pon el cursor dentro de un campo para desvincularlo'); return; }
+    campo.parentNode.replaceChild(document.createTextNode(campo.textContent),campo);
+    editor.normalize(); snapshot(); rebuildPanel(); say('Campo desvinculado — ahora es texto libre');
+  }
+
+  /* ---------- biblioteca ---------- */
+  var BIBLIO=[
+    {t:'Forma de pago — contado', d:'El precio se paga de contado', html:'<p><span class="clh">FORMA DE PAGO.</span> El precio se paga de contado en su totalidad, suma que la parte vendedora declara recibida a entera satisfacción.</p>'},
+    {t:'Forma de pago — crédito hipotecario', d:'Cuota inicial + saldo con crédito', html:'<p><span class="clh">FORMA DE PAGO.</span> La cuota inicial de <span class="campo" data-field="inicial">$0</span> con recursos propios, y el saldo de <span class="campo" data-field="saldo">$0</span> con el desembolso de un crédito hipotecario ante <span class="campo" data-field="banco">EL BANCO</span>.</p>'},
+    {t:'Saneamiento', d:'Garantía y saneamiento', html:'<p><span class="clh">SANEAMIENTO.</span> La parte vendedora garantiza la propiedad del inmueble, libre de gravámenes y limitaciones, y se obliga al saneamiento por evicción o vicios redhibitorios.</p>'},
+    {t:'Renuncia a condición resolutoria', d:'Título firme e irresoluble', html:'<p><span class="clh">RENUNCIA A LA RESOLUTORIA.</span> No obstante la forma de pago, la parte vendedora renuncia a la acción resolutoria y otorga título firme e irresoluble.</p>'},
+    {t:'Servidumbre', d:'Con servidumbre a favor de predio vecino', html:'<p><span class="clh">SERVIDUMBRE.</span> El inmueble se transfiere con la servidumbre de <span class="campo" data-field="servidumbre">tránsito</span> a favor del predio vecino, que la compradora declara conocer y aceptar.</p>'}
+  ];
+  function renderBiblio(){ g('#biblioteca').innerHTML=BIBLIO.map(function(it,i){ return '<button class="bib-btn" data-bib="'+i+'">'+esc(it.t)+'<small>'+esc(it.d)+'</small></button>'; }).join(''); }
+  function currentTopBlock(){ var sel=window.getSelection(); if(!sel.rangeCount) return null; var n=sel.anchorNode; n=n&&n.nodeType===3?n.parentElement:n; if(!n||!editor.contains(n)) return null; while(n.parentNode!==editor) n=n.parentNode; return n; }
+  function insertBiblio(i){
+    var item=BIBLIO[i]; var frag=document.createRange().createContextualFragment(item.html);
+    var newBlock=frag.firstChild; var ref=currentTopBlock();
+    if(ref&&ref.nextSibling) editor.insertBefore(frag,ref.nextSibling); else editor.appendChild(frag);
+    snapshot(); rebuildPanel();
+    if(newBlock&&newBlock.scrollIntoView) newBlock.scrollIntoView({block:'center'});
+    say('Cláusula insertada: '+item.t);
+  }
+  g('#biblioteca').addEventListener('click',function(e){ var b=e.target.closest('[data-bib]'); if(b) insertBiblio(+b.dataset.bib); });
+
+  /* ---------- control de cambios (tracked changes, demo) ---------- */
+  function refreshTracked(){ snapshot(); rebuildPanel(); }
+  function leftIns(range){
+    var c=range.startContainer, off=range.startOffset;
+    if(c.nodeType===3){ var p=c.parentElement; var i=p&&p.closest?p.closest('ins.track'):null; if(i) return i;
+      if(off===0){ var prev=c.previousSibling; if(prev&&prev.nodeType===1&&prev.matches('ins.track')) return prev; } return null; }
+    var node=c.childNodes[off-1]; return (node&&node.nodeType===1&&node.matches&&node.matches('ins.track'))?node:null;
+  }
+  function insTracked(text){
+    if(text==null||text==='') return; var sel=window.getSelection(); if(!sel.rangeCount) return;
+    var range=sel.getRangeAt(0); if(!range.collapsed) range.deleteContents();
+    var ins=leftIns(range), tn=document.createTextNode(text);
+    if(ins){ ins.appendChild(tn); }
+    else { ins=document.createElement('ins'); ins.className='track'; ins.appendChild(tn); range.insertNode(ins); }
+    var r=document.createRange(); r.setStartAfter(tn); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+    refreshTracked();
+  }
+  function delTracked(inputType){
+    var sel=window.getSelection(); if(!sel.rangeCount) return; var range=sel.getRangeAt(0);
+    var forward=inputType.indexOf('Forward')>=0;
+    if(range.collapsed){ if(!sel.modify) return; sel.modify('extend', forward?'forward':'backward', inputType.indexOf('Word')>=0?'word':'character'); range=sel.getRangeAt(0); if(range.collapsed) return; }
+    var content=range.extractContents();
+    // si lo que borro es solo una inserción mía sin confirmar, desaparece (no deja marca)
+    var onlyIns=true; Array.prototype.forEach.call(content.childNodes,function(n){ if(!(n.nodeType===1&&n.matches&&n.matches('ins.track'))) onlyIns=false; });
+    if(!onlyIns){ var del=document.createElement('del'); del.className='track'; del.appendChild(content); range.insertNode(del); range.setStartAfter(del); }
+    range.collapse(true); sel.removeAllRanges(); sel.addRange(range); refreshTracked();
+  }
+  editor.addEventListener('beforeinput',function(e){
+    if(!track) return; var it=e.inputType;
+    if(it==='insertText'){ e.preventDefault(); insTracked(e.data); }
+    else if(it==='insertFromPaste'){ e.preventDefault(); var t=e.dataTransfer?e.dataTransfer.getData('text/plain'):''; insTracked(t); }
+    else if(it.indexOf('delete')===0){ e.preventDefault(); delTracked(it); }
+  });
+  function setTrack(on){ track=on; editor.classList.toggle('tracking',on); g('#btnTrack').classList.toggle('on',on); g('#trackActions').hidden=!on; say(on?'Control de cambios ACTIVADO — escribe/borra y verás el rojo':'Control de cambios desactivado'); }
+  function acceptChanges(){ all('#editor ins.track').forEach(function(n){ var f=document.createDocumentFragment(); while(n.firstChild) f.appendChild(n.firstChild); n.parentNode.replaceChild(f,n); }); all('#editor del.track').forEach(function(n){ n.parentNode.removeChild(n); }); editor.normalize(); refreshTracked(); say('Cambios aceptados'); }
+  function rejectChanges(){ all('#editor ins.track').forEach(function(n){ n.parentNode.removeChild(n); }); all('#editor del.track').forEach(function(n){ var f=document.createDocumentFragment(); while(n.firstChild) f.appendChild(n.firstChild); n.parentNode.replaceChild(f,n); }); editor.normalize(); refreshTracked(); say('Cambios rechazados'); }
+
+  /* ---------- barra de herramientas ---------- */
+  g('#toolbar').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return; e.preventDefault();
+    if(b.dataset.cmd){ editor.focus(); document.execCommand(b.dataset.cmd,false,null); return; }
+    var a=b.dataset.act;
+    if(a==='vincular') vincular();
+    else if(a==='desvincular') desvincular();
+    else if(a==='track') setTrack(!track);
+    else if(a==='accept') acceptChanges();
+    else if(a==='reject') rejectChanges();
+  });
+
+  /* ---------- recepción del borrador del wizard ---------- */
+  function loadHandoff(){
+    var raw; try{ raw=localStorage.getItem('easypro_editor_handoff'); }catch(e){ return false; }
+    if(!raw) return false;
+    var d; try{ d=JSON.parse(raw); }catch(e){ return false; }
+    if(!d||!d.html) return false;
+    if(d.labels) for(var k in d.labels){ fieldMeta[k]={label:d.labels[k]}; }
+    editor.innerHTML='<h4>Escritura pública — borrador recibido del asistente de captura</h4>'+d.html;
+    var when=d.ts?new Date(d.ts):null;
+    g('#note').textContent='Borrador recibido del wizard'+(when?' · '+when.toLocaleTimeString():'')+' — edítalo, vincula, inserta cláusulas o activa control de cambios';
+    return true;
+  }
+
+  /* init */
+  var got=loadHandoff();
+  renderBiblio(); snapshot(); rebuildPanel();
+  if(got) say('Documento cargado desde el wizard — '+docFields().length+' campos vinculados');
+})();
+</script>
