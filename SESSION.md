@@ -1,6 +1,103 @@
 ﻿# SESSION.md â€” EasyProNotarial-2
 
 ---
+## Sesión 2026-07-22 — Port de "Escritura asistida" al software (front + back + BD) + salida en producción
+
+**Objetivo de la sesión:** Llevar el prototipo HTML congelado `escritura-asistida.html` al software real (Next.js + FastAPI + BD), reutilizando la infraestructura existente y SIN reprocesar; construir la capa de corpus jurídico real (normas verificadas contra fuente oficial); y dejarlo **visible y funcionando** para el usuario, accesible desde el menú lateral.
+
+### Modelo de trabajo usado
+- **Codex escribe el código**, los prompts los co-diseñamos aquí, y yo (Claude) **reviso cada PR en GitHub y hago el merge**. El HTML congelado (`docs/ecosistema-notarial/prototipos/escritura-asistida.html`) es la ESPECIFICACIÓN — nunca se modifica; el motor TS se porta 1:1 y se valida con golden tests (equivalencia byte a byte).
+- Los prompts para Codex quedaron guardados en `docs/ecosistema-notarial/prompts/` (WP-0 a WP-5 + Bloques A/B/C/D + briefs para GPT).
+
+**Realizado (todo mergeado a `main`, commit final `fc02318` vía PR #142 — fast-forward, 55 commits):**
+
+- **3.er acto — Cancelación de hipoteca** (commit `ebe1da8`): extraído del corpus real de la Notaría 16 (5 documentos de cancelación). Acto sin cuantía, inmueble liberado, banco/apoderado, firma fuera de sede. Sumado como 3.ª tarjeta en el lanzador.
+
+- **WP-0 (ADR + plan)** (`4c26c61`, `43ba224`): decisiones de arquitectura y plan detallado del port (`plan-port-software.md`, `adr-escritura-asistida.md`).
+
+- **WP-1 — Corpus jurídico: esquema + migración + seed + vigencia** (PR #133, `59fd981`): modelos SQLAlchemy `legal_norma`, `norma_relacion`, `clausula`, `regla`, `tarifa`, `jurisprudencia`. Vigencia temporal artículo por artículo, **doble estado** (vigencia_formal / aplicabilidad_operativa), regla "nunca borrar, versionar", filtro por **fecha de otorgamiento**. (Nota: el 1.er PR de Codex venía sobre un checkout STALE `easypro2/`; se corrigió re-basando en la rama con `backend/` en la RAÍZ.)
+
+- **WP-2 — Motor determinístico en TypeScript + golden tests** (PR #134, `9e52677`): `frontend/lib/motor-escritura/index.ts` portado 1:1 del JS del HTML. Golden fixtures (compraventa, compraventa+hipoteca, cancelación) que garantizan equivalencia byte a byte con el HTML congelado. `generar(acto, state, corpus?)`.
+
+- **WP-3 — API backend de escritura asistida** (PR #135, `2bdf55c`): `backend/app/modules/escritura/router.py`. Motor de reglas server-side (`escritura_reglas.py`): recalcula desde el corpus y devuelve **409 en BLOCK** (no confía en el cliente).
+
+- **WP-4 — UI de Captura** (PR #136, `bd8bf38`): componentes `frontend/components/escritura/` (workspace, form, preview + `.module.css`, panel de cumplimiento, panel de liquidación).
+
+- **WP-5 — Editor propio (modo Redacción)** (PR #137, `1c573d2`): editor tipo HTML (NO OnlyOffice — decisión del usuario: "creamos nuestro editor como el HTML").
+
+- **Bloque A — Corpus vivo + RAG + gobernanza** (PR #138, `473b1cc`): `legal_rag.py`, `legal_gobernanza.py`, `legal_corpus.py`. Citas desde corpus/RAG, no inventadas por el modelo.
+
+- **Bloque B — Gari (capa IA)** (PR #139, `5483e02`): `escritura_gari.py`. Principio de frontera: **Gari sugiere + humano valida**; el motor determinístico manda; el notario decide.
+
+- **Bloque C — Compraventa de todo tipo, lote 1** (PR #140, `1b96f3c`): varios inmuebles (matrícula/linderos por inmueble), estado del folio (segregado → Ley 1579/2012; falsa tradición → Ley 1561/2012), encadenamientos en orden canónico (cancelación hipoteca previa → cancelación patrimonio familia → afectación vivienda familiar).
+
+- **Bloque D — Compraventa de todo tipo, lote 2** (PR #141, `c596a9a`): extranjería/divisas (Banco de la República, Circular DCIN, canalización mercado cambiario, registro inversión extranjera), predio rural/UAF/baldíos (arts. 39 y 72 Ley 160/1994, autorización ANT, derecho de preferencia), capacidad/representación/apoyos (venta de bien de menor, discapacidad con apoyos — redacción incluyente, nunca "incapaz").
+
+- **Entrada de UI** (`ffa1b73`, `194eaaf`): botón "✒ Escritura asistida" en el detalle del caso (`/dashboard/casos/[caseId]/escritura`) + ítem **"Escritura asistida"** en el menú lateral (`/dashboard/escritura`, landing que lista los casos reales).
+
+- **Merge a producción** (PR #142, `fc02318`): la rama `claude/notaria16-escritura-asistida-fsro6n` se mergeó a `main` (fast-forward limpio). **Verificado corriendo en el navegador del usuario**: menú → landing de casos → workspace con las 3 tarjetas de acto. `npx next build` pasa limpio con las rutas `/dashboard/escritura` y `/dashboard/casos/[caseId]/escritura`.
+
+### Lo que hizo GPT (verificación normativa — corpus capa 3)
+- **1.ª verificación (67 normas)** — aplicada en commit `99156fa`. GPT cotejó las 67 normas contra **fuente oficial** (Gestor Normativo de Función Pública, compilaciones oficiales) y entregó: **URL oficial, texto del artículo, vigencia y nivel de confianza** por norma. Se aplicaron esos 4 campos al corpus.
+  - **Importante:** NO se pisó el campo `estado` para no importar una clasificación dudosa ni alterar la aplicabilidad operativa del motor. Las **discrepancias de estado** (nuestro → GPT) quedaron listadas en `corpus-juridico/reporte-conflictos-gpt-2026-07-21.md` para **decisión del notario**. Ejemplos: Dcto-ley 960/1970 arts. 13/14/38/39 (nosotros "modificada" → GPT "vigente"); Dcto 1069/2015 y Ley 1579/2012 (nosotros "vigente" → GPT "modificada"); C.C. art. 1521 ord. 4 → "derogada_parcial"; C.C. art. 1931 → "derogada_total" (derogado por Ley 45/1930).
+- **Correcciones de fuentes previas** aplicadas antes (verificación C1–C5, `verificacion-fuentes-2026-07-21.md`): registro → Ley 223/1995 art. 231; art. 12 Dcto 2148/1983 → art. 2.2.6.1.2.1.5 Dcto 1069/2015; retención personas jurídicas art. 401; exención 5000 UVT; Dcto 0732 modifica 1069.
+- **2.ª verificación (7 normas nuevas de baja)** — brief entregado a GPT en `docs/ecosistema-notarial/prompts/tarea-gpt-normas-nuevas-2.md`. **PENDIENTE:** GPT aún no ha devuelto el JSON; falta aplicarlo al corpus.
+
+### Estado del corpus jurídico (`corpus-juridico/*.json`) al cierre
+- `normas.json` → **74** registros
+- `reglas.json` → **40**
+- `clausulas.json` → **55**
+- `tarifas.json` → **13**
+- `jurisprudencia.json` → **5**
+- `norma_relaciones.json` → **6**
+
+**Archivos creados/modificados (principales):**
+- `frontend/lib/motor-escritura/index.ts` — motor determinístico TS (port 1:1 del HTML)
+- `frontend/lib/motor-escritura/__fixtures__/{compraventa,hipoteca,cancelacion}.json` + `README.md` — golden fixtures
+- `frontend/lib/motor-escritura/__tests__/{golden,unit,ramas-compraventa}.test.ts` — tests (motor + ramas todo-tipo)
+- `frontend/components/escritura/{escritura-workspace,escritura-form,escritura-preview(+.module.css),escritura-editor,cumplimiento-panel,liquidacion-panel,escritura-index}.tsx` — UI completa
+- `frontend/app/(app)/dashboard/escritura/page.tsx` — landing de casos
+- `frontend/lib/navigation.ts` — ítem "Escritura asistida" en el menú lateral (línea 36)
+- `frontend/components/cases/case-detail-workspace.tsx` — botón "✒ Escritura asistida" en el detalle del caso
+- `backend/app/modules/escritura/router.py` — API de escritura
+- `backend/app/services/{escritura_reglas,escritura_gari,legal_rag,legal_gobernanza,legal_corpus}.py` — reglas server-side, Gari, RAG, gobernanza, corpus
+- `backend/app/models/legal_*.py` — modelos del corpus jurídico
+- `corpus-juridico/*.json` — corpus (normas/reglas/cláusulas/tarifas/jurisprudencia/relaciones)
+- `corpus-juridico/reporte-conflictos-gpt-2026-07-21.md` — conflictos de estado para el notario
+- `docs/ecosistema-notarial/prompts/*.md` — prompts Codex (WP-0..5, Bloques A/B/C/D) + briefs GPT
+- `docs/ecosistema-notarial/{plan-port-software,adr-escritura-asistida}.md` — plan y decisiones
+- `docs/ecosistema-notarial/corpus-notaria16/capa-notaria16-cancelacion-hipoteca.md` — corpus del 3.er acto
+- `docs/ecosistema-notarial/corpus-juridico/verificacion-fuentes-2026-07-21.md` — correcciones C1–C5
+
+### Cómo queda funcionando (para retomar mañana)
+- **Repo real del usuario (Windows):** `C:\EasyProNotarial-2\easypro2` (ahí viven `.git` y `frontend/`). OJO: `C:\EasyProNotarial-2` NO es el repo, es la carpeta contenedora.
+- **Arranque limpio que SÍ funcionó** (evita el script PowerShell `dev` que se trababa por PATH):
+  ```powershell
+  cd C:\EasyProNotarial-2\easypro2
+  git fetch origin
+  git checkout main
+  git reset --hard origin/main   # garantiza el commit fc02318
+  cd frontend
+  npm run dev:next               # = next dev -H 127.0.0.1 -p 5179 (directo, sin el .ps1)
+  ```
+  Luego `http://127.0.0.1:5179` + **Ctrl+Shift+R**. Login `superadmin@easypro.co` / `ChangeMe123!`.
+- **Ruta en la app:** menú lateral → "Escritura asistida" → elegir caso → workspace con 3 actos (Compraventa · Compraventa+Hipoteca · Cancelación de hipoteca) → captura determinística + redacción manual + Generar documento.
+- El **ítem del menú NO depende del backend** (se renderiza desde `navigation.ts`); la **lista de casos** de la landing sí consume la API (`getCases`).
+
+**Pendientes para la próxima sesión:**
+1. **Aplicar la 2.ª verificación de GPT** (7 normas de baja): entregar/recibir el JSON de `docs/ecosistema-notarial/prompts/tarea-gpt-normas-nuevas-2.md` y aplicarlo al corpus.
+2. **Adjudicación del notario** de las discrepancias de `estado` en `corpus-juridico/reporte-conflictos-gpt-2026-07-21.md` (Dcto-ley 960/1970, Dcto 1069/2015, Ley 1579/2012, C.C. arts. 1521 y 1931, etc.).
+3. **Revisión visual a fondo** de los 3 actos con datos reales (recorrer captura → generar → cumplimiento/liquidación) y anotar ajustes de redacción/UX. Requiere backend + BD corriendo para cargar casos.
+4. **Extraer los documentos restantes** del corpus de la Notaría 16 (capa por-notaría de los demás actos) y seguir poblando el corpus.
+5. Conectar/afinar la **capa Gari (IA)** sobre la escritura una vez el corpus esté validado por el notario.
+
+**Estado al cierre:**
+- Backend: código en `main` (módulo escritura + servicios legales). Operativo al arrancar; no se dejó corriendo en esta sesión.
+- Frontend: **operativo y verificado en el navegador del usuario** (menú + landing + workspace con los 3 actos). `next build` limpio.
+- BD producción: sin migraciones nuevas aplicadas a producción esta sesión (el corpus vive en JSON + seed; verificación de GPT pendiente de 2.ª tanda).
+- Git: rama `claude/notaria16-escritura-asistida-fsro6n` **mergeada a `main`** (PR #142, `fc02318`). Árbol limpio.
+
+---
 ## Sesión 2026-07-20 — Ecosistema Notarial: "Escritura asistida"
 
 **Objetivo de la sesión:** Retomar el ecosistema notarial (contexto del doc `Ecosistema_notarial_19jul26`), analizar el corpus real de la Notaría 16, y evolucionar los prototipos hacia UNA sola herramienta lista para grabar demo.
