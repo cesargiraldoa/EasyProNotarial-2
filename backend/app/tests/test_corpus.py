@@ -280,6 +280,61 @@ class LegalCorpusTests(unittest.TestCase):
         self.assertIn("Acto previo - Cancelación de hipoteca previa", clausulas)
         self.assertIn("Acto posterior - Afectación a vivienda familiar", clausulas)
 
+    def test_ramas_especiales_compraventa_seed(self):
+        self._seed()
+        normas_baja = {
+            slug: self._norma_by_slug(slug).confianza
+            for slug in [
+                "ley-9-1991-regimen-cambiario",
+                "decreto-1068-2015-regimen-cambiario",
+                "resolucion-externa-jdbr-1-2018-regimen-cambiario",
+                "circular-dcin-banrep-regimen-cambiario",
+                "ley-160-1994-art-39",
+                "decreto-1429-2020-apoyos",
+            ]
+        }
+        self.assertEqual(set(normas_baja.values()), {"baja"})
+
+        reglas = {
+            row.codigo: row
+            for row in self.session.execute(
+                select(LegalRegla).where(
+                    LegalRegla.codigo.in_(
+                        [
+                            "compraventa_extranjero_no_residente_identificacion",
+                            "compraventa_divisas_declaracion_cambio_banrep",
+                            "compraventa_divisas_canalizacion_mercado_cambiario",
+                            "compraventa_extranjero_no_residente_registro_inversion",
+                            "compraventa_rural_predio_identificacion_sin_ph",
+                            "compraventa_rural_supera_uaf_sin_autorizacion",
+                            "compraventa_rural_baldio_restriccion_temporal",
+                            "compraventa_rural_derecho_preferencia_ant",
+                            "compraventa_venta_bien_menor_autorizacion",
+                            "compraventa_apoyos_acreditados_ley_1996",
+                        ]
+                    )
+                )
+            ).scalars()
+        }
+        self.assertEqual(len(reglas), 10)
+        self.assertEqual(reglas["compraventa_rural_supera_uaf_sin_autorizacion"].severidad, "BLOCK")
+        self.assertEqual(self._norma_slug(reglas["compraventa_divisas_declaracion_cambio_banrep"].norma_id), "circular-dcin-banrep-regimen-cambiario")
+
+        clausulas = {
+            row.titulo
+            for row in self.session.execute(
+                select(LegalClausula).where(LegalClausula.orden.in_([300, 310, 320]))
+            ).scalars()
+        }
+        self.assertEqual(
+            clausulas,
+            {
+                "Parágrafo - Extranjería, no residencia y divisas",
+                "Parágrafo - Predio rural, UAF y baldíos",
+                "Parágrafo - Capacidad, representación y apoyos",
+            },
+        )
+
     def test_jurisprudencia_verificada_seed(self):
         self._seed()
         providencias = {

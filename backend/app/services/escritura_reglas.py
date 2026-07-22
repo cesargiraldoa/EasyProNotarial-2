@@ -78,6 +78,23 @@ def _any_party_type(state: dict[str, Any], key: str, expected: str) -> bool:
     return any(isinstance(item, dict) and item.get("tipo") == expected for item in parties)
 
 
+def _any_party_doc(state: dict[str, Any], expected: set[str]) -> bool:
+    for key in ("V", "C"):
+        parties = state.get(key)
+        if not isinstance(parties, list):
+            continue
+        if any(isinstance(item, dict) and item.get("tipoDoc") in expected for item in parties):
+            return True
+    return False
+
+
+def _nested_bool(state: dict[str, Any], group: str, *keys: str) -> bool:
+    data = state.get(group)
+    if not isinstance(data, dict):
+        return False
+    return any(bool(data.get(key)) for key in keys)
+
+
 def _state_inmuebles(state: dict[str, Any]) -> list[dict[str, Any]]:
     raw = state.get("inmuebles")
     if isinstance(raw, list) and raw:
@@ -117,6 +134,36 @@ def _resolve_value(state: dict[str, Any], field: str) -> Any:
         return _encadenamiento_activo(state, "cancelacionPatrimonioFamilia")
     if field == "encadenamiento_afectacion_vivienda_familiar":
         return _encadenamiento_activo(state, "afectacionViviendaFamiliar")
+    if field == "parte_extranjera_no_residente":
+        return _nested_bool(state, "divisas", "parteExtranjeraNoResidente") or _any_party_doc(state, {"CE", "PA", "PPT"})
+    if field == "pago_divisas":
+        return _nested_bool(state, "divisas", "pagoDivisas")
+    if field == "registro_inversion_extranjera":
+        return _nested_bool(state, "divisas", "registroInversionExtranjera")
+    if field == "canalizacion_mercado_cambiario":
+        return _nested_bool(state, "divisas", "canalizacionMercadoCambiario")
+    if field == "poder_exterior_apostillado":
+        return _nested_bool(state, "divisas", "poderExteriorApostillado")
+    if field == "predio_rural":
+        return _nested_bool(state, "rural", "predioRural")
+    if field == "baldio_adjudicado":
+        return _nested_bool(state, "rural", "baldioAdjudicado")
+    if field == "baldio_restriccion_temporal":
+        return _nested_bool(state, "rural", "baldioAdjudicado") and _nested_bool(state, "rural", "restriccionTemporal")
+    if field == "supera_uaf":
+        return _nested_bool(state, "rural", "superaUaf")
+    if field == "autorizacion_ant":
+        return _nested_bool(state, "rural", "autorizacionAnt")
+    if field == "derecho_preferencia_agrario":
+        return _nested_bool(state, "rural", "derechoPreferencia")
+    if field == "venta_bien_menor":
+        return _nested_bool(state, "capacidad", "ventaBienMenor", "menorVendedor")
+    if field == "autorizacion_venta_menor":
+        return _nested_bool(state, "capacidad", "autorizacionVentaMenor")
+    if field == "discapacidad_con_apoyos":
+        return _nested_bool(state, "capacidad", "discapacidadConApoyos")
+    if field == "apoyo_acreditado":
+        return _nested_bool(state, "capacidad", "apoyoAcreditado")
 
     aliases = {
         "matricula_inmobiliaria": ("matricula", "cMatricula"),

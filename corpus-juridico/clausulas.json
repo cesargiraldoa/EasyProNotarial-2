@@ -674,5 +674,44 @@
     "vigencia_desde": null,
     "vigencia_hasta": null,
     "notas": "Mapa de situaciones dimensiones 3, 12 y 21: compra + afectación."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 300,
+    "titulo": "Parágrafo - Extranjería, no residencia y divisas",
+    "texto": "Cuando intervenga parte extranjera o no residente, o el precio se pague total o parcialmente en divisas, se deja constancia de la identificación con pasaporte, cédula de extranjería o PPT, la apostilla/legalización del poder otorgado en el exterior cuando aplique, la declaración de cambio, la canalización por el mercado cambiario y el registro de inversión extranjera ante el Banco de la República cuando proceda.",
+    "capa": "por_ley",
+    "norma_slug": "circular-dcin-banrep-regimen-cambiario",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensiones 4 y 16: extranjero/no residente, divisas e inversión extranjera. Norma cambiaria incorporada con confianza baja por no estar en la verificación oficial."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 310,
+    "titulo": "Parágrafo - Predio rural, UAF y baldíos",
+    "texto": "Si el inmueble es predio rural, se identifica sin propiedad horizontal, con cabida, linderos y UAF de referencia. Si proviene de baldío adjudicado, supera la UAF o tiene derecho de preferencia, se advierte que deben verificarse restricciones de enajenación/acumulación, autorización de la Agencia Nacional de Tierras y derecho de preferencia antes del otorgamiento o registro.",
+    "capa": "por_ley",
+    "norma_slug": "ley-160-1994-art-72",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensión 11: rural/UAF/baldíos. Art. 72 ya estaba en el corpus; art. 39 se agrega con confianza baja para derecho de preferencia."
+  },
+  {
+    "acto_code": "compraventa",
+    "orden": 320,
+    "titulo": "Parágrafo - Capacidad, representación y apoyos",
+    "texto": "Cuando se venda un bien de persona menor de edad, comparece su representante legal y se protocoliza la autorización judicial o notarial aplicable. La persona con discapacidad conserva capacidad legal plena; si utiliza apoyos, se acredita el acuerdo o adjudicación vigente y la persona de apoyo asiste sin sustituir su voluntad.",
+    "capa": "por_ley",
+    "norma_slug": "ley-1996-2019-art-6",
+    "notaria_id": 16,
+    "condicional": true,
+    "vigencia_desde": null,
+    "vigencia_hasta": null,
+    "notas": "Mapa de situaciones dimensión 2. Redacción evita lenguaje restrictivo sobre la capacidad y se apoya en Ley 1996/2019 arts. 6 y 15-16; Dcto 1429/2020 se agrega con confianza baja."
   }
 ]

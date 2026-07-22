@@ -318,6 +318,49 @@ class EscrituraApiTests(unittest.TestCase):
         bloqueantes = {item.codigo for item in hallazgos if item.severidad == "BLOCK"}
         self.assertIn("compraventa_varios_inmuebles_identificacion_individual", bloqueantes)
 
+    def test_evaluador_reglas_corpus_ramas_especiales_compraventa(self):
+        with self.Session() as session:
+            state = _valid_compraventa_state()
+            state.update(
+                {
+                    "C": [{"tipo": "natural", "tipoDoc": "PA", "nombre": "COMPRADOR EXTRANJERO"}],
+                    "divisas": {
+                        "parteExtranjeraNoResidente": True,
+                        "pagoDivisas": True,
+                        "canalizacionMercadoCambiario": False,
+                        "registroInversionExtranjera": False,
+                    },
+                    "rural": {
+                        "predioRural": True,
+                        "baldioAdjudicado": True,
+                        "restriccionTemporal": True,
+                        "superaUaf": True,
+                        "autorizacionAnt": False,
+                        "derechoPreferencia": True,
+                    },
+                    "capacidad": {
+                        "menorVendedor": True,
+                        "ventaBienMenor": True,
+                        "autorizacionVentaMenor": False,
+                        "discapacidadConApoyos": True,
+                        "apoyoAcreditado": False,
+                    },
+                }
+            )
+            hallazgos = evaluar_reglas(session, "compraventa", date(2026, 8, 14), state)
+
+        codigos = {item.codigo for item in hallazgos}
+        self.assertIn("compraventa_divisas_declaracion_cambio_banrep", codigos)
+        self.assertIn("compraventa_divisas_canalizacion_mercado_cambiario", codigos)
+        self.assertIn("compraventa_extranjero_no_residente_registro_inversion", codigos)
+        self.assertIn("compraventa_rural_supera_uaf_sin_autorizacion", codigos)
+        self.assertIn("compraventa_rural_baldio_restriccion_temporal", codigos)
+        self.assertIn("compraventa_venta_bien_menor_autorizacion", codigos)
+        self.assertIn("compraventa_apoyos_acreditados_ley_1996", codigos)
+
+        bloqueantes = {item.codigo for item in hallazgos if item.severidad == "BLOCK"}
+        self.assertEqual(bloqueantes, {"compraventa_rural_supera_uaf_sin_autorizacion"})
+
     def test_case_inexistente_responde_404(self):
         response = self.client.get("/api/v1/escritura/cases/999")
 
