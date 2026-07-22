@@ -150,6 +150,54 @@
   text-align: center;
 }
 
+/* Resaltado en vivo del último campo/sección editada (portado del prototipo) */
+.sheet :global(.hl) {
+  background: #fce96a !important;
+  color: #1b1e23 !important;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px #fce96a;
+  padding: 0 1px;
+}
+
+.sheet :global(.hl-sec) {
+  background: color-mix(in srgb, #fce96a 45%, transparent);
+  border-radius: 5px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #fce96a 45%, transparent);
+}
+
+.sheet :global(.flash) {
+  animation: escrituraFlash 1.5s ease;
+}
+
+.sheet :global([data-sec]),
+.sheet :global([data-f]) {
+  scroll-margin-top: 16px;
+}
+
+/* Badge de cita con norma conocida → cursor de ayuda + subrayado punteado */
+.sheet :global(.cite.tip-norma) {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+@keyframes escrituraFlash {
+  0%,
+  20% {
+    background-color: color-mix(in srgb, #fce96a 55%, transparent);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet :global(.flash) {
+    animation: none;
+  }
+}
+
 .editorSheet {
   min-height: 70vh;
   outline: none;
@@ -299,4 +347,10 @@
   font-weight: 700;
   margin-left: 3px;
   padding: 1px 5px;
+}
+
+.liquidacionHtml :global(.cite.tip-norma) {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }

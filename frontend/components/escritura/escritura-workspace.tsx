@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, Bot, Check, FileDown, Home, Landmark, Loader2, PencilLine, Save, ScrollText, SearchCheck, ShieldCheck, Upload, WandSparkles } from "lucide-react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
+import { ArrowLeft, Bot, Check, FileDown, Home, Landmark, Loader2, PencilLine, Printer, Save, ScrollText, SearchCheck, ShieldCheck, Upload, WandSparkles } from "lucide-react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
 import { EscrituraRedaccionEditor, type EscrituraEditorHandle, type RedaccionComment, type RedaccionDraft } from "@/components/escritura/escritura-editor";
 import { EscrituraForm } from "@/components/escritura/escritura-form";
@@ -28,6 +28,7 @@ import {
   type GariRevisionResponse,
 } from "@/lib/api-escritura";
 import { bibliotecaItemFromClausula, type BibliotecaRedaccionItem } from "@/lib/escritura-redaccion-biblioteca";
+import { printEscrituraHtml } from "@/lib/escritura-print";
 import { defaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
 
 type Props = {
@@ -210,6 +211,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [isLoadingState, setIsLoadingState] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [lastId, setLastId] = useState<string | null>(null);
+  const [highlightTick, setHighlightTick] = useState(0);
 
   const resultado = useMemo(() => {
     if (!acto || !state) return null;
@@ -223,6 +226,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setActo(nextActo);
     setState(null);
     setMode("captura");
+    setLastId(null);
+    setHighlightTick(0);
     setRedaccionDraft(null);
     setRedaccionDirty(false);
     setDocumento(null);
@@ -429,6 +434,25 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setMode("redaccion");
   }
 
+  // Rastrea el último campo editado en el formulario para resaltarlo en vivo en la escritura.
+  function handleFormSignal(event: FormEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.id !== "string" || !target.id) return;
+    setLastId(target.id);
+    setHighlightTick((tick) => tick + 1);
+  }
+
+  function handlePrintPdf() {
+    if (!resultado) return;
+    const opened = printEscrituraHtml(resultado.html);
+    if (opened) {
+      setError(null);
+      setFeedback("Vista de impresion abierta. Elige 'Guardar como PDF' en el dialogo.");
+    } else {
+      setError("El navegador bloqueo la ventana de impresion. Habilita las ventanas emergentes e intenta de nuevo.");
+    }
+  }
+
   const selectedTitle = acto ? humanActo(acto) : "Minutas Asistidas";
   const downloadHref = documento?.download_url ? escrituraDownloadUrl(documento.download_url) : null;
 
@@ -455,6 +479,17 @@ export function EscrituraWorkspace({ caseId }: Props) {
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
             {mode === "redaccion" ? "Guardar borrador" : "Guardar"}
           </button>
+          {mode === "captura" ? (
+            <button
+              type="button"
+              onClick={handlePrintPdf}
+              disabled={!acto || !state || !resultado || isLoadingState}
+              className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              Imprimir / PDF
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={handleGenerate}
@@ -519,13 +554,15 @@ export function EscrituraWorkspace({ caseId }: Props) {
 
       {acto && state && resultado ? (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)_340px]">
-          <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
+          <div className="min-w-0" onInput={handleFormSignal} onChangeCapture={handleFormSignal}>
+            <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
+          </div>
           {mode === "captura" ? (
             <>
               <main className="min-w-0 space-y-4">
                 <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
                 <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
-                <EscrituraPreview html={resultado.html} />
+                <EscrituraPreview html={resultado.html} lastId={lastId} highlightTick={highlightTick} />
               </main>
               <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
                 <CumplimientoPanel cumplimiento={resultado.cumplimiento} />
