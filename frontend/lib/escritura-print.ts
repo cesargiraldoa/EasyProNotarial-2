@@ -25,11 +25,16 @@ body{background:#fff;color:#1b1e23;font-family:Georgia,"Times New Roman",serif;f
 `;
 
 export function printEscrituraHtml(html: string): boolean {
-  const printWindow = window.open("", "_blank", "noopener,noreferrer");
+  // Nota: NO usar "noopener"/"noreferrer" aquí — con esas flags el navegador
+  // devuelve null y solo queda una pestaña en blanco imposible de escribir.
+  const printWindow = window.open("", "_blank");
   if (!printWindow) return false;
+  printWindow.document.open();
   printWindow.document.write(
     `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Escritura</title><style>${PRINT_CSS}</style></head>` +
-      `<body><article class="sheet">${html}</article><script>window.print();</script></body></html>`,
+      `<body><article class="sheet">${html}</article>` +
+      `<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},60);};<\/script>` +
+      `</body></html>`,
   );
   printWindow.document.close();
   return true;
