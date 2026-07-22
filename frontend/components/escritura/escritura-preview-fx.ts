@@ -95,19 +95,44 @@ function sectionKeyFor(id: string): string {
   return id;
 }
 
+const HL_BG = "#fce96a";
+const HL_SEC_BG = "rgba(252, 233, 106, 0.45)";
+
+// Estilos aplicados INLINE (no dependemos del CSS module para el amarillo).
+function paintField(el: HTMLElement) {
+  el.classList.add("hl");
+  el.style.backgroundColor = HL_BG;
+  el.style.color = "#1b1e23";
+  el.style.borderRadius = "3px";
+  el.style.boxShadow = `0 0 0 2px ${HL_BG}`;
+}
+function paintSection(el: HTMLElement) {
+  el.classList.add("hl-sec");
+  el.style.backgroundColor = HL_SEC_BG;
+  el.style.borderRadius = "5px";
+  el.style.boxShadow = `0 0 0 4px ${HL_SEC_BG}`;
+}
+function clearPaint(el: HTMLElement) {
+  el.classList.remove("hl", "hl-sec");
+  el.style.backgroundColor = "";
+  el.style.color = "";
+  el.style.borderRadius = "";
+  el.style.boxShadow = "";
+}
+
 /**
  * Aplica el resaltado del último campo editado sobre el preview ya renderizado.
  * Limpia el resaltado anterior y devuelve el elemento resaltado (para scroll/flash).
+ * Usa estilos inline para que el amarillo se vea sí o sí, sin depender del CSS.
  */
 export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLElement | null {
-  root.querySelectorAll<HTMLElement>(".hl").forEach((el) => el.classList.remove("hl"));
-  root.querySelectorAll<HTMLElement>(".hl-sec").forEach((el) => el.classList.remove("hl-sec"));
+  root.querySelectorAll<HTMLElement>(".hl, .hl-sec").forEach(clearPaint);
   if (!lastId) return null;
 
   for (const candidate of dataFCandidates(lastId)) {
     const spans = root.querySelectorAll<HTMLElement>(`[data-f="${candidate}"]`);
     if (spans.length) {
-      spans.forEach((span) => span.classList.add("hl"));
+      spans.forEach(paintField);
       return spans[0];
     }
   }
@@ -118,7 +143,7 @@ export function applyHighlight(root: HTMLElement, lastId: string | null): HTMLEl
       root.querySelector<HTMLElement>(`[data-sec="${key}"]`) ||
       (FALLBACK[key] ? root.querySelector<HTMLElement>(`[data-sec="${FALLBACK[key]}"]`) : null);
     if (sec) {
-      sec.classList.add("hl-sec");
+      paintSection(sec);
       return sec;
     }
   }

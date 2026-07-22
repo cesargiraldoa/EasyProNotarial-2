@@ -12,12 +12,6 @@ type Props = {
   highlightTick?: number;
 };
 
-function inView(el: HTMLElement): boolean {
-  const rect = el.getBoundingClientRect();
-  const viewport = window.innerHeight || document.documentElement.clientHeight;
-  return rect.top >= 48 && rect.bottom <= viewport - 8;
-}
-
 export function EscrituraPreview({ html, lastId = null, highlightTick = 0 }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -47,15 +41,8 @@ export function EscrituraPreview({ html, lastId = null, highlightTick = 0 }: Pro
     if (!root) return;
     const target = applyHighlight(root, lastId);
     if (!target) return;
-    // flash breve para llamar la atención sobre el cambio
-    target.classList.remove("flash");
-    void target.offsetWidth;
-    target.classList.add("flash");
-    const timer = setTimeout(() => target.classList.remove("flash"), 1600);
-    if (!inView(target)) {
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-    return () => clearTimeout(timer);
+    // Lleva la vista al cambio (mínimo movimiento si ya está visible).
+    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, lastId, highlightTick]);
 

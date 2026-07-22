@@ -558,7 +558,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
           </div>
           {mode === "captura" ? (
             <>
-              <main className="min-w-0 space-y-4">
+              <main className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
                 <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
                 <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
                 <EscrituraPreview html={resultado.html} lastId={lastId} highlightTick={highlightTick} />
