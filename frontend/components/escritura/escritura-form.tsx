@@ -319,9 +319,9 @@ function BancoSelector({
         className={inputClass}
         value={selId ?? ""}
         onChange={(event) => {
-          const value = event.currentTarget.value;
-          setDbg(`onChange raw="${value}"`);
-          if (value !== "") handlePickEntity(Number(value));
+          const si = event.currentTarget.selectedIndex; // 0 = placeholder
+          setDbg(`onChange selectedIndex=${si} value="${event.currentTarget.value}"`);
+          if (si > 0) handlePickEntity(si - 1);
         }}
       >
         <option value="">— Seleccionar banco —</option>
