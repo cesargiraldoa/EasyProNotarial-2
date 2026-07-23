@@ -680,7 +680,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
             </div>
           ) : null}
         <div className={`grid grid-cols-1 gap-5 ${dockOpen ? "xl:grid-cols-[400px_minmax(0,1fr)_340px]" : "xl:grid-cols-[400px_minmax(0,1fr)_64px]"}`}>
-          <div className="min-w-0" onInput={handleFormSignal} onChangeCapture={handleFormSignal}>
+          <div className="min-w-0" onInput={handleFormSignal} onChange={handleFormSignal}>
             <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
           </div>
           {mode === "captura" ? (

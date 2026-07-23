@@ -320,6 +320,7 @@ function BancoSelector({
         value={selId ?? ""}
         onChange={(event) => {
           const value = event.currentTarget.value;
+          setDbg(`onChange raw="${value}"`);
           if (value !== "") handlePickEntity(Number(value));
         }}
       >
