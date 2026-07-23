@@ -195,6 +195,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [mode, setMode] = useState<WorkspaceMode>("captura");
   const [dockOpen, setDockOpen] = useState(true);
   const [gariOpen, setGariOpen] = useState(false);
+  const [fuente, setFuente] = useState<"banco" | "particular" | "proyecto">("banco");
+  const minutaBaseInputRef = useRef<HTMLInputElement>(null);
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
@@ -559,6 +561,52 @@ export function EscrituraWorkspace({ caseId }: Props) {
             />
           </div>
         ) : (
+        <div className="space-y-4">
+          {mode === "captura" ? (
+            <div className="rounded-xl border border-line-strong bg-white p-3 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">Fuente del caso</span>
+                <div className="inline-flex rounded-xl border border-line-strong bg-slate-50 p-1">
+                  {(["banco", "particular", "proyecto"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFuente(f)}
+                      aria-pressed={fuente === f}
+                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold capitalize ${fuente === f ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"}`}
+                    >
+                      {f === "banco" ? <Landmark className="h-4 w-4" aria-hidden="true" /> : f === "proyecto" ? <Home className="h-4 w-4" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                      {f}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => minutaBaseInputRef.current?.click()}
+                  disabled={gariOperation === "extraer"}
+                  className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-3 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {gariOperation === "extraer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
+                  Cargar minuta base{fuente === "banco" ? " del banco" : ""}
+                </button>
+                <input
+                  ref={minutaBaseInputRef}
+                  type="file"
+                  className="hidden"
+                  aria-label="Cargar minuta base"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] ?? null;
+                    handleExtraerArchivo(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </div>
+              {fuente === "banco" ? (
+                <p className="mt-2 text-xs text-secondary">Elige el banco y sus datos en el formulario; sube la minuta que envía el banco para prellenar la captura.</p>
+              ) : null}
+            </div>
+          ) : null}
         <div className={`grid grid-cols-1 gap-5 ${dockOpen ? "xl:grid-cols-[400px_minmax(0,1fr)_340px]" : "xl:grid-cols-[400px_minmax(0,1fr)_64px]"}`}>
           <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
           {mode === "captura" ? (
@@ -619,6 +667,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
               />
             </section>
           )}
+        </div>
         </div>
         )
       ) : null}
