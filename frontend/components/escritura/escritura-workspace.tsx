@@ -34,7 +34,7 @@ import { bibliotecaItemFromClausula, type BibliotecaRedaccionItem } from "@/lib/
 import { fillPlantilla, type PlantillaState } from "@/lib/escritura-plantilla";
 import { searchLegalEntities } from "@/lib/legal-entities";
 import { printEscrituraHtml } from "@/lib/escritura-print";
-import { defaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
+import { emptyDefaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
 
 type Props = {
   caseId: number;
@@ -164,7 +164,7 @@ function stateForActo(acto: ActoCode, saved: Record<string, unknown>) {
       return cloneState({ ...saved, credito: acto === "hipoteca" ? true : Boolean(saved.credito) });
     }
   }
-  return cloneState(defaults[acto]);
+  return cloneState(emptyDefaults[acto]);
 }
 
 function humanActo(acto: ActoCode) {

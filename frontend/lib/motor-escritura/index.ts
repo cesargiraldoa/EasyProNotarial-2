@@ -671,6 +671,54 @@ export const defaults: Record<ActoCode, CaseState> = {
   cancelacion: { ...defaultCancelacion },
 };
 
+// Parte y auxiliar en blanco: un caso NUEVO nace vacío para diligenciarlo
+// desde el formulario (no con los datos de ejemplo del motor).
+function emptyParty(): Party {
+  return {
+    tipo: "natural", genero: "M", tipoDoc: "CC", nombre: "", id: "", ciudad: "",
+    estado: "soltero", repr: "", cuota: 100, direccion: "", telefono: "", correo: "",
+    ocupacion: "", notiElec: false, pep: false,
+  };
+}
+function emptyAux(): AuxParty {
+  return { tipoDoc: "CC", nombre: "", id: "", ciudad: "", direccion: "", telefono: "", correo: "", ocupacion: "" };
+}
+
+function blankCompraventa(credito: boolean): CompraventaState {
+  return {
+    ...cloneCompraventaDefault(credito),
+    banco: "", bancoNit: "", plazoAnios: 0, numCuotas: 0, apoderadoBanco: "",
+    poderBancoEP: "", poderBancoNot: "", avaluoCatastral: 0, nupre: "",
+    apod: false, apodN: "", apodP: "",
+    afect: "no", inmdesc: "", linderos: "", matricula: "", catastral: "",
+    ph: false, phReg: "", vis: "no", tituloNum: "", tituloFecha: "", tituloNotaria: "",
+    gravamen: "libre", tipoNegocio: "compraventa", tituloTipo: "compraventa",
+    subsidio: false, subsidioEnt: "", posesion2: false, firmaRuego: false, interprete: false,
+    pep: false, cuentaTercero: false, pep_indagado: false, rupta_verificado: false,
+    numEscritura: "", fechaOtorg: "", huella: false, testigosOn: false, hojaInicial: "", pepAny: false,
+    testigos: [emptyAux()], ruego: emptyAux(),
+    total: 0, inicial: 0, saldo: 0,
+    ax: { tradicion: false, predial: false, admin: false, cedulas: false },
+    V: [emptyParty()], C: [emptyParty()],
+  };
+}
+
+const blankCancelacion: CancelacionState = {
+  ...defaultCancelacion,
+  cNum: "", cFechaOtorg: "", cNotario: "", cCalidad: "", cActoAdmin: "",
+  cBanco: "", cBancoNit: "", cBancoDom: "", cRepCargo: "", cApoNombre: "", cApoCC: "",
+  cPoderEP: "", cPoderFecha: "", cPoderNotaria: "", cDeudor: "", cHipEP: "", cHipFecha: "",
+  cHipNotaria: "", cHipRegFecha: "", cOrip: "", cHipMonto: 0, cInmdesc: "", cMatricula: "",
+  cCatastral: "", cNupre: "", cHojas: "", cRecaudo: 0, cCorreoNotif: "",
+};
+
+// Estado inicial vacío para casos nuevos (el de `defaults` es el ejemplo demo).
+export const emptyDefaults: Record<ActoCode, CaseState> = {
+  compraventa: blankCompraventa(false),
+  hipoteca: blankCompraventa(true),
+  cancelacion: { ...blankCancelacion },
+};
+
 function legacyInmueble(s: CompraventaState): CompraventaInmueble {
   return {
     descripcion: s.inmdesc,
