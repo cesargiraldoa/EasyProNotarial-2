@@ -317,10 +317,10 @@ function BancoSelector({
       <select
         id="banco-registro"
         className={inputClass}
-        value={selId ?? ""}
+        defaultValue=""
         onChange={(event) => {
           const si = event.currentTarget.selectedIndex; // 0 = placeholder
-          setDbg(`onChange selectedIndex=${si} value="${event.currentTarget.value}"`);
+          setDbg(`onChange selectedIndex=${si}`);
           if (si > 0) handlePickEntity(si - 1);
         }}
       >
