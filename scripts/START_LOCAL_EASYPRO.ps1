@@ -1,10 +1,14 @@
+param(
+    [int]$BackendPort = 8001
+)
+
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $backendPath = Join-Path $root 'backend'
 $frontendPath = Join-Path $root 'frontend'
 $frontendLauncher = Join-Path $root 'scripts\dev\start-frontend-local.ps1'
-$backendHealthUrl = 'http://127.0.0.1:8000/health'
+$backendHealthUrl = "http://127.0.0.1:$BackendPort/health"
 
 function Stop-NodeProcesses {
     $nodeProcesses = Get-Process node -ErrorAction SilentlyContinue
@@ -107,14 +111,12 @@ function Wait-For-BackendHealth {
 
 $currentBranch = (git branch --show-current).Trim()
 if ($currentBranch -eq 'main') {
-    Write-Error 'This script cannot run on main. Switch to feature/auditoria-easypro1.'
+    Write-Error 'This script cannot run on main. Switch to your feature branch.'
     exit 1
 }
 
-if ($currentBranch -ne 'feature/auditoria-easypro1') {
-    Write-Error "This script requires branch feature/auditoria-easypro1. Current branch: $currentBranch"
-    exit 1
-}
+Write-Host "Branch: $currentBranch"
+Write-Host "Backend port: $BackendPort"
 
 if (-not (Test-Path -LiteralPath $backendPath)) {
     throw "Backend path not found: $backendPath"
@@ -127,15 +129,15 @@ if (-not (Test-Path -LiteralPath $frontendPath)) {
 Write-Host "Stopping node processes..."
 Stop-NodeProcesses
 
-Write-Host "Freeing ports 5179 and 8000..."
-Stop-ProcessesOnPort -Ports @(5179, 8000)
+Write-Host "Freeing ports 5179 and $BackendPort..."
+Stop-ProcessesOnPort -Ports @(5179, $BackendPort)
 
 Write-Host "Cleaning frontend cache..."
 Remove-PathIfExists -Path (Join-Path $frontendPath '.next')
 
 Assert-RequiredPaths
 
-$backendWindowCommand = "Set-Location -LiteralPath `"$backendPath`"; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+$backendWindowCommand = "Set-Location -LiteralPath `"$backendPath`"; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --host 127.0.0.1 --port $BackendPort"
 
 Write-Host "Starting backend in a new PowerShell window..."
 Start-Process -FilePath powershell.exe -ArgumentList @(
