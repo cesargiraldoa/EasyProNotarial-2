@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bot, Check, FileDown, Home, Landmark, Loader2, PencilLine, Save, ScrollText, SearchCheck, ShieldCheck, Upload, WandSparkles } from "lucide-react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
 import { CertificadoCumplimiento } from "@/components/escritura/certificado-cumplimiento";
+import { CalculadoraLiquidacion } from "@/components/escritura/calculadora-liquidacion";
 import { EscrituraRedaccionEditor, type EscrituraEditorHandle, type RedaccionComment, type RedaccionDraft } from "@/components/escritura/escritura-editor";
 import { EscrituraForm } from "@/components/escritura/escritura-form";
 import { EscrituraPreview } from "@/components/escritura/escritura-preview";
@@ -533,6 +534,10 @@ export function EscrituraWorkspace({ caseId }: Props) {
             <CertificadoCumplimiento
               cumplimiento={resultado.cumplimiento}
               caso={{ codigo: `CAS-${caseId}`, acto: humanActo(acto) }}
+            />
+            <CalculadoraLiquidacion
+              liquidacionHtml={resultado.liquidacionHtml}
+              caso={{ codigo: `CAS-${caseId}` }}
             />
           </div>
         ) : (
