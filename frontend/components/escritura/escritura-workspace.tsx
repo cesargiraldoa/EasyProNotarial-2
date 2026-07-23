@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bot, Check, FileDown, Home, Landmark, Loader2, PencilLine, Save, ScrollText, SearchCheck, ShieldCheck, Upload, WandSparkles } from "lucide-react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
+import { CertificadoCumplimiento } from "@/components/escritura/certificado-cumplimiento";
 import { EscrituraRedaccionEditor, type EscrituraEditorHandle, type RedaccionComment, type RedaccionDraft } from "@/components/escritura/escritura-editor";
 import { EscrituraForm } from "@/components/escritura/escritura-form";
 import { EscrituraPreview } from "@/components/escritura/escritura-preview";
@@ -34,7 +35,7 @@ type Props = {
   caseId: number;
 };
 
-type WorkspaceMode = "captura" | "redaccion";
+type WorkspaceMode = "captura" | "redaccion" | "cumplimiento";
 type GariOperation = "extraer" | "prosa" | "clasificar" | "revisar";
 
 const REDACCION_KEY = "__redaccion";
@@ -429,6 +430,14 @@ export function EscrituraWorkspace({ caseId }: Props) {
     setMode("redaccion");
   }
 
+  function showCumplimiento() {
+    if (!acto || !state || !resultado) return;
+    if (mode === "redaccion" && redaccionDirty && !window.confirm("Ir a Cumplimiento descarta las ediciones de Redaccion no guardadas. Continuar?")) {
+      return;
+    }
+    setMode("cumplimiento");
+  }
+
   const selectedTitle = acto ? humanActo(acto) : "Escritura asistida";
   const downloadHref = documento?.download_url ? escrituraDownloadUrl(documento.download_url) : null;
 
@@ -518,13 +527,22 @@ export function EscrituraWorkspace({ caseId }: Props) {
       ) : null}
 
       {acto && state && resultado ? (
+        mode === "cumplimiento" ? (
+          <div className="space-y-4">
+            <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} onCumplimiento={showCumplimiento} />
+            <CertificadoCumplimiento
+              cumplimiento={resultado.cumplimiento}
+              caso={{ codigo: `CAS-${caseId}`, acto: humanActo(acto) }}
+            />
+          </div>
+        ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)_340px]">
           <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
           {mode === "captura" ? (
             <>
               <main className="min-w-0 space-y-4">
                 <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
-                <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
+                <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} onCumplimiento={showCumplimiento} />
                 <EscrituraPreview html={resultado.html} />
               </main>
               <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
@@ -535,7 +553,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
           ) : (
             <section className="min-w-0 space-y-4 xl:col-span-2">
               <EstadoBar ok={resultado.estado.ok} texto={resultado.estado.texto} />
-              <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} />
+              <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} onCumplimiento={showCumplimiento} />
               <EscrituraRedaccionEditor
                 ref={editorRef}
                 acto={acto}
@@ -558,17 +576,19 @@ export function EscrituraWorkspace({ caseId }: Props) {
             </section>
           )}
         </div>
+        )
       ) : null}
     </div>
   );
 }
 
-function ModeSwitch({ mode, onCaptura, onRedaccion }: { mode: WorkspaceMode; onCaptura: () => void; onRedaccion: () => void }) {
+function ModeSwitch({ mode, onCaptura, onRedaccion, onCumplimiento }: { mode: WorkspaceMode; onCaptura: () => void; onRedaccion: () => void; onCumplimiento: () => void }) {
+  const label = mode === "redaccion" ? "Redaccion manual" : mode === "cumplimiento" ? "Certificado de cumplimiento" : "Captura estructurada";
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line-strong bg-white p-3 shadow-sm">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-secondary">Modo</p>
-        <p className="text-sm font-semibold text-primary">{mode === "redaccion" ? "Redaccion manual" : "Captura estructurada"}</p>
+        <p className="text-sm font-semibold text-primary">{label}</p>
       </div>
       <div className="inline-flex rounded-xl border border-line-strong bg-slate-50 p-1">
         <button
@@ -588,6 +608,15 @@ function ModeSwitch({ mode, onCaptura, onRedaccion }: { mode: WorkspaceMode; onC
         >
           <PencilLine className="h-4 w-4" aria-hidden="true" />
           Redaccion
+        </button>
+        <button
+          type="button"
+          onClick={onCumplimiento}
+          aria-pressed={mode === "cumplimiento"}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${mode === "cumplimiento" ? "bg-white text-primary shadow-sm" : "text-secondary hover:text-primary"}`}
+        >
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          Cumplimiento
         </button>
       </div>
     </div>
