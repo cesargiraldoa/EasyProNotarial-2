@@ -38,6 +38,8 @@ from app.schemas.escritura import (
     LegalNormaOut,
     LegalReglaOut,
     LegalTarifaOut,
+    PlantillaSemillaOut,
+    PlantillaSemillaTokenOut,
 )
 from app.services.document_persistence import get_or_create_document, persist_case_document_version
 from app.services.escritura_reglas import evaluar_reglas
@@ -53,6 +55,7 @@ from app.services.escritura_gari import (
 from app.services.gari_document_service import build_gari_docx_buffer
 from app.services.legal_corpus import clausulas_vigentes, normas_vigentes, reglas_vigentes, tarifas_vigentes
 from app.services.legal_rag import buscar_corpus
+from app.services.plantilla_semilla import resolver_plantilla_semilla
 
 router = APIRouter(prefix="/escritura", tags=["escritura"])
 
@@ -294,6 +297,45 @@ def get_escritura_biblioteca(
         BibliotecaClausulaOut.model_validate(item, from_attributes=True)
         for item in clausulas_vigentes(db, corpus_acto, effective_date)
     ]
+
+
+@router.get("/plantilla-semilla", response_model=PlantillaSemillaOut)
+def get_plantilla_semilla(
+    acto: ActoCode = Query(...),
+    fuente: str = Query(default="banco"),
+    legal_entity_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cuerpo base (plantilla semilla) para elegir acto+fuente+banco.
+
+    Devuelve la plantilla de la entidad; si no existe, cae a la genérica del
+    acto (`is_fallback = True`). 404 si el acto no tiene ninguna plantilla."""
+    notary_ids = get_manageable_notary_ids(current_user)
+    resuelta = resolver_plantilla_semilla(
+        db,
+        notary_ids=notary_ids,
+        act_code=acto,
+        fuente=fuente,
+        legal_entity_id=legal_entity_id,
+    )
+    if resuelta is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay plantilla semilla para este acto todavía.",
+        )
+    return PlantillaSemillaOut(
+        id=resuelta.id,
+        acto=acto,
+        fuente=resuelta.fuente or fuente,
+        name=resuelta.name,
+        body_html=resuelta.body_html,
+        tokens=[PlantillaSemillaTokenOut(**token) for token in resuelta.tokens],
+        bank_name=resuelta.bank_name,
+        legal_entity_id=resuelta.legal_entity_id,
+        notaria=resuelta.notaria,
+        is_fallback=resuelta.is_fallback,
+    )
 
 
 @router.post("/cases/{case_id}/extraer", response_model=GariExtraccionOut)

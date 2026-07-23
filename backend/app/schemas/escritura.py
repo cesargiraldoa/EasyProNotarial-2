@@ -130,6 +130,26 @@ class BibliotecaClausulaOut(BaseModel):
     vigencia_hasta: date | None = None
 
 
+class PlantillaSemillaTokenOut(BaseModel):
+    token: str
+    label: str | None = None
+    field: str | None = None
+    section: str | None = None
+
+
+class PlantillaSemillaOut(BaseModel):
+    id: int
+    acto: ActoCode
+    fuente: str
+    name: str
+    body_html: str
+    tokens: list[PlantillaSemillaTokenOut] = Field(default_factory=list)
+    bank_name: str | None = None
+    legal_entity_id: int | None = None
+    notaria: str | None = None
+    is_fallback: bool = False
+
+
 class CaseMeta(BaseModel):
     id: int
     notary_id: int
