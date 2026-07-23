@@ -257,15 +257,18 @@ export function EscrituraForm({ acto, state, onChange }: Props) {
 function BancoSelector({
   onPickBanco,
   onPickRepresentante,
+  bancoActual,
 }: {
   onPickBanco: (entity: LegalEntityRecord) => void;
   onPickRepresentante: (name: string) => void;
+  bancoActual: string;
 }) {
   const [entidades, setEntidades] = useState<LegalEntityRecord[]>([]);
   const [representantes, setRepresentantes] = useState<LegalEntityRepresentativeRecord[]>([]);
   const [selId, setSelId] = useState<number | null>(null);
   const [cargaError, setCargaError] = useState<string | null>(null);
   const [cargado, setCargado] = useState(false);
+  const [dbg, setDbg] = useState<string>("(sin selección)");
 
   useEffect(() => {
     let active = true;
@@ -289,7 +292,11 @@ function BancoSelector({
 
   async function handlePickEntity(index: number) {
     const entity = entidades[index];
-    if (!entity) return;
+    if (!entity) {
+      setDbg(`onChange idx=${index} pero entidad no encontrada`);
+      return;
+    }
+    setDbg(`elegido: ${entity.name} · id=${String(entity.id)} · idx=${index}`);
     setSelId(index);
     setRepresentantes([]);
     onPickBanco(entity);
@@ -330,6 +337,7 @@ function BancoSelector({
       ) : cargado ? (
         <p className="mt-1 text-[11px] text-secondary">{entidades.length} banco(s) disponibles.</p>
       ) : null}
+      <p className="mt-1 text-[11px] font-mono text-blue-600">dbg: {dbg} · selId={String(selId)} · banco.estado="{bancoActual}"</p>
       {representantes.length > 0 ? (
         <select
           className={`${inputClass} mt-2`}
@@ -482,6 +490,7 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         {effectiveCredito ? (
           <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
             <BancoSelector
+              bancoActual={state.banco}
               onPickBanco={(entity) =>
                 applyPatch({
                   banco: entity.name,
