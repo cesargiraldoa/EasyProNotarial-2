@@ -828,12 +828,13 @@ export const EscrituraRedaccionEditor = forwardRef<EscrituraEditorHandle, Props>
 
   function exportPdf() {
     const html = materializeFillLeaders(editorRef.current?.innerHTML ?? "");
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    const printWindow = window.open("", "_blank");
     if (!printWindow) {
       say("El navegador bloqueo la ventana de impresion.");
       return;
     }
-    printWindow.document.write(`<!doctype html><html><head><title>Escritura</title><style>${PRINT_CSS}</style></head><body><article class="sheet">${html}</article><script>window.print();</script></body></html>`);
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Escritura</title><style>${PRINT_CSS}</style></head><body><article class="sheet">${html}</article><script>window.onload=function(){setTimeout(function(){window.focus();window.print();},60);};<\/script></body></html>`);
     printWindow.document.close();
     say("Vista de impresion abierta.");
   }

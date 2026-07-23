@@ -1,6 +1,57 @@
 ﻿# SESSION.md â€” EasyProNotarial-2
 
 ---
+## Sesión 2026-07-23 — Rebranding "Minutas Asistidas" + arreglos UX de la escritura (resaltado en vivo, PDF, guiones, popup de norma)
+
+**Objetivo de la sesión:** Revisión visual del port de "Escritura asistida" con datos reales y corregir los defectos de UX detectados por el usuario en el navegador, dejándolos verificados con tests.
+
+**Rama de trabajo:** `claude/escritura-asistida-produccion-7oc57i` (11 commits, `26b10a6`..`5779155`). **NO** se mergeó a `main` (queda para PR/merge cuando el usuario lo apruebe).
+
+**Realizado (cada punto = uno o más commits):**
+- **Rebranding a "Minutas Asistidas"** (`26b10a6`): renombrado en menú lateral, landing, botones, título del workspace y CTA del detalle del caso. Recorte del menú para **superadmin**: se ocultan Biblioteca, Actos/Plantillas, Revisión Documental y Ayuda (siguen visibles para los demás roles notariales). Superadmin ve: Resumen · Comercial · Notarías · Usuarios · Roles · Minutas · Crear Minuta · Minutas Asistidas · System Status · Configuración · Mi Perfil.
+- **3 comportamientos del prototipo HTML portados** (`99db5ca`): resaltado en vivo, popup de norma al hover (diccionario `NORMAS` 1:1 + tooltip flotante sobre badges `.cite` del preview y liquidación), y botón Imprimir/PDF en Captura.
+- **Bug PDF pestaña en blanco** (`1ce5095`): `window.open(..., "noopener,noreferrer")` devolvía null; se quitaron esas flags (aplica a Captura y al Exportar PDF de Redacción).
+- **Botón PDF en ambos modos + guiones de relleno** (`362b027`): botón Imprimir/PDF visible en Captura y Redacción; portado `fillLeaders()` (rayas `—` que rellenan el renglón hasta el margen para impedir intercalar texto), medido en vivo en el preview y al ancho A4 en la ventana de impresión.
+- **Arranque local robusto** (`b54f1cb`): `npm run dev:next` ahora corre `scripts/dev.mjs` que **libera el puerto 5179** antes de arrancar (fin del `EADDRINUSE` que dejaba el navegador viendo código viejo). `outputFileTracingRoot` fijado en `next.config.mjs`. `dev:raw` conserva el arranque directo.
+- **Resaltado: de "no funciona" a robusto y correcto** (`a1f178f`, `1f66c64`, `24279e8`, `fc6a9c9`, `32246f5`):
+  - Amarillo aplicado con **estilos inline** (no depende del CSS).
+  - **Causa raíz encontrada:** los ids de partes del form usan lado en MAYÚSCULA (`V-0-nombre`) pero el motor emite `data-f` en minúscula (`v0nombre`) → normalización case-insensitive.
+  - Mapeo **exacto** id→data-f (`DATAF_ALIAS`, inmuebles single/multi, encadenamientos, divisas, rural, capacidad) para resaltar el **valor** en el cuerpo, no un párrafo equivocado.
+  - **Resaltado por coincidencia de texto** (para firmas/testigos/contacto que sí van al cuerpo pero sin `data-f`). Subió de 44 → **67 campos** que resaltan su valor exacto.
+  - Se quitó el "último recurso" que pintaba párrafos equivocados; el preview tiene su **propio scroll** (sticky + overflow).
+- **Scroll centrado + color del cambio** (`5779155`): `scrollIntoView({block:"center"})` centra el cambio sin mover el form; el valor resaltado va en **azul fuerte + negrita** sobre el amarillo para que el protocolista vea qué cambia.
+- **Diagnóstico confirmado (no eran bugs):** los selects SÍ cambian el texto (tipoDoc/estado/género/derecho/tipoNegocio) y los datos de firma SÍ se renderizan — el problema era solo de resaltado, ya resuelto.
+
+**Archivos creados/modificados:**
+- `frontend/lib/navigation.ts` — rebranding + recorte de menú superadmin
+- `frontend/lib/authorization.ts` — (lectura; base de roles)
+- `frontend/lib/escritura-normas.ts` — **nuevo**: diccionario `NORMAS` (37 normas, popups)
+- `frontend/lib/escritura-print.ts` — **nuevo**: `printEscrituraHtml()` + guiones al ancho A4
+- `frontend/components/escritura/escritura-preview-fx.ts` — **nuevo**: `applyHighlight` (data-f + texto + sección), `sectionForId`, `fillLeaders`, `useNormaTooltip`
+- `frontend/components/escritura/escritura-preview.tsx` — reescrito: resaltado + scroll centrado + tooltips + guiones
+- `frontend/components/escritura/escritura-preview.module.css` — estilos `.hl`/`.hl-sec`/`.fill`/tooltip
+- `frontend/components/escritura/escritura-workspace.tsx` — captura de campo/valor editado, botón PDF ambos modos, preview con scroll propio
+- `frontend/components/escritura/liquidacion-panel.tsx` — tooltips de norma
+- `frontend/components/escritura/escritura-editor.tsx` — fix noopener del Exportar PDF
+- `frontend/components/escritura/escritura-index.tsx`, `frontend/components/cases/case-detail-workspace.tsx` — rebranding
+- `frontend/scripts/dev.mjs` — **nuevo**: arranque que libera el puerto
+- `frontend/next.config.mjs`, `frontend/package.json` — `outputFileTracingRoot`, script `dev:next`/`dev:raw`
+- `frontend/components/escritura/__tests__/escritura-highlight*.test.ts` — **nuevos**: 4 tests (integración, cobertura de 145 ids, barrido de 191 controles, correctitud del valor)
+
+**Pendientes para la próxima sesión:**
+1. **Decidir merge de la rama** `claude/escritura-asistida-produccion-7oc57i` → `main` (PR o fast-forward) cuando el usuario apruebe la revisión visual. NO se ha mergeado.
+2. **Revisión visual a fondo** de los 3 actos con datos reales end-to-end (captura → generar → cumplimiento/liquidación → PDF), anotando ajustes de redacción/UX que falten.
+3. **Casos de resaltado por sección** (los ~10 campos sin valor en el cuerpo: teléfono/correo en ciertas condiciones, `divisas-moneda` condicional, `apoyoActo`): validar que la sección resaltada sea la más natural; afinar mapeo si el notario lo pide.
+4. Confirmar color/estilo del resaltado (azul actual) con el usuario; ajustable en `HL_TEXT` de `escritura-preview-fx.ts`.
+5. **Pendientes del corpus jurídico** heredados: aplicar 2.ª verificación de GPT (7 normas), adjudicación del notario de conflictos de estado (`corpus-juridico/reporte-conflictos-gpt-2026-07-21.md`), extraer resto del corpus Notaría 16, afinar capa Gari.
+
+**Estado al cierre:**
+- Backend: sin cambios esta sesión (todo fue frontend). Operativo al arrancar.
+- Frontend: **operativo** — `tsc --noEmit` sin errores, **173/173 tests**, `next build` limpio. Verificado por el usuario en el navegador (resaltado, PDF, guiones, popups funcionando).
+- BD producción: sin migraciones nuevas.
+- Git: rama `claude/escritura-asistida-produccion-7oc57i` pusheada (`5779155`), árbol limpio. **No mergeada a main.**
+
+---
 ## Sesión 2026-07-22 — Port de "Escritura asistida" al software (front + back + BD) + salida en producción
 
 **Objetivo de la sesión:** Llevar el prototipo HTML congelado `escritura-asistida.html` al software real (Next.js + FastAPI + BD), reutilizando la infraestructura existente y SIN reprocesar; construir la capa de corpus jurídico real (normas verificadas contra fuente oficial); y dejarlo **visible y funcionando** para el usuario, accesible desde el menú lateral.
