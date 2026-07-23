@@ -39,6 +39,14 @@ def _index_exists(inspector: sa.Inspector, table_name: str, index_name: str) -> 
 def _ensure_vector_extension(bind) -> bool:
     if bind.dialect.name != "postgresql":
         return False
+    # Solo intenta crear la extension si su binario esta disponible en el
+    # servidor. Asi la migracion no aborta su transaccion cuando pgvector no
+    # esta instalado: se degrada a embeddings en Text y la cadena continua.
+    available = bind.execute(
+        sa.text("select exists (select 1 from pg_available_extensions where name = 'vector')")
+    ).scalar()
+    if not available:
+        return False
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     return bool(bind.execute(sa.text("select exists (select 1 from pg_extension where extname = 'vector')")).scalar())
 
@@ -104,8 +112,10 @@ def upgrade() -> None:
         ("ix_legal_embeddings_vigencia_desde", ["vigencia_desde"], False, None, None),
         ("ix_legal_embeddings_vigencia_hasta", ["vigencia_hasta"], False, None, None),
         ("ix_legal_embeddings_acto_code", ["acto_code"], False, None, None),
-        ("ix_legal_embeddings_embedding_hnsw", ["embedding"], False, "hnsw", {"embedding": "vector_cosine_ops"}),
     ]
+    if vector_enabled:
+        # El indice HNSW solo aplica sobre una columna vector real (pgvector).
+        indexes.append(("ix_legal_embeddings_embedding_hnsw", ["embedding"], False, "hnsw", {"embedding": "vector_cosine_ops"}))
     for index_name, columns, unique, using, ops in indexes:
         _create_index_if_missing("legal_embeddings", index_name, columns, unique=unique, postgresql_using=using, postgresql_ops=ops)
 
