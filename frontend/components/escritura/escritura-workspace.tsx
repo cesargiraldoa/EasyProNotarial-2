@@ -193,6 +193,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [acto, setActo] = useState<ActoCode | null>(null);
   const [state, setState] = useState<CaseState | null>(null);
   const [mode, setMode] = useState<WorkspaceMode>("captura");
+  const [dockOpen, setDockOpen] = useState(true);
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
@@ -541,7 +542,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
             />
           </div>
         ) : (
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)_340px]">
+        <div className={`grid grid-cols-1 gap-5 ${dockOpen ? "xl:grid-cols-[400px_minmax(0,1fr)_340px]" : "xl:grid-cols-[400px_minmax(0,1fr)_64px]"}`}>
           <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
           {mode === "captura" ? (
             <>
@@ -550,9 +551,30 @@ export function EscrituraWorkspace({ caseId }: Props) {
                 <ModeSwitch mode={mode} onCaptura={showCaptura} onRedaccion={showRedaccion} onCumplimiento={showCumplimiento} />
                 <EscrituraPreview html={resultado.html} />
               </main>
-              <aside className="space-y-5 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
-                <CumplimientoPanel cumplimiento={resultado.cumplimiento} />
-                <LiquidacionPanel html={resultado.liquidacionHtml} />
+              <aside className="space-y-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-line-strong bg-white p-2 shadow-sm">
+                  {dockOpen ? (
+                    <span className="px-1 text-xs font-semibold uppercase tracking-[0.08em] text-secondary">Cumplimiento</span>
+                  ) : (
+                    <span className="flex flex-col gap-0.5 px-1 font-mono text-[11px] leading-tight" aria-hidden="true">
+                      <span className="text-emerald-600">{resultado.cumplimiento.tiles.cumple} ✓</span>
+                      <span className="text-amber-600">{resultado.cumplimiento.tiles.advertencia} ⚠</span>
+                      <span className="text-red-600">{resultado.cumplimiento.tiles.bloqueante} ⛔</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDockOpen((v) => !v)}
+                    aria-label={dockOpen ? "Colapsar cumplimiento" : "Expandir cumplimiento"}
+                    className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg border border-line-strong bg-slate-50 text-secondary hover:text-primary"
+                  >
+                    {dockOpen ? "»" : "«"}
+                  </button>
+                </div>
+                <div className={dockOpen ? "space-y-5" : "hidden"}>
+                  <CumplimientoPanel cumplimiento={resultado.cumplimiento} />
+                  <LiquidacionPanel html={resultado.liquidacionHtml} />
+                </div>
               </aside>
             </>
           ) : (
