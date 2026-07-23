@@ -164,6 +164,43 @@ function TextField({ id, label, value, hint, onChange, type = "text" }: { id: st
   );
 }
 
+const EMAIL_DOMINIOS = ["gmail.com", "hotmail.com", "outlook.com", "yahoo.com", "icloud.com"];
+
+function EmailField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  function setDominio(dominio: string) {
+    const at = value.indexOf("@");
+    const usuario = at >= 0 ? value.slice(0, at) : value;
+    onChange(`${usuario.trim()}@${dominio}`);
+  }
+  return (
+    <Field id={id} label={label}>
+      <input
+        id={id}
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        placeholder="usuario@dominio.com"
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        className={inputClass}
+      />
+      <div className="mt-1 flex flex-wrap gap-1">
+        {EMAIL_DOMINIOS.map((dominio) => (
+          <button
+            key={dominio}
+            type="button"
+            tabIndex={-1}
+            onClick={() => setDominio(dominio)}
+            className="rounded border border-line-strong bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-secondary transition hover:border-primary hover:bg-primary/8 hover:text-primary"
+          >
+            @{dominio}
+          </button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
 function TextAreaField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   return (
     <Field id={id} label={label}>
@@ -905,7 +942,7 @@ function PartyList({ title, side, parties, onPatch, onAdd, onRemove }: { title: 
               <TextField id={`${side}-${index}-telefono`} label="Telefono" value={party.telefono} onChange={(value) => onPatch(side, index, { telefono: value })} />
               <TextField id={`${side}-${index}-ocupacion`} label={party.tipo === "juridica" ? "Actividad economica" : "Profesion u ocupacion"} value={party.ocupacion} onChange={(value) => onPatch(side, index, { ocupacion: value })} />
             </div>
-            <TextField id={`${side}-${index}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch(side, index, { correo: value })} />
+            <EmailField id={`${side}-${index}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch(side, index, { correo: value })} />
             <Checkbox id={`${side}-${index}-notiElec`} checked={party.notiElec} label="Autoriza notificaciones electronicas" onChange={(checked) => onPatch(side, index, { notiElec: checked })} />
             <Checkbox id={`${side}-${index}-pep`} checked={party.pep} label="Persona Expuesta Politicamente" onChange={(checked) => onPatch(side, index, { pep: checked })} />
           </div>
@@ -934,7 +971,7 @@ function AuxPartyFields({ title, scope, party, onPatch }: { title: string; scope
         <TextField id={`${scope}-telefono`} label="Telefono" value={party.telefono} onChange={(value) => onPatch({ telefono: value })} />
         <TextField id={`${scope}-ocupacion`} label="Profesion u ocupacion" value={party.ocupacion} onChange={(value) => onPatch({ ocupacion: value })} />
       </div>
-      <TextField id={`${scope}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch({ correo: value })} />
+      <EmailField id={`${scope}-correo`} label="Correo electronico" value={party.correo} onChange={(value) => onPatch({ correo: value })} />
     </div>
   );
 }
@@ -1022,7 +1059,7 @@ function CancelacionForm({ state, onChange }: { state: CancelacionState; onChang
           <TextField id="cHojas" label="Hojas de papel notarial" value={state.cHojas} onChange={(value) => setField("cHojas", value)} />
           <MoneyField id="cRecaudo" label="Recaudo Superintendencia y Fondo" value={state.cRecaudo} onChange={(value) => setField("cRecaudo", value)} />
         </div>
-        <TextField id="cCorreoNotif" label="Correo para notificaciones electronicas" value={state.cCorreoNotif} onChange={(value) => setField("cCorreoNotif", value)} />
+        <EmailField id="cCorreoNotif" label="Correo para notificaciones electronicas" value={state.cCorreoNotif} onChange={(value) => setField("cCorreoNotif", value)} />
         <Checkbox id="cSinCuantia" checked={state.cSinCuantia} label="Acto sin cuantia - credito de vivienda" onChange={(checked) => setField("cSinCuantia", checked)} />
         <Checkbox id="cNoPazSalvo" checked={state.cNoPazSalvo} label="Incluir clausula de no paz y salvo" onChange={(checked) => setField("cNoPazSalvo", checked)} />
         <Checkbox id="cSarlaft" checked={state.cSarlaft} label="Incluir nota SARLAFT / tratamiento de datos" onChange={(checked) => setField("cSarlaft", checked)} />
