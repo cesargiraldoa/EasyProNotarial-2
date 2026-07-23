@@ -18,6 +18,7 @@ import {
   getBibliotecaEscritura,
   getCorpus,
   getEscrituraState,
+  getPlantillaSemilla,
   redactarProsaGari,
   revisarEscritura,
   saveEscrituraState,
@@ -30,6 +31,8 @@ import {
   type GariRevisionResponse,
 } from "@/lib/api-escritura";
 import { bibliotecaItemFromClausula, type BibliotecaRedaccionItem } from "@/lib/escritura-redaccion-biblioteca";
+import { fillPlantilla, type PlantillaState } from "@/lib/escritura-plantilla";
+import { searchLegalEntities } from "@/lib/legal-entities";
 import { printEscrituraHtml } from "@/lib/escritura-print";
 import { defaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
 
@@ -220,6 +223,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [lastId, setLastId] = useState<string | null>(null);
   const [lastValue, setLastValue] = useState<string | null>(null);
   const [highlightTick, setHighlightTick] = useState(0);
+  const [isLoadingPlantilla, setIsLoadingPlantilla] = useState(false);
 
   const resultado = useMemo(() => {
     if (!acto || !state) return null;
@@ -346,6 +350,38 @@ export function EscrituraWorkspace({ caseId }: Props) {
       throw issue;
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleCargarPlantilla() {
+    if (!acto || !state) return;
+    if (mode === "redaccion" && redaccionDirty && !window.confirm("Cargar la plantilla base reemplazara el cuerpo de Redaccion. Se conservan los datos del formulario. Continuar?")) {
+      return;
+    }
+    setIsLoadingPlantilla(true);
+    setFeedback(null);
+    setError(null);
+    try {
+      let legalEntityId: number | null = null;
+      if (fuente === "banco" && isCompraventaState(state) && state.bancoNit.trim()) {
+        const matches = await searchLegalEntities(state.bancoNit.trim());
+        const found = matches.find((entity) => entity.nit === state.bancoNit.trim()) ?? matches[0];
+        legalEntityId = found?.id ?? null;
+      }
+      const plantilla = await getPlantillaSemilla(acto, fuente, legalEntityId);
+      const filled = fillPlantilla(plantilla.body_html, state as unknown as PlantillaState);
+      setRedaccionDraft({ acto, html: filled, comments: [], updated_at: new Date().toISOString() });
+      setRedaccionDirty(false);
+      setMode("redaccion");
+      setFeedback(
+        plantilla.is_fallback
+          ? "Cargada plantilla generica del acto (este banco no tiene una propia); el formulario ya la rellena."
+          : `Cargada plantilla base: ${plantilla.name}. El formulario la rellena; ajusta y firma.`,
+      );
+    } catch (issue) {
+      setError(parseApiError(issue));
+    } finally {
+      setIsLoadingPlantilla(false);
     }
   }
 
@@ -624,6 +660,16 @@ export function EscrituraWorkspace({ caseId }: Props) {
                 <div className="flex-1" />
                 <button
                   type="button"
+                  onClick={handleCargarPlantilla}
+                  disabled={isLoadingPlantilla}
+                  className="inline-flex items-center gap-2 rounded-xl border border-primary bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Carga el cuerpo base de la notaría para este acto/banco en Redacción; el formulario lo rellena."
+                >
+                  {isLoadingPlantilla ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ScrollText className="h-4 w-4" aria-hidden="true" />}
+                  Cargar cuerpo base{fuente === "banco" ? " del banco" : ""}
+                </button>
+                <button
+                  type="button"
                   onClick={() => minutaBaseInputRef.current?.click()}
                   disabled={gariOperation === "extraer"}
                   className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-3 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -643,9 +689,10 @@ export function EscrituraWorkspace({ caseId }: Props) {
                   }}
                 />
               </div>
-              {fuente === "banco" ? (
-                <p className="mt-2 text-xs text-secondary">Elige el banco y sus datos en el formulario; sube la minuta que envía el banco para prellenar la captura.</p>
-              ) : null}
+              <p className="mt-2 text-xs text-secondary">
+                <b>Cargar cuerpo base</b>: trae la plantilla semilla de la notaría {fuente === "banco" ? "para ese banco" : "del acto"} a Redacción y el formulario la rellena.
+                {" "}<b>Cargar minuta base</b>: sube el archivo que envía el banco solo para extraer datos y prellenar el formulario.
+              </p>
             </div>
           ) : null}
         <div className={`grid grid-cols-1 gap-5 ${dockOpen ? "xl:grid-cols-[400px_minmax(0,1fr)_340px]" : "xl:grid-cols-[400px_minmax(0,1fr)_64px]"}`}>

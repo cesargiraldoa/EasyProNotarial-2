@@ -229,6 +229,36 @@ export function getBibliotecaEscritura(acto: ActoCode, fecha?: string) {
   return apiFetch<BibliotecaClausula[]>(`/api/v1/escritura/biblioteca${escrituraQuery({ acto, fecha })}`);
 }
 
+export type PlantillaSemillaToken = {
+  token: string;
+  label?: string | null;
+  field?: string | null;
+  section?: string | null;
+};
+
+export type PlantillaSemilla = {
+  id: number;
+  acto: ActoCode;
+  fuente: string;
+  name: string;
+  body_html: string;
+  tokens: PlantillaSemillaToken[];
+  bank_name?: string | null;
+  legal_entity_id?: number | null;
+  notaria?: string | null;
+  is_fallback: boolean;
+};
+
+export function getPlantillaSemilla(acto: ActoCode, fuente: string, legalEntityId?: number | null) {
+  return apiFetch<PlantillaSemilla>(
+    `/api/v1/escritura/plantilla-semilla${escrituraQuery({
+      acto,
+      fuente,
+      legal_entity_id: legalEntityId != null ? String(legalEntityId) : undefined,
+    })}`,
+  );
+}
+
 export function getEscrituraState(caseId: number) {
   return apiFetch<EscrituraStateResponse>(`/api/v1/escritura/cases/${caseId}`);
 }

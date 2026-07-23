@@ -14,6 +14,6 @@ export default defineConfig({
   test: {
     cache: false,
     environment: "node",
-    include: ["lib/motor-escritura/**/*.test.ts", "components/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "components/**/*.test.ts"],
   },
 });
