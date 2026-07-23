@@ -287,14 +287,15 @@ function BancoSelector({
     };
   }, []);
 
-  async function handlePickEntity(id: number) {
-    setSelId(id);
-    setRepresentantes([]);
-    const entity = entidades.find((item) => item.id === id);
+  async function handlePickEntity(index: number) {
+    const entity = entidades[index];
     if (!entity) return;
+    setSelId(index);
+    setRepresentantes([]);
     onPickBanco(entity);
+    if (entity.id == null) return;
     try {
-      const reps = await getLegalEntityRepresentatives(id);
+      const reps = await getLegalEntityRepresentatives(entity.id);
       setRepresentantes(reps.filter((rep) => rep.is_active));
     } catch {
       setRepresentantes([]);
@@ -312,12 +313,12 @@ function BancoSelector({
         value={selId ?? ""}
         onChange={(event) => {
           const value = event.currentTarget.value;
-          if (value) handlePickEntity(Number(value));
+          if (value !== "") handlePickEntity(Number(value));
         }}
       >
         <option value="">— Seleccionar banco —</option>
-        {entidades.map((entity) => (
-          <option key={entity.id} value={entity.id}>
+        {entidades.map((entity, index) => (
+          <option key={entity.id ?? index} value={index}>
             {entity.name} · NIT {entity.nit}
           </option>
         ))}
