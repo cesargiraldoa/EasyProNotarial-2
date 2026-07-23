@@ -651,6 +651,8 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         <Checkbox id="interprete" checked={state.interprete} label="Requiere interprete / traductor" onChange={(checked) => setField("interprete", checked)} />
         <Checkbox id="pep" checked={state.pep} label="Alguna parte es PEP" onChange={(checked) => setField("pep", checked)} />
         <Checkbox id="cuentaTercero" checked={state.cuentaTercero} label="Alguna parte actua por cuenta de tercero" onChange={(checked) => setField("cuentaTercero", checked)} />
+        <Checkbox id="pep_indagado" checked={state.pep_indagado} label="Indagacion PEP realizada y con constancia" onChange={(checked) => setField("pep_indagado", checked)} />
+        <Checkbox id="rupta_verificado" checked={state.rupta_verificado} label="Verificacion RUPTA (tierras despojadas/protegidas) realizada" onChange={(checked) => setField("rupta_verificado", checked)} />
       </Fieldset>
 
       <Fieldset marker="6" title="Otorgamiento y firmas">

@@ -151,6 +151,8 @@ export interface CompraventaState {
   interprete: boolean;
   pep: boolean;
   cuentaTercero: boolean;
+  pep_indagado: boolean;
+  rupta_verificado: boolean;
   numEscritura: string;
   fechaOtorg: string;
   huella: boolean;
@@ -606,6 +608,8 @@ function cloneCompraventaDefault(credito: boolean): CompraventaState {
     interprete: false,
     pep: false,
     cuentaTercero: false,
+    pep_indagado: false,
+    rupta_verificado: false,
     numEscritura: "2.847",
     fechaOtorg: "2026-08-14",
     huella: true,

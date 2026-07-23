@@ -562,7 +562,9 @@
     "acto_code": "compraventa",
     "codigo": "compraventa_indagacion_pep_laft",
     "condicion_json": {
-      "pep_indagado": "faltante"
+      "pep_indagado": {
+        "ne": true
+      }
     },
     "efecto": "exigir_indagacion_pep",
     "severidad": "REVIEW",
@@ -575,7 +577,9 @@
     "acto_code": "compraventa",
     "codigo": "compraventa_verificacion_rupta",
     "condicion_json": {
-      "rupta_verificado": "faltante"
+      "rupta_verificado": {
+        "ne": true
+      }
     },
     "efecto": "exigir_verificacion_rupta",
     "severidad": "REVIEW",
