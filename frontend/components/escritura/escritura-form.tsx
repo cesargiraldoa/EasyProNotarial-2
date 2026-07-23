@@ -264,15 +264,23 @@ function BancoSelector({
   const [entidades, setEntidades] = useState<LegalEntityRecord[]>([]);
   const [representantes, setRepresentantes] = useState<LegalEntityRepresentativeRecord[]>([]);
   const [selId, setSelId] = useState<number | null>(null);
+  const [cargaError, setCargaError] = useState<string | null>(null);
+  const [cargado, setCargado] = useState(false);
 
   useEffect(() => {
     let active = true;
     searchLegalEntities("")
       .then((list) => {
-        if (active) setEntidades(list);
+        if (!active) return;
+        setEntidades(list);
+        setCargado(true);
+        setCargaError(null);
       })
-      .catch(() => {
-        if (active) setEntidades([]);
+      .catch((err) => {
+        if (!active) return;
+        setEntidades([]);
+        setCargado(true);
+        setCargaError(err instanceof Error ? err.message : "No se pudieron cargar los bancos.");
       });
     return () => {
       active = false;
@@ -314,6 +322,13 @@ function BancoSelector({
           </option>
         ))}
       </select>
+      {cargaError ? (
+        <p className="mt-1 text-[11px] font-semibold text-red-600">Error cargando bancos: {cargaError}</p>
+      ) : cargado && entidades.length === 0 ? (
+        <p className="mt-1 text-[11px] font-semibold text-amber-600">No hay bancos registrados. Siembra: <code>python -m app.seeds.seed_legal_entities</code></p>
+      ) : cargado ? (
+        <p className="mt-1 text-[11px] text-secondary">{entidades.length} banco(s) disponibles.</p>
+      ) : null}
       {representantes.length > 0 ? (
         <select
           className={`${inputClass} mt-2`}
