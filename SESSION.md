@@ -1,6 +1,35 @@
 ﻿# SESSION.md â€” EasyProNotarial-2
 
 ---
+## Sesión 2026-07-23 — Entorno local reproducible (backend 8001) + guía de arranque
+
+**Objetivo de la sesión:** Dejar el proyecto corriendo en local sin choques de puerto con Helexium/Gari y documentar el arranque para que no vuelva a ser un enredo.
+
+**Realizado:**
+- **Diagnóstico del enredo de arranque:** la carpeta `C:\EasyProNotarial-2` (raíz) NO es el repo — no es git, sin `frontend`, con un `backend` incompleto sin `requirements.txt`. El repo real es la subcarpeta **`C:\EasyProNotarial-2\easypro2`** (rama `claude/escritura-asistida-produccion-7oc57i`, árbol limpio). Todo el trabajo local debe hacerse ahí.
+- **Convención de puertos local:** backend en **8001** (el **8000** queda reservado para Gari/Helexium). El frontend resuelve el backend por `NEXT_PUBLIC_API_URL` (`frontend/.env.local`, copiado de `.env.example`, ya apunta a 8001).
+- **Launchers PowerShell parametrizables por puerto:** `scripts/dev/start-backend-local.ps1` y `scripts/START_LOCAL_EASYPRO.ps1` ahora aceptan `-BackendPort` (default 8001), liberan/health-check del puerto configurado, y se les quitó el candado de rama obsoleto (`feature/auditoria-easypro1`); solo bloquean `main`.
+- **Verificado corriendo:** backend `Application startup complete` en `http://127.0.0.1:8001` (`/health` 200 OK), frontend en `http://127.0.0.1:5179`, CORS OK, `Backend health: OK` desde el front. Login accesible.
+
+**Archivos creados/modificados:**
+- `docs/LEVANTAR-LOCAL.md` — guía completa de arranque local (carpeta correcta, puertos, preparación 1.ª vez, launcher vs. manual, tabla de problemas comunes)
+- `scripts/dev/start-backend-local.ps1` — parámetro `-BackendPort` (default 8001)
+- `scripts/START_LOCAL_EASYPRO.ps1` — parámetro `-BackendPort` (default 8001), sin candado de rama viejo
+
+> Nota: estos 3 archivos se commitearon en la rama **`claude/session-closure-documentation-unxu4o`** (rama designada de esta sesión de cierre). Para usarlos en la rama de desarrollo, traerlos con `git checkout origin/claude/session-closure-documentation-unxu4o -- docs/LEVANTAR-LOCAL.md scripts/START_LOCAL_EASYPRO.ps1 scripts/dev/start-backend-local.ps1`.
+
+**Pendientes para la próxima sesión:**
+1. **Continuar el desarrollo de la escritura asistida** (foco principal): retomar sobre `claude/escritura-asistida-produccion-7oc57i`, revisar visual end-to-end de los 3 actos, afinar campos que resaltan por sección.
+2. Pendientes del corpus jurídico: 2.ª verificación de GPT (7 normas nuevas) sin aplicar, conflictos de estado para decisión del notario, resto Notaría 16, capa Gari.
+3. Decidir merge a `main` de la rama de escritura asistida tras la revisión visual.
+
+**Estado al cierre:**
+- Backend: operativo en local (puerto 8001)
+- Frontend: operativo en local (puerto 5179)
+- BD producción: sin cambios
+- Git: árbol limpio; guía + launchers pusheados a `claude/session-closure-documentation-unxu4o`
+
+---
 ## Sesión 2026-07-22 — Port de "Escritura asistida" al software (front + back + BD) + salida en producción
 
 **Objetivo de la sesión:** Llevar el prototipo HTML congelado `escritura-asistida.html` al software real (Next.js + FastAPI + BD), reutilizando la infraestructura existente y SIN reprocesar; construir la capa de corpus jurídico real (normas verificadas contra fuente oficial); y dejarlo **visible y funcionando** para el usuario, accesible desde el menú lateral.
