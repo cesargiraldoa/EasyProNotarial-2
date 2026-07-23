@@ -260,7 +260,7 @@ export function crearCasoEscritura(acto?: ActoCode) {
   return apiFetch<NuevoCasoEscritura>("/api/v1/escritura/cases", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ acto: acto ?? null }),
+    body: { acto: acto ?? null },
   });
 }
 
