@@ -1,7 +1,13 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  getLegalEntityRepresentatives,
+  searchLegalEntities,
+  type LegalEntityRecord,
+  type LegalEntityRepresentativeRecord,
+} from "@/lib/legal-entities";
 import {
   casadoOUnion,
   fechaText,
@@ -248,6 +254,87 @@ export function EscrituraForm({ acto, state, onChange }: Props) {
   return <CompraventaForm acto={acto} state={state} onChange={onChange} />;
 }
 
+function BancoSelector({
+  onPickBanco,
+  onPickRepresentante,
+}: {
+  onPickBanco: (entity: LegalEntityRecord) => void;
+  onPickRepresentante: (name: string) => void;
+}) {
+  const [entidades, setEntidades] = useState<LegalEntityRecord[]>([]);
+  const [representantes, setRepresentantes] = useState<LegalEntityRepresentativeRecord[]>([]);
+  const [selId, setSelId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    searchLegalEntities("")
+      .then((list) => {
+        if (active) setEntidades(list);
+      })
+      .catch(() => {
+        if (active) setEntidades([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handlePickEntity(id: number) {
+    setSelId(id);
+    setRepresentantes([]);
+    const entity = entidades.find((item) => item.id === id);
+    if (!entity) return;
+    onPickBanco(entity);
+    try {
+      const reps = await getLegalEntityRepresentatives(id);
+      setRepresentantes(reps.filter((rep) => rep.is_active));
+    } catch {
+      setRepresentantes([]);
+    }
+  }
+
+  return (
+    <div className="mb-3 rounded-md border border-dashed border-line-strong bg-white/60 p-2">
+      <label htmlFor="banco-registro" className={labelClass}>
+        Banco del registro (autocompleta)
+      </label>
+      <select
+        id="banco-registro"
+        className={inputClass}
+        value={selId ?? ""}
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          if (value) handlePickEntity(Number(value));
+        }}
+      >
+        <option value="">— Seleccionar banco —</option>
+        {entidades.map((entity) => (
+          <option key={entity.id} value={entity.id}>
+            {entity.name} · NIT {entity.nit}
+          </option>
+        ))}
+      </select>
+      {representantes.length > 0 ? (
+        <select
+          className={`${inputClass} mt-2`}
+          defaultValue=""
+          onChange={(event) => {
+            if (event.currentTarget.value) onPickRepresentante(event.currentTarget.value);
+          }}
+        >
+          <option value="">— Apoderado(a) del banco —</option>
+          {representantes.map((rep) => (
+            <option key={rep.id} value={rep.person_name}>
+              {rep.person_name}
+              {rep.power_type ? ` · ${rep.power_type}` : ""}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "cancelacion">; state: CompraventaState; onChange: (state: CaseState) => void }) {
   const effectiveCredito = acto === "hipoteca" || state.credito;
   const showAfectacion = casadoOUnion(state.V);
@@ -262,6 +349,10 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
 
   function setField<K extends keyof CompraventaState>(key: K, value: CompraventaState[K]) {
     onChange({ ...state, [key]: value });
+  }
+
+  function applyPatch(patch: Partial<CompraventaState>) {
+    onChange({ ...state, ...patch } as CompraventaState);
   }
 
   function setAx<K extends keyof CompraventaState["ax"]>(key: K, value: boolean) {
@@ -374,6 +465,16 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
         />
         {effectiveCredito ? (
           <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+            <BancoSelector
+              onPickBanco={(entity) =>
+                applyPatch({
+                  banco: entity.name,
+                  bancoNit: entity.nit,
+                  ...(entity.legal_representative ? { apoderadoBanco: entity.legal_representative } : {}),
+                })
+              }
+              onPickRepresentante={(name) => setField("apoderadoBanco", name)}
+            />
             <div className={row2Class}>
               <TextField id="banco" label="Banco acreedor" value={state.banco} onChange={(value) => setField("banco", value)} />
               <TextField id="bancoNit" label="NIT del banco" value={state.bancoNit} onChange={(value) => setField("bancoNit", value)} />
