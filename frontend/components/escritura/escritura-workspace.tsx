@@ -194,6 +194,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [state, setState] = useState<CaseState | null>(null);
   const [mode, setMode] = useState<WorkspaceMode>("captura");
   const [dockOpen, setDockOpen] = useState(true);
+  const [gariOpen, setGariOpen] = useState(false);
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
@@ -512,20 +513,36 @@ export function EscrituraWorkspace({ caseId }: Props) {
       ) : null}
 
       {acto && state && resultado ? (
-        <GariPanel
-          operation={gariOperation}
-          extraccion={gariExtraccion}
-          clasificacion={gariClasificacion}
-          revision={gariRevision}
-          clasificacionText={clasificacionText}
-          prosaInstruction={prosaInstruction}
-          onClasificacionText={setClasificacionText}
-          onProsaInstruction={setProsaInstruction}
-          onExtraerArchivo={handleExtraerArchivo}
-          onAcceptField={acceptGariField}
-          onClasificar={handleClasificar}
-          onRevisar={handleRevisarGari}
-        />
+        <div>
+          <button
+            type="button"
+            onClick={() => setGariOpen((v) => !v)}
+            aria-expanded={gariOpen}
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-line-strong bg-white px-4 py-2.5 text-left shadow-sm hover:bg-slate-50"
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+              <WandSparkles className="h-4 w-4" aria-hidden="true" />
+              Asistencia de Gari (IA) — prellenar · clasificar · revisar
+            </span>
+            <span className="text-xs font-semibold text-secondary">{gariOpen ? "Ocultar ▲" : "Mostrar ▼"}</span>
+          </button>
+          <div className={gariOpen ? "mt-3" : "hidden"}>
+            <GariPanel
+              operation={gariOperation}
+              extraccion={gariExtraccion}
+              clasificacion={gariClasificacion}
+              revision={gariRevision}
+              clasificacionText={clasificacionText}
+              prosaInstruction={prosaInstruction}
+              onClasificacionText={setClasificacionText}
+              onProsaInstruction={setProsaInstruction}
+              onExtraerArchivo={handleExtraerArchivo}
+              onAcceptField={acceptGariField}
+              onClasificar={handleClasificar}
+              onRevisar={handleRevisarGari}
+            />
+          </div>
+        </div>
       ) : null}
 
       {acto && state && resultado ? (
