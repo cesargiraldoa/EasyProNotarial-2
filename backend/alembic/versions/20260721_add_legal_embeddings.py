@@ -39,15 +39,27 @@ def _index_exists(inspector: sa.Inspector, table_name: str, index_name: str) -> 
 def _ensure_vector_extension(bind) -> bool:
     if bind.dialect.name != "postgresql":
         return False
+    # Si ya esta instalada, usarla directamente.
+    already = bind.execute(
+        sa.text("select exists (select 1 from pg_extension where extname = 'vector')")
+    ).scalar()
+    if already:
+        return True
     # Solo intenta crear la extension si su binario esta disponible en el
-    # servidor. Asi la migracion no aborta su transaccion cuando pgvector no
-    # esta instalado: se degrada a embeddings en Text y la cadena continua.
+    # servidor. Asi la migracion no aborta cuando pgvector no esta instalado.
     available = bind.execute(
         sa.text("select exists (select 1 from pg_available_extensions where name = 'vector')")
     ).scalar()
     if not available:
         return False
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Crear dentro de un SAVEPOINT: si el rol no es superusuario (dev local),
+    # el CREATE EXTENSION falla por privilegios; hacemos rollback solo de ese
+    # savepoint para no envenenar la transaccion y degradamos a embeddings Text.
+    try:
+        with bind.begin_nested():
+            bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
+    except Exception:
+        return False
     return bool(bind.execute(sa.text("select exists (select 1 from pg_extension where extname = 'vector')")).scalar())
 
 
