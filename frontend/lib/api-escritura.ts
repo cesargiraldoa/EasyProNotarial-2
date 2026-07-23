@@ -249,6 +249,21 @@ export type PlantillaSemilla = {
   is_fallback: boolean;
 };
 
+export type NuevoCasoEscritura = {
+  case_id: number;
+  acto: ActoCode;
+  current_state: string;
+  notary_id: number;
+};
+
+export function crearCasoEscritura(acto?: ActoCode) {
+  return apiFetch<NuevoCasoEscritura>("/api/v1/escritura/cases", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ acto: acto ?? null }),
+  });
+}
+
 export function getPlantillaSemilla(acto: ActoCode, fuente: string, legalEntityId?: number | null) {
   return apiFetch<PlantillaSemilla>(
     `/api/v1/escritura/plantilla-semilla${escrituraQuery({

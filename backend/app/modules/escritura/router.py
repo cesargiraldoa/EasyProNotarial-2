@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, get_db, get_manageable_notary_ids, get_role_codes, require_roles
@@ -16,6 +17,8 @@ from app.models.case import Case
 from app.models.case_act_data import CaseActData
 from app.models.case_document import CaseDocument
 from app.models.case_document_version import CaseDocumentVersion
+from app.models.case_state_definition import CaseStateDefinition
+from app.models.notary import Notary
 from app.models.user import User
 from app.schemas.escritura import (
     ActoCode,
@@ -38,6 +41,8 @@ from app.schemas.escritura import (
     LegalNormaOut,
     LegalReglaOut,
     LegalTarifaOut,
+    NuevoCasoEscrituraIn,
+    NuevoCasoEscrituraOut,
     PlantillaSemillaOut,
     PlantillaSemillaTokenOut,
 )
@@ -297,6 +302,63 @@ def get_escritura_biblioteca(
         BibliotecaClausulaOut.model_validate(item, from_attributes=True)
         for item in clausulas_vigentes(db, corpus_acto, effective_date)
     ]
+
+
+@router.post("/cases", response_model=NuevoCasoEscrituraOut, status_code=status.HTTP_201_CREATED)
+def crear_caso_escritura(
+    payload: NuevoCasoEscrituraIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+):
+    """Crea un caso de escritura vacío y devuelve su id para abrir el workspace.
+
+    Es el punto de entrada del flujo acto-primero: no exige subir ningún .docx.
+    El acto real se elige en el workspace (ActoLauncher); aquí solo se
+    inicializa el caso con la notaría del usuario, estado inicial y consecutivo."""
+    acto: ActoCode = payload.acto or "compraventa"
+
+    notary_id = current_user.default_notary_id
+    if notary_id is None:
+        manageable = sorted(get_manageable_notary_ids(current_user))
+        notary_id = manageable[0] if manageable else None
+    if notary_id is None:
+        first_notary = db.query(Notary.id).order_by(Notary.id.asc()).first()
+        notary_id = first_notary[0] if first_notary else None
+    if notary_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No hay notaría configurada para crear el caso.",
+        )
+
+    state_def = (
+        db.query(CaseStateDefinition)
+        .filter(CaseStateDefinition.case_type == "escritura", CaseStateDefinition.is_active.is_(True))
+        .order_by(CaseStateDefinition.step_order.asc())
+        .first()
+    )
+    current_state = state_def.code if state_def else "borrador"
+
+    year = date.today().year
+    max_consecutive = (
+        db.query(func.max(Case.consecutive))
+        .filter(Case.notary_id == notary_id, Case.year == year)
+        .scalar()
+    )
+    consecutive = (max_consecutive or 0) + 1
+
+    case = Case(
+        notary_id=notary_id,
+        created_by_user_id=current_user.id,
+        case_type="escritura",
+        act_type=acto,
+        consecutive=consecutive,
+        year=year,
+        current_state=current_state,
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    return NuevoCasoEscrituraOut(case_id=case.id, acto=acto, current_state=current_state, notary_id=notary_id)
 
 
 @router.get("/plantilla-semilla", response_model=PlantillaSemillaOut)

@@ -130,6 +130,17 @@ class BibliotecaClausulaOut(BaseModel):
     vigencia_hasta: date | None = None
 
 
+class NuevoCasoEscrituraIn(BaseModel):
+    acto: ActoCode | None = None
+
+
+class NuevoCasoEscrituraOut(BaseModel):
+    case_id: int
+    acto: ActoCode
+    current_state: str
+    notary_id: int
+
+
 class PlantillaSemillaTokenOut(BaseModel):
     token: str
     label: str | None = None

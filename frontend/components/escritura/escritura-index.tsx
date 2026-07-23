@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, PenTool, RefreshCw } from "lucide-react";
+import { ArrowRight, Loader2, PenTool, RefreshCw } from "lucide-react";
 import { getCases, type CaseRecord } from "@/lib/api";
+import { crearCasoEscritura } from "@/lib/api-escritura";
 
 export function EscrituraIndex() {
+  const router = useRouter();
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   async function load() {
     setIsLoading(true);
@@ -22,6 +26,18 @@ export function EscrituraIndex() {
     }
   }
 
+  async function nuevaEscritura() {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const creado = await crearCasoEscritura();
+      router.push(`/dashboard/casos/${creado.case_id}/escritura`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No fue posible iniciar la escritura.");
+      setIsCreating(false);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -30,17 +46,19 @@ export function EscrituraIndex() {
     <div className="space-y-6">
       <section className="ep-card rounded-[2rem] px-6 py-5">
         <p className="text-sm font-semibold uppercase tracking-[0.22em] text-accent">Minutas Asistidas</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">Elige un caso para redactar su escritura</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-primary">Inicia una escritura o retoma un caso</h1>
         <p className="mt-2 text-sm text-secondary">
-          Abre la captura y la redacción asistida (compraventa, compraventa + hipoteca, cancelación de hipoteca) de cualquier caso.
+          Empieza eligiendo el acto (compraventa, compraventa + hipoteca, cancelación de hipoteca); luego la fuente (banco, particular o proyecto) y la captura asistida. No necesitas subir ningún documento.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Link
-            href="/dashboard/minutas/nueva"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
+          <button
+            type="button"
+            onClick={nuevaEscritura}
+            disabled={isCreating}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <PenTool className="h-4 w-4" /> Crear nuevo caso
-          </Link>
+            {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenTool className="h-4 w-4" />} Nueva escritura
+          </button>
           <button
             type="button"
             onClick={load}
