@@ -557,5 +557,31 @@
     "norma_slug": "ley-1996-2019-art-15-16",
     "vigencia_desde": null,
     "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_indagacion_pep_laft",
+    "condicion_json": {
+      "pep_indagado": "faltante"
+    },
+    "efecto": "exigir_indagacion_pep",
+    "severidad": "REVIEW",
+    "mensaje": "Indagar y dejar constancia si algún compareciente es Persona Expuesta Políticamente (PEP); en caso afirmativo, aplicar debida diligencia reforzada.",
+    "norma_slug": "decreto-1674-2016-pep",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
+  },
+  {
+    "acto_code": "compraventa",
+    "codigo": "compraventa_verificacion_rupta",
+    "condicion_json": {
+      "rupta_verificado": "faltante"
+    },
+    "efecto": "exigir_verificacion_rupta",
+    "severidad": "REVIEW",
+    "mensaje": "Verificar que el inmueble no esté inscrito en el registro de tierras despojadas o protegidas (RUPTA) antes de autorizar la transferencia.",
+    "norma_slug": "ley-1448-2011-rupta",
+    "vigencia_desde": null,
+    "vigencia_hasta": null
   }
 ]
