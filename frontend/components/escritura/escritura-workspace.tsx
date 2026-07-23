@@ -200,7 +200,6 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [dockOpen, setDockOpen] = useState(true);
   const [gariOpen, setGariOpen] = useState(false);
   const [fuente, setFuente] = useState<"banco" | "particular" | "proyecto">("banco");
-  const minutaBaseInputRef = useRef<HTMLInputElement>(null);
   const [caseMeta, setCaseMeta] = useState<EscrituraCaseMeta | null>(null);
   const [corpus, setCorpus] = useState<CorpusResponse | null>(null);
   const [corpusError, setCorpusError] = useState<string | null>(null);
@@ -224,6 +223,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [lastValue, setLastValue] = useState<string | null>(null);
   const [highlightTick, setHighlightTick] = useState(0);
   const [isLoadingPlantilla, setIsLoadingPlantilla] = useState(false);
+
+  const bancoElegido = state && isCompraventaState(state) ? state.banco.trim() : "";
 
   const resultado = useMemo(() => {
     if (!acto || !state) return null;
@@ -355,7 +356,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
 
   async function handleCargarPlantilla() {
     if (!acto || !state) return;
-    if (mode === "redaccion" && redaccionDirty && !window.confirm("Cargar la plantilla base reemplazara el cuerpo de Redaccion. Se conservan los datos del formulario. Continuar?")) {
+    if (mode === "redaccion" && redaccionDirty && !window.confirm("Cargar la minuta base reemplazara el cuerpo de Redaccion. Se conservan los datos del formulario. Continuar?")) {
       return;
     }
     setIsLoadingPlantilla(true);
@@ -375,8 +376,8 @@ export function EscrituraWorkspace({ caseId }: Props) {
       setMode("redaccion");
       setFeedback(
         plantilla.is_fallback
-          ? "Cargada plantilla generica del acto (este banco no tiene una propia); el formulario ya la rellena."
-          : `Cargada plantilla base: ${plantilla.name}. El formulario la rellena; ajusta y firma.`,
+          ? "Cargada minuta base generica del acto (este banco no tiene una propia); el formulario ya la rellena."
+          : `Cargada minuta base: ${plantilla.name}. El formulario la rellena; ajusta y firma.`,
       );
     } catch (issue) {
       setError(parseApiError(issue));
@@ -661,37 +662,20 @@ export function EscrituraWorkspace({ caseId }: Props) {
                 <button
                   type="button"
                   onClick={handleCargarPlantilla}
-                  disabled={isLoadingPlantilla}
+                  disabled={isLoadingPlantilla || (fuente === "banco" && !bancoElegido)}
                   className="inline-flex items-center gap-2 rounded-xl border border-primary bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Carga el cuerpo base de la notaría para este acto/banco en Redacción; el formulario lo rellena."
+                  title="Trae la minuta base (molde de la notaría para este acto/banco) a Redacción; el formulario la rellena."
                 >
                   {isLoadingPlantilla ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ScrollText className="h-4 w-4" aria-hidden="true" />}
-                  Cargar cuerpo base{fuente === "banco" ? " del banco" : ""}
+                  {fuente === "banco"
+                    ? bancoElegido
+                      ? `Cargar minuta base de ${bancoElegido}`
+                      : "Elige un banco para su minuta base"
+                    : "Cargar minuta base del acto"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => minutaBaseInputRef.current?.click()}
-                  disabled={gariOperation === "extraer"}
-                  className="inline-flex items-center gap-2 rounded-xl border border-line-strong bg-white px-3 py-2 text-sm font-semibold text-primary shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {gariOperation === "extraer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
-                  Cargar minuta base{fuente === "banco" ? " del banco" : ""}
-                </button>
-                <input
-                  ref={minutaBaseInputRef}
-                  type="file"
-                  className="hidden"
-                  aria-label="Cargar minuta base"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0] ?? null;
-                    handleExtraerArchivo(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
               </div>
               <p className="mt-2 text-xs text-secondary">
-                <b>Cargar cuerpo base</b>: trae la plantilla semilla de la notaría {fuente === "banco" ? "para ese banco" : "del acto"} a Redacción y el formulario la rellena.
-                {" "}<b>Cargar minuta base</b>: sube el archivo que envía el banco solo para extraer datos y prellenar el formulario.
+                La <b>minuta base</b> es el molde de la notaría {fuente === "banco" ? "para ese banco y acto" : "del acto"}. Se carga en Redacción y el formulario la rellena con los datos del caso.
               </p>
             </div>
           ) : null}
