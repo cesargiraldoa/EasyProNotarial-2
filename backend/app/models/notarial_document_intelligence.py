@@ -461,6 +461,7 @@ class NotarialTemplateLibraryItem(Base, TimestampMixin):
     document_type: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
     family_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_document_families.id", ondelete="SET NULL"), nullable=True, index=True)
     bank_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
+    legal_entity_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("legal_entities.id", ondelete="SET NULL"), nullable=True, index=True)
     project_name: Mapped[str | None] = mapped_column(String(240), nullable=True, index=True)
     source_document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notarial_documents.id", ondelete="SET NULL"), nullable=True, index=True)
     latest_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)

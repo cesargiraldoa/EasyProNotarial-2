@@ -14,6 +14,7 @@ from docx.shared import RGBColor
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.legal_entity import LegalEntity
 from app.models.notarial_document_intelligence import (
     NotarialDocument,
     NotarialDocumentBlock,
@@ -260,7 +261,7 @@ class NotarialHumanReviewService:
         self.db.commit()
         return {"session": _session_payload(session), "library_item": _library_payload(item), "version": _version_payload(version)}
 
-    def list_library(self, *, act_code: str | None = None, bank_name: str | None = None, project_name: str | None = None) -> list[dict[str, Any]]:
+    def list_library(self, *, act_code: str | None = None, bank_name: str | None = None, project_name: str | None = None, legal_entity_id: int | None = None) -> list[dict[str, Any]]:
         query = self.db.query(NotarialTemplateLibraryItem).filter(NotarialTemplateLibraryItem.notary_id == self.notary_id)
         if act_code:
             query = query.filter(NotarialTemplateLibraryItem.act_code == act_code)
@@ -268,7 +269,31 @@ class NotarialHumanReviewService:
             query = query.filter(NotarialTemplateLibraryItem.bank_name == bank_name)
         if project_name:
             query = query.filter(NotarialTemplateLibraryItem.project_name == project_name)
+        if legal_entity_id is not None:
+            query = query.filter(NotarialTemplateLibraryItem.legal_entity_id == legal_entity_id)
         return [_library_payload(item) for item in query.order_by(NotarialTemplateLibraryItem.updated_at.desc()).all()]
+
+    def link_bank(self, library_item_id: int, legal_entity_id: int | None) -> dict[str, Any]:
+        """Enlaza (o desvincula) un modelo de minuta aprendido con un banco del
+        registro de entidades. legal_entity_id=None quita el vinculo."""
+        item = (
+            self.db.query(NotarialTemplateLibraryItem)
+            .filter(
+                NotarialTemplateLibraryItem.notary_id == self.notary_id,
+                NotarialTemplateLibraryItem.id == library_item_id,
+            )
+            .first()
+        )
+        if item is None:
+            raise ValueError(f"Modelo de minuta {library_item_id} no existe para esta notaria")
+        if legal_entity_id is not None:
+            entity = self.db.query(LegalEntity).filter(LegalEntity.id == legal_entity_id).first()
+            if entity is None:
+                raise ValueError(f"Entidad (banco) {legal_entity_id} no existe")
+        item.legal_entity_id = legal_entity_id
+        self.db.commit()
+        self.db.refresh(item)
+        return _library_payload(item)
 
     def rollback_template(self, library_item_id: int, target_version_id: int, *, idempotency_key: str | None = None) -> dict[str, Any]:
         item = self._library_item(library_item_id)
@@ -693,6 +718,7 @@ def _library_payload(item: NotarialTemplateLibraryItem) -> dict[str, Any]:
         "document_type": item.document_type,
         "family_id": item.family_id,
         "bank_name": item.bank_name,
+        "legal_entity_id": item.legal_entity_id,
         "project_name": item.project_name,
         "source_document_id": item.source_document_id,
         "latest_version_id": item.latest_version_id,

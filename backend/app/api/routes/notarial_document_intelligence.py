@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -582,10 +582,34 @@ def list_template_library(
     act_code: str | None = None,
     bank_name: str | None = None,
     project_name: str | None = None,
+    legal_entity_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("notarial_intelligence.read", scoped_to_default_notary=True)),
 ):
-    return {"items": _human_review_service(db, current_user).list_library(act_code=act_code, bank_name=bank_name, project_name=project_name)}
+    return {
+        "items": _human_review_service(db, current_user).list_library(
+            act_code=act_code,
+            bank_name=bank_name,
+            project_name=project_name,
+            legal_entity_id=legal_entity_id,
+        )
+    }
+
+
+@router.post("/template-library/{library_item_id}/link-bank")
+def link_template_library_bank(
+    library_item_id: int,
+    legal_entity_id: int | None = Body(default=None, embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("notarial_intelligence.reparse", scoped_to_default_notary=True)),
+):
+    """Vincula un modelo de minuta aprendido con un banco del registro
+    (legal_entities). legal_entity_id=null quita el vinculo."""
+    service = _human_review_service(db, current_user)
+    try:
+        return {"library_item": service.link_bank(library_item_id, legal_entity_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/template-library/{library_item_id}/rollback", response_model=TemplateApprovalResponse)
