@@ -445,8 +445,10 @@ export function EscrituraWorkspace({ caseId }: Props) {
           ? "Banco elegido. Cargada minuta base generica del acto (este banco no tiene una propia); el formulario la rellena."
           : `Banco elegido. Cargada minuta base: ${plantilla.name}. El formulario la rellena.`,
       );
-    } catch (issue) {
-      setError(parseApiError(issue));
+    } catch {
+      // Auto-carga best-effort: si este acto aun no tiene molde (404), NO es un error
+      // del usuario. Se llenan los datos del banco igual y puede diligenciar/generar.
+      setFeedback("Banco elegido. Este acto aun no tiene minuta base propia; diligencia y genera normalmente.");
     } finally {
       setIsLoadingPlantilla(false);
     }
