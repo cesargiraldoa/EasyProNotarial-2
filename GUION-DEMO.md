@@ -4,6 +4,28 @@
 
 ---
 
+## ⭐ EL MENSAJE CENTRAL (con esto abres y cierras)
+
+**La frase que remata:**
+> **"El protocolista no arma la escritura. Describe el caso, y la escritura se arma sola — con las cláusulas correctas, los datos en su lugar, y validada contra la ley en tiempo real."**
+
+**La idea brutal (dilo con tus palabras):**
+Esto NO es un formulario que rellena una plantilla fija. Es un sistema donde **el documento se adapta al caso**. Cada situación jurídica (hipoteca previa, patrimonio de familia, afectación, divisas, predio rural, menor de edad…) es un **bloque que se ensambla solo**: trae **su cláusula legal + su formulario + el cableado entre ambos**. El protocolista no decide qué cláusula escribir ni de dónde copiarla: marca lo que aplica, llena los datos de ese tema, y el resto lo pone el sistema. **El conocimiento legal está incorporado** — un junior produce la misma calidad que el más experto.
+
+**Antes vs Ahora (el contraste que vende):**
+
+| Hoy en la notaría | Con el sistema |
+|---|---|
+| Copiar-pegar de una minuta vieja | Describir el caso con clics |
+| Riesgo de dejar datos de OTRO caso | Cada dato se captura una vez y se inserta solo |
+| El protocolista debe *saber* qué cláusula aplica | El sistema **arma** las cláusulas correctas |
+| Errores que el registro **devuelve** | Validación legal **en vivo**; no deja generar con bloqueantes |
+| Cada persona lo hace distinto | Documento **consistente y determinístico** |
+
+**Cierre potente:** *"Esto convierte años de experiencia notarial en algo que cualquiera opera en minutos, sin errores."*
+
+---
+
 ## Antes de empezar (montaje, 2 min antes)
 - Backend y frontend corriendo (`npm run restart` o las dos terminales).
 - Navegador en `http://localhost:5179/dashboard`, sesión iniciada.
@@ -40,6 +62,22 @@
 
 **[CLICO]** Pestaña **Redacción**.
 **[DIGO]** "Este es el molde **real** de Bancolombia, con el texto legal de la notaría, y los datos del caso ya insertados."
+
+---
+
+## Acto 3.5 · EL MOMENTO CLAVE — las cláusulas se ensamblan solas (1.5 min)
+> Este es el beat que prueba el mensaje central. No te lo saltes.
+
+**[CLICO]** En Captura, sección **Encadenamientos**, marco **"Agregar afectación a vivienda familiar"** (o "Cancelación de hipoteca previa").
+**[DIGO]** "Miren lo que pasa al marcar esto:" (señalo)
+- "Apareció **el formulario** que ese tema necesita — solo esos campos."
+- "Y en el documento se **insertó la cláusula legal** de ese tema, ya conectada."
+
+**[CLICO]** Lleno el campo del escenario (beneficiarios / acreedor previo).
+**[DIGO]** "Escribo el dato y **se mete solo** en la cláusula. **El protocolista no escribió una línea de derecho — solo describió el caso.** Y fíjense: el nombre del comprador ya está en la cláusula, no lo repetí; se captura una vez y el sistema lo reutiliza."
+
+**[CLICO]** Desmarco el checkbox.
+**[DIGO]** "Y si no aplica, desaparece. El documento **se adapta al caso**, no al revés. Esto es lo que ningún Word con campos hace."
 
 ---
 
