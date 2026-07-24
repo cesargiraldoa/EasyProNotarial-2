@@ -319,9 +319,22 @@ function MoneyField({ id, label, value, onChange }: { id: string; label: string;
 }
 
 function SelectField<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: Array<[T, string]>; onChange: (value: T) => void }) {
+  if (typeof window !== "undefined" && id.toLowerCase().includes("genero")) {
+    // eslint-disable-next-line no-console
+    console.log("[SELECT render]", id, "value=", value);
+  }
   return (
     <Field id={id} label={label}>
-      <select id={id} value={value} onChange={(event) => onChange(event.currentTarget.value as T)} className={inputClass}>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => {
+          // eslint-disable-next-line no-console
+          console.log("[SELECT change]", id, "nuevo=", event.currentTarget.value, "| valuePrevio=", value);
+          onChange(event.currentTarget.value as T);
+        }}
+        className={inputClass}
+      >
         {options.map(([optionValue, optionLabel]) => (
           <option key={optionValue} value={optionValue}>{optionLabel}</option>
         ))}
