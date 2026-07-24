@@ -28,9 +28,11 @@ import {
   type EstadoCivil,
   type FolioEstado,
   type GeneroCode,
+  type NotarioRol,
   type Party,
   type TipoDoc,
   type TipoPersona,
+  NOTARIOS_NOTARIA16,
 } from "@/lib/motor-escritura";
 
 type Props = {
@@ -925,6 +927,39 @@ function CompraventaForm({ acto, state, onChange }: { acto: Exclude<ActoCode, "c
           hint={state.fechaOtorg ? `En la escritura: a los ${fechaText(state.fechaOtorg)}.` : "Seleccione la fecha de otorgamiento."}
           onChange={(value) => setField("fechaOtorg", value)}
         />
+        <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/8 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-primary">Notario que autoriza</p>
+          <Field id="notario-pick" label="Notario de la notaría (autocompleta)">
+            <select
+              id="notario-pick"
+              className={inputClass}
+              defaultValue=""
+              onChange={(event) => {
+                const index = event.currentTarget.selectedIndex; // 0 = placeholder
+                if (index > 0) {
+                  const notario = NOTARIOS_NOTARIA16[index - 1];
+                  applyPatch({ notarioNombre: notario.nombre, notarioRol: notario.rol, notarioGenero: notario.genero });
+                }
+              }}
+            >
+              <option value="">— Seleccionar notario —</option>
+              {NOTARIOS_NOTARIA16.map((notario, index) => (
+                <option key={notario.nombre} value={index}>{notario.nombre} · {notario.rol}</option>
+              ))}
+            </select>
+          </Field>
+          <TextField id="notarioNombre" label="Nombre del notario(a)" value={state.notarioNombre} onChange={(value) => setField("notarioNombre", value)} />
+          <div className={row2Class}>
+            <SelectField<NotarioRol>
+              id="notarioRol"
+              label="Rol"
+              value={state.notarioRol}
+              onChange={(value) => setField("notarioRol", value)}
+              options={[["titular", "Titular"], ["suplente", "Suplente"], ["encargado", "Encargado(a)"]]}
+            />
+            <SelectField<GeneroCode> id="notarioGenero" label="Genero del notario(a)" value={state.notarioGenero} onChange={(value) => setField("notarioGenero", value)} options={generoOptions} />
+          </div>
+        </div>
         <Checkbox id="huella" checked={state.huella} label="Se toma impresion dactilar de los otorgantes" onChange={(checked) => setField("huella", checked)} />
         <Checkbox id="testigos" checked={state.testigosOn} label="Concurren testigos instrumentales" onChange={(checked) => setField("testigosOn", checked)} />
         {state.testigosOn || state.firmaRuego ? (

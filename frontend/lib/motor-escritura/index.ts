@@ -3,6 +3,13 @@ export type GeneroCode = "M" | "F" | "NB" | "T";
 export type TipoPersona = "natural" | "juridica";
 export type TipoDoc = "CC" | "CE" | "PA" | "TI" | "RC" | "PPT" | "NIT";
 export type EstadoCivil = "soltero" | "casado_sc" | "union" | "divorciado" | "viudo";
+export type NotarioRol = "titular" | "suplente" | "encargado";
+
+// Notarios de la Notaría Dieciséis de Medellín (para el selector; editable a mano igual).
+export const NOTARIOS_NOTARIA16: Array<{ nombre: string; rol: NotarioRol; genero: GeneroCode }> = [
+  { nombre: "JULIANA OLIVA ZULUAGA ARISMENDY", rol: "titular", genero: "F" },
+  { nombre: "JUAN CAMILO OROZCO GAVIRIA", rol: "encargado", genero: "M" },
+];
 export type CumplimientoTipo = "ok" | "obl" | "warn" | "crit";
 
 export interface Party {
@@ -155,6 +162,9 @@ export interface CompraventaState {
   rupta_verificado: boolean;
   numEscritura: string;
   fechaOtorg: string;
+  notarioNombre: string;
+  notarioRol: NotarioRol;
+  notarioGenero: GeneroCode;
   huella: boolean;
   testigosOn: boolean;
   hojaInicial: string;
@@ -498,6 +508,26 @@ export function genArt(g: GeneroCode): "el" | "la" | "le" {
   return g === "F" ? "la" : g === "NB" || g === "T" ? "le" : "el";
 }
 
+function notarioTitulo(g: GeneroCode): string {
+  return g === "F" ? "Notaria" : "Notario";
+}
+
+function notarioRolSufijo(rol: NotarioRol, g: GeneroCode): string {
+  if (rol === "encargado") return g === "F" ? " Encargada" : g === "NB" || g === "T" ? " Encargade" : " Encargado";
+  if (rol === "suplente") return " Suplente";
+  return "";
+}
+
+// "Notario Dieciséis Encargado" / "Notaria Dieciséis" (titular) / "Notario Dieciséis Suplente"
+export function notarioCargo(s: CompraventaState): string {
+  return notarioTitulo(s.notarioGenero) + " Dieciséis" + notarioRolSufijo(s.notarioRol, s.notarioGenero);
+}
+
+// "El suscrito" / "La suscrita" / "Le suscrite"
+export function notarioSuscrito(g: GeneroCode): string {
+  return g === "F" ? "La suscrita" : g === "NB" || g === "T" ? "Le suscrite" : "El suscrito";
+}
+
 export function labelEstado(e: EstadoCivil, genero: GeneroCode): string {
   const x = genEnding(genero);
   return {
@@ -612,6 +642,9 @@ function cloneCompraventaDefault(credito: boolean): CompraventaState {
     rupta_verificado: false,
     numEscritura: "2.847",
     fechaOtorg: "2026-08-14",
+    notarioNombre: "JUAN CAMILO OROZCO GAVIRIA",
+    notarioRol: "encargado",
+    notarioGenero: "M",
     huella: true,
     testigosOn: false,
     hojaInicial: "Aa-112942941",
@@ -695,7 +728,9 @@ function blankCompraventa(credito: boolean): CompraventaState {
     gravamen: "libre", tipoNegocio: "compraventa", tituloTipo: "compraventa",
     subsidio: false, subsidioEnt: "", posesion2: false, firmaRuego: false, interprete: false,
     pep: false, cuentaTercero: false, pep_indagado: false, rupta_verificado: false,
-    numEscritura: "", fechaOtorg: "", huella: false, testigosOn: false, hojaInicial: "", pepAny: false,
+    numEscritura: "", fechaOtorg: "",
+    notarioNombre: "JUAN CAMILO OROZCO GAVIRIA", notarioRol: "encargado", notarioGenero: "M",
+    huella: false, testigosOn: false, hojaInicial: "", pepAny: false,
     testigos: [emptyAux()], ruego: emptyAux(),
     total: 0, inicial: 0, saldo: 0,
     ax: { tradicion: false, predial: false, admin: false, cedulas: false },
@@ -921,7 +956,7 @@ export function renderEscritura(s: CompraventaState, tarifas: TarifaConfig = TAR
     + '<table><tr><td>CÓD. ' + negCod + (({ nuda: " (NUDA PROPIEDAD)", usufructo: " (USUFRUCTO)", cuota: " (DERECHOS Y ACCIONES)", uso: " (USO Y HABITACIÓN)" } as Partial<Record<CompraventaState["derecho"], string>>)[s.derecho] || "") + "</td><td>" + IF("total", "$" + pts(s.total)) + "</td></tr>"
     + (s.credito ? '<tr><td>CÓD. 0219 — HIPOTECA ABIERTA SIN LÍMITE</td><td>' + IF("saldo", "$" + pts(s.saldo)) + "</td></tr>" : "") + "</table></div>";
 
-  h += '<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los ' + IF("fechaOtorg", fechaText(s.fechaOtorg)) + ", ante el Notario Dieciséis del Círculo Notarial de Medellín, ";
+  h += '<p class="cl" data-sec="comparecencia">En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a los ' + IF("fechaOtorg", fechaText(s.fechaOtorg)) + ", ante " + genArt(s.notarioGenero) + " " + notarioCargo(s) + " del Círculo Notarial de Medellín, ";
   if (s.apod) {
     h += "compareció " + IF("apodNombre", s.apodN) + ", mayor de edad, quien obra en nombre y representación de " + persList(V, "v") + ", en virtud del poder conferido por " + IF("apodPoder", s.apodP) + ", que se protocoliza " + D("Dcto 1069/2015") + ", y en adelante la parte representada se denominará " + VEND + ", y por su conducto manifest" + adq + ":";
   } else {
@@ -1075,7 +1110,7 @@ export function otorgamiento(s: CompraventaState, tarifas: TarifaConfig = TARIFA
   } else {
     h += '<p class="para"><span class="clh">AVALÚO CATASTRAL DEL INMUEBLE.</span> ' + IF("avaluoCatastral", money(s.avaluoCatastral)) + ". NUPRE: " + IF("nupre", s.nupre) + ".</p>";
   }
-  h += '<p class="cl"><span class="clh">AUTORIZACIÓN.</span> ' + R("El suscrito Notario Dieciséis del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número " + esc(s.numEscritura) + "—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.", "Dcto 960/1970") + '<span class="fill"></span></p>';
+  h += '<p class="cl"><span class="clh">AUTORIZACIÓN.</span> ' + R(notarioSuscrito(s.notarioGenero) + " " + notarioCargo(s) + " del Círculo de Medellín AUTORIZA el presente instrumento —Escritura número " + esc(s.numEscritura) + "—, previa verificación del cumplimiento de los requisitos legales y de la identidad de los comparecientes, e imparte la fe pública que la ley le confía.", "Dcto 960/1970") + '<span class="fill"></span></p>';
 
   const blank = '<span style="color:var(--line-strong)">____________________</span>';
   const fld = (label: string, val: string): string => '<div style="font-family:var(--sans);font-size:10px;color:var(--ink-soft);margin-top:1px"><span style="color:var(--ink-faint)">' + label + ":</span> " + (val ? '<span style="color:var(--ink)">' + val + "</span>" : blank) + "</div>";
@@ -1112,7 +1147,7 @@ export function otorgamiento(s: CompraventaState, tarifas: TarifaConfig = TARIFA
   h += '<div data-sec="firmas" style="margin-top:22px"><div style="font-family:var(--sans);font-size:9px;color:var(--ink-faint);letter-spacing:.02em;margin-bottom:6px">VIENE DE LA HOJA DE PAPEL NOTARIAL NRO. ' + IF("hojaInicial", s.hojaInicial) + " DE LA ESCRITURA PÚBLICA NÚMERO " + esc(s.numEscritura) + " DE LA NOTARÍA DIECISÉIS DE MEDELLÍN. ——————</div>"
     + '<div style="text-align:center;font-family:var(--sans);font-size:10.5px;letter-spacing:.07em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px">Firmas de los otorgantes</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">' + sigs + "</div>";
-  h += '<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">JUAN CAMILO OROZCO GAVIRIA</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">Notario Dieciséis Encargado de Medellín · Autoriza — Escritura Nro. ' + esc(s.numEscritura) + "</div></div></div>";
+  h += '<div style="margin-top:34px;text-align:center"><div style="border-top:1px solid var(--ink);width:55%;margin:0 auto 5px"></div><div style="font-family:var(--serif);font-weight:600;font-size:12.5px">' + IF("notarioNombre", s.notarioNombre) + '</div><div style="font-family:var(--sans);font-size:10.5px;color:var(--ink-soft)">' + esc(notarioCargo(s)) + " de Medellín · Autoriza — Escritura Nro. " + esc(s.numEscritura) + "</div></div></div>";
   return h;
 }
 
