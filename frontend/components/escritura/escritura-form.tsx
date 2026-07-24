@@ -319,19 +319,23 @@ function MoneyField({ id, label, value, onChange }: { id: string; label: string;
 }
 
 function SelectField<T extends string>({ id, label, value, options, onChange }: { id: string; label: string; value: T; options: Array<[T, string]>; onChange: (value: T) => void }) {
-  if (typeof window !== "undefined" && id.toLowerCase().includes("genero")) {
-    // eslint-disable-next-line no-console
-    console.log("[SELECT render]", id, "value=", value);
-  }
+  // Uncontrolled + sync imperativo: en este entorno (React 19 + wrapper onChange del
+  // workspace) un <select> controlado con `value` se revierte a su valor previo ANTES
+  // de que onChange lea la nueva seleccion (mismo bug del selector de banco). Se lee
+  // por selectedIndex y se sincroniza el valor externo via ref, no via prop `value`.
+  const ref = useRef<HTMLSelectElement | null>(null);
+  useEffect(() => {
+    if (ref.current && ref.current.value !== value) ref.current.value = value;
+  }, [value]);
   return (
     <Field id={id} label={label}>
       <select
         id={id}
-        value={value}
+        ref={ref}
+        defaultValue={value}
         onChange={(event) => {
-          // eslint-disable-next-line no-console
-          console.log("[SELECT change]", id, "nuevo=", event.currentTarget.value, "| valuePrevio=", value);
-          onChange(event.currentTarget.value as T);
+          const picked = options[event.currentTarget.selectedIndex]?.[0];
+          if (picked !== undefined) onChange(picked);
         }}
         className={inputClass}
       >
