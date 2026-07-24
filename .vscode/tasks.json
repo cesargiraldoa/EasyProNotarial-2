@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Reiniciar EasyPro (backend + frontend)",
+      "detail": "Mata puertos 8001/5179, limpia .next y arranca backend + frontend con codigo fresco.",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/dev-restart.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

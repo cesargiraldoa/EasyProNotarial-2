@@ -4,6 +4,7 @@
     "private":  true,
     "scripts":  {
                     "dev":  "powershell -ExecutionPolicy Bypass -File ..\\scripts\\dev\\start-frontend-local.ps1",
+                    "restart":  "powershell -ExecutionPolicy Bypass -File ..\\scripts\\dev-restart.ps1",
                     "dev:local":  "next dev -H 127.0.0.1 -p 5179",
                     "dev:next":  "node scripts/dev.mjs",
                     "dev:raw":  "next dev -H 127.0.0.1 -p 5179",
