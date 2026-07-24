@@ -1,7 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Mic, Plus, Square, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   getLegalEntityRepresentatives,
   searchLegalEntities,
@@ -201,10 +201,97 @@ function EmailField({ id, label, value, onChange }: { id: string; label: string;
   );
 }
 
+// --- Dictado por voz (Web Speech API) ---
+type SpeechResultItem = { isFinal: boolean; 0: { transcript: string } };
+type SpeechEvent = { resultIndex: number; results: { length: number; [i: number]: SpeechResultItem } };
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+function useDictado(onAppend: (texto: string) => void) {
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<SpeechRecognitionLike | null>(null);
+  const w = typeof window !== "undefined"
+    ? (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike })
+    : null;
+  const supported = Boolean(w && (w.SpeechRecognition || w.webkitSpeechRecognition));
+
+  useEffect(() => () => { recRef.current?.stop(); }, []);
+
+  function toggle() {
+    if (!supported || !w) return;
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) return;
+    const rec = new Ctor();
+    rec.lang = "es-CO";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (event) => {
+      let texto = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const item = event.results[i];
+        if (item.isFinal) texto += item[0].transcript;
+      }
+      if (texto.trim()) onAppend(texto.trim());
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    rec.start();
+    setListening(true);
+  }
+
+  return { supported, listening, toggle };
+}
+
+// Crece con el contenido (nunca encoge: respeta el arrastre manual de la esquina).
+function useAutoGrow(value: string) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.scrollHeight > el.clientHeight) el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value]);
+  return ref;
+}
+
 function TextAreaField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  const ref = useAutoGrow(value);
+  const dictado = useDictado((texto) => onChange(value.trim() ? `${value.trimEnd()} ${texto}` : texto));
   return (
     <Field id={id} label={label}>
-      <textarea id={id} value={value} onChange={(event) => onChange(event.currentTarget.value)} className={`${inputClass} min-h-20 resize-y leading-5`} />
+      <div className="relative">
+        <textarea
+          id={id}
+          ref={ref}
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          className={`${inputClass} min-h-28 resize-y pr-11 leading-6`}
+        />
+        {dictado.supported ? (
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={dictado.toggle}
+            title={dictado.listening ? "Detener dictado" : "Dictar por voz"}
+            aria-label={dictado.listening ? "Detener dictado" : "Dictar por voz"}
+            className={`absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-md border transition ${dictado.listening ? "animate-pulse border-red-400 bg-red-50 text-red-600" : "border-line-strong bg-white text-secondary hover:border-primary hover:text-primary"}`}
+          >
+            {dictado.listening ? <Square className="h-3.5 w-3.5" aria-hidden="true" /> : <Mic className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        ) : null}
+      </div>
     </Field>
   );
 }
