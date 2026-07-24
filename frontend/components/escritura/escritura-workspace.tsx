@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Bot, Check, FileDown, Home, Landmark, Loader2, PencilLine, Printer, Save, ScrollText, SearchCheck, ShieldCheck, Upload, WandSparkles } from "lucide-react";
 import { CumplimientoPanel } from "@/components/escritura/cumplimiento-panel";
 import { CertificadoCumplimiento } from "@/components/escritura/certificado-cumplimiento";
@@ -32,7 +32,7 @@ import {
 } from "@/lib/api-escritura";
 import { bibliotecaItemFromClausula, type BibliotecaRedaccionItem } from "@/lib/escritura-redaccion-biblioteca";
 import { fillPlantilla, type PlantillaState } from "@/lib/escritura-plantilla";
-import { searchLegalEntities } from "@/lib/legal-entities";
+import { searchLegalEntities, type LegalEntityRecord } from "@/lib/legal-entities";
 import { printEscrituraHtml } from "@/lib/escritura-print";
 import { emptyDefaults, generar, type ActoCode, type CancelacionState, type CaseState, type CompraventaState } from "@/lib/motor-escritura";
 
@@ -102,6 +102,51 @@ function applyStatePath(state: CaseState, path: string, value: unknown): CaseSta
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+// Paso 1 del flujo guiado cuando Fuente = Banco: obliga a elegir banco antes de diligenciar.
+function BankGate({ onPick }: { onPick: (entity: LegalEntityRecord) => void }) {
+  const [entities, setEntities] = useState<LegalEntityRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    searchLegalEntities("")
+      .then((list) => { if (active) setEntities(list); })
+      .catch(() => { if (active) setError("No se pudieron cargar los bancos."); });
+    return () => { active = false; };
+  }, []);
+  return (
+    <div className="rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 p-6 text-center">
+      <div className="mx-auto max-w-lg">
+        <div className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Landmark className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <h3 className="font-serif text-lg font-semibold text-primary">Paso 1 · Elige el banco del caso</h3>
+        <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-secondary">
+          Con fuente <b>Banco</b>, primero selecciona el banco. Se cargará su minuta base y se habilitará el formulario para diligenciar; así no se llena ni se pierde nada por error.
+        </p>
+        <select
+          aria-label="Banco del caso"
+          className="mt-4 w-full rounded-lg border border-line-strong bg-white px-3 py-2 text-sm text-primary shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          defaultValue=""
+          onChange={(event) => {
+            const index = event.currentTarget.selectedIndex; // 0 = placeholder
+            if (index > 0) onPick(entities[index - 1]);
+          }}
+        >
+          <option value="">— Seleccionar banco —</option>
+          {entities.map((entity, index) => (
+            <option key={entity.id ?? index} value={index}>{entity.name} · NIT {entity.nit}</option>
+          ))}
+        </select>
+        {error ? (
+          <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>
+        ) : (
+          <p className="mt-2 text-xs text-secondary">{entities.length} banco(s) disponibles. ¿No aparece? Puedes cambiar la fuente a “Particular”.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function isCompraventaState(value: unknown): value is CompraventaState {
@@ -225,6 +270,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
   const [isLoadingPlantilla, setIsLoadingPlantilla] = useState(false);
 
   const bancoElegido = state && isCompraventaState(state) ? state.banco.trim() : "";
+  const bancoGate = mode === "captura" && fuente === "banco" && isCompraventaState(state) && !bancoElegido;
 
   const resultado = useMemo(() => {
     if (!acto || !state) return null;
@@ -384,6 +430,41 @@ export function EscrituraWorkspace({ caseId }: Props) {
     } finally {
       setIsLoadingPlantilla(false);
     }
+  }
+
+  async function loadPlantillaForEntity(entityId: number | null, baseState: CaseState) {
+    if (!acto) return;
+    setIsLoadingPlantilla(true);
+    try {
+      const plantilla = await getPlantillaSemilla(acto, "banco", entityId);
+      const filled = fillPlantilla(plantilla.body_html, baseState as unknown as PlantillaState);
+      setRedaccionDraft({ acto, html: filled, comments: [], updated_at: new Date().toISOString() });
+      setRedaccionDirty(false);
+      setFeedback(
+        plantilla.is_fallback
+          ? "Banco elegido. Cargada minuta base generica del acto (este banco no tiene una propia); el formulario la rellena."
+          : `Banco elegido. Cargada minuta base: ${plantilla.name}. El formulario la rellena.`,
+      );
+    } catch (issue) {
+      setError(parseApiError(issue));
+    } finally {
+      setIsLoadingPlantilla(false);
+    }
+  }
+
+  // Paso 1 del flujo guiado (Fuente = Banco): elegir banco llena sus datos y, si
+  // Redaccion esta limpia, auto-carga su molde (hibrido: no pisa ediciones).
+  function handlePickBankGate(entity: LegalEntityRecord) {
+    if (!state || !isCompraventaState(state)) return;
+    const nextState: CaseState = {
+      ...state,
+      credito: true,
+      banco: entity.name,
+      bancoNit: entity.nit,
+      ...(entity.legal_representative ? { apoderadoBanco: entity.legal_representative } : {}),
+    };
+    setState(nextState);
+    if (!redaccionDirty) void loadPlantillaForEntity(entity.id ?? null, nextState);
   }
 
   async function handleExtraerArchivo(file: File | null) {
@@ -679,6 +760,9 @@ export function EscrituraWorkspace({ caseId }: Props) {
               </p>
             </div>
           ) : null}
+        {bancoGate ? (
+          <BankGate onPick={handlePickBankGate} />
+        ) : (
         <div className={`grid grid-cols-1 gap-5 ${dockOpen ? "xl:grid-cols-[400px_minmax(0,1fr)_340px]" : "xl:grid-cols-[400px_minmax(0,1fr)_64px]"}`}>
           <div className="min-w-0" onInput={handleFormSignal} onChange={handleFormSignal}>
             <EscrituraForm acto={acto} state={state} onChange={(nextState) => setState(nextState)} />
@@ -742,6 +826,7 @@ export function EscrituraWorkspace({ caseId }: Props) {
             </section>
           )}
         </div>
+        )}
         </div>
         )
       ) : null}

@@ -59,6 +59,11 @@ function buttonByText(c: HTMLElement, t: string) {
   const b = Array.from(c.querySelectorAll("button")).find((i) => i.textContent?.includes(t));
   if (!b) throw new Error(`No button ${t}`); return b;
 }
+// fuente=banco (default) bloquea el form hasta elegir banco; estos tests usan "particular".
+async function usarFuenteParticular(c: HTMLElement) {
+  await waitFor(() => { buttonByText(c, "particular"); });
+  await act(async () => { buttonByText(c, "particular").dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+}
 function inputByLabel(c: HTMLElement, t: string) {
   const l = Array.from(c.querySelectorAll("label")).find((i) => i.textContent?.trim() === t);
   if (!l?.htmlFor) throw new Error(`No label ${t}`);
@@ -91,6 +96,7 @@ describe("DIAG integración resaltado", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await waitFor(() => { expect(container.textContent).toContain("PRIMERO: OBJETO"); });
 
     const totalInput = inputByLabel(container, "Precio total");
@@ -108,6 +114,7 @@ describe("DIAG integración resaltado", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await waitFor(() => { expect(container.textContent).toContain("PRIMERO: OBJETO"); });
 
     // "Direccion" del vendedor 1 (V-0-direccion): no tiene data-f, pero su valor

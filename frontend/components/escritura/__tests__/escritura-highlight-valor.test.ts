@@ -35,6 +35,15 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
+// fuente=banco (default) bloquea el form hasta elegir banco; este test usa "particular".
+async function usarFuenteParticular(c: HTMLElement) {
+  for (let i = 0; i < 50; i += 1) {
+    const b = Array.from(c.querySelectorAll("button")).find((x) => x.textContent?.includes("particular"));
+    if (b) { await act(async () => b.dispatchEvent(new MouseEvent("click", { bubbles: true }))); return; }
+    await act(async () => { await new Promise((r) => window.setTimeout(r, 20)); });
+  }
+  throw new Error("fuente particular no aparecio");
+}
 
 // Campos cuyo valor DEBE aparecer resaltado en el cuerpo del documento.
 const VALUE_FIELDS = [
@@ -68,6 +77,7 @@ describe("resaltado por valor: el .hl contiene el texto tecleado", () => {
     await act(async () => {
       buttonByText(container, "Compraventa + Hipoteca").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await act(async () => {});
     for (const cb of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"][id]'))) {
       if (!cb.checked) await act(async () => cb.click());

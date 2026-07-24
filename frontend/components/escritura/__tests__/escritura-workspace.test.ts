@@ -148,6 +148,17 @@ function selectText(container: HTMLElement, text: string) {
   throw new Error(`Text not found: ${text}`);
 }
 
+// Con fuente=banco (default) el formulario se bloquea hasta elegir banco (flujo guiado).
+// Estos tests no prueban el flujo de banco, asi que usan "particular" (sin gate).
+async function usarFuenteParticular(container: HTMLElement) {
+  await waitFor(() => {
+    buttonByText(container, "particular");
+  });
+  await act(async () => {
+    buttonByText(container, "particular").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
 async function openRedaccion(container: HTMLElement) {
   await act(async () => {
     buttonByText(container, "Redaccion").dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -240,6 +251,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
 
     await waitFor(() => {
       expect(container.textContent).toContain("PRIMERO: OBJETO DEL NEGOCIO");
@@ -259,6 +271,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
 
     await waitFor(() => {
       expect(container.textContent).toContain("Inmueble 1");
@@ -287,6 +300,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
 
     await waitFor(() => {
       expect(container.textContent).toContain("Rural / UAF / baldios");
@@ -312,6 +326,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await waitFor(() => {
       expect(container.textContent).toContain("Sugerencias de IA");
     });
@@ -345,6 +360,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await openRedaccion(container);
 
     const editor = editorNode(container);
@@ -367,6 +383,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await openRedaccion(container);
 
     await act(async () => {
@@ -383,6 +400,7 @@ describe("EscrituraWorkspace", () => {
     await act(async () => {
       buttonByText(container, "Compraventa").dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await usarFuenteParticular(container);
     await openRedaccion(container);
 
     const editor = editorNode(container);
