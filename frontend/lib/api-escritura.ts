@@ -274,6 +274,55 @@ export function getPlantillaSemilla(acto: ActoCode, fuente: string, legalEntityI
   );
 }
 
+// --- Registro maestro (admin) de moldes ---
+export type PlantillaAdminItem = {
+  id: number;
+  acto: string;
+  fuente: string;
+  name: string;
+  bank_name?: string | null;
+  legal_entity_id?: number | null;
+  is_active: boolean;
+  updated_at?: string | null;
+};
+
+export type PlantillaAdminDetail = {
+  id: number;
+  acto: string;
+  fuente: string;
+  name: string;
+  body_html: string;
+  tokens: PlantillaSemillaToken[];
+  bank_name?: string | null;
+  legal_entity_id?: number | null;
+  notaria?: string | null;
+};
+
+export type PlantillaAdminPayload = {
+  acto: ActoCode;
+  fuente: string;
+  legal_entity_id: number | null;
+  name: string;
+  body_html: string;
+  tokens?: PlantillaSemillaToken[];
+};
+
+export function listPlantillasAdmin() {
+  return apiFetch<PlantillaAdminItem[]>("/api/v1/escritura/plantillas-semilla");
+}
+
+export function getPlantillaAdmin(id: number) {
+  return apiFetch<PlantillaAdminDetail>(`/api/v1/escritura/plantillas-semilla/${id}`);
+}
+
+export function savePlantillaAdmin(payload: PlantillaAdminPayload) {
+  return apiFetch<PlantillaAdminDetail>("/api/v1/escritura/plantillas-semilla", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+  });
+}
+
 export function getEscrituraState(caseId: number) {
   return apiFetch<EscrituraStateResponse>(`/api/v1/escritura/cases/${caseId}`);
 }

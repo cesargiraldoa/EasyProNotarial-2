@@ -161,6 +161,39 @@ class PlantillaSemillaOut(BaseModel):
     is_fallback: bool = False
 
 
+# --- Registro maestro (admin) de moldes semilla ---
+class PlantillaAdminItemOut(BaseModel):
+    id: int
+    acto: str
+    fuente: str
+    name: str
+    bank_name: str | None = None
+    legal_entity_id: int | None = None
+    is_active: bool = True
+    updated_at: str | None = None
+
+
+class PlantillaAdminDetailOut(BaseModel):
+    id: int
+    acto: str
+    fuente: str
+    name: str
+    body_html: str
+    tokens: list[PlantillaSemillaTokenOut] = Field(default_factory=list)
+    bank_name: str | None = None
+    legal_entity_id: int | None = None
+    notaria: str | None = None
+
+
+class PlantillaAdminIn(BaseModel):
+    acto: ActoCode
+    fuente: str = "banco"
+    legal_entity_id: int | None = None
+    name: str = Field(min_length=1, max_length=240)
+    body_html: str = Field(min_length=1)
+    tokens: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class CaseMeta(BaseModel):
     id: int
     notary_id: int

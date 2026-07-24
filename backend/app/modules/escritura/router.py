@@ -43,6 +43,9 @@ from app.schemas.escritura import (
     LegalTarifaOut,
     NuevoCasoEscrituraIn,
     NuevoCasoEscrituraOut,
+    PlantillaAdminDetailOut,
+    PlantillaAdminIn,
+    PlantillaAdminItemOut,
     PlantillaSemillaOut,
     PlantillaSemillaTokenOut,
 )
@@ -60,7 +63,12 @@ from app.services.escritura_gari import (
 from app.services.gari_document_service import build_gari_docx_buffer
 from app.services.legal_corpus import clausulas_vigentes, normas_vigentes, reglas_vigentes, tarifas_vigentes
 from app.services.legal_rag import buscar_corpus
-from app.services.plantilla_semilla import resolver_plantilla_semilla
+from app.services.plantilla_semilla import (
+    get_plantilla_admin,
+    list_plantillas_admin,
+    resolver_plantilla_semilla,
+    upsert_plantilla_admin,
+)
 
 router = APIRouter(prefix="/escritura", tags=["escritura"])
 
@@ -397,6 +405,87 @@ def get_plantilla_semilla(
         legal_entity_id=resuelta.legal_entity_id,
         notaria=resuelta.notaria,
         is_fallback=resuelta.is_fallback,
+    )
+
+
+@router.get("/plantillas-semilla", response_model=list[PlantillaAdminItemOut])
+def listar_plantillas_admin(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Registro maestro: lista los moldes semilla de las notarías del usuario."""
+    notary_ids = get_manageable_notary_ids(current_user)
+    items = list_plantillas_admin(db, notary_ids)
+    return [PlantillaAdminItemOut(**item.__dict__) for item in items]
+
+
+@router.get("/plantillas-semilla/{item_id}", response_model=PlantillaAdminDetailOut)
+def obtener_plantilla_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Registro maestro: un molde con su cuerpo HTML para editarlo."""
+    notary_ids = get_manageable_notary_ids(current_user)
+    resuelta = get_plantilla_admin(db, item_id, notary_ids)
+    if resuelta is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Molde no encontrado.")
+    return PlantillaAdminDetailOut(
+        id=resuelta.id,
+        acto=resuelta.acto,
+        fuente=resuelta.fuente,
+        name=resuelta.name,
+        body_html=resuelta.body_html,
+        tokens=[PlantillaSemillaTokenOut(**token) for token in resuelta.tokens],
+        bank_name=resuelta.bank_name,
+        legal_entity_id=resuelta.legal_entity_id,
+        notaria=resuelta.notaria,
+    )
+
+
+@router.post("/plantillas-semilla", response_model=PlantillaAdminDetailOut, status_code=status.HTTP_201_CREATED)
+def guardar_plantilla_admin(
+    payload: PlantillaAdminIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+):
+    """Registro maestro: crea o actualiza un molde (acto+fuente+banco). Sin seed ni código."""
+    notary_id = current_user.default_notary_id
+    if notary_id is None:
+        manageable = sorted(get_manageable_notary_ids(current_user))
+        notary_id = manageable[0] if manageable else None
+    if notary_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No hay notaría configurada para guardar el molde.",
+        )
+    try:
+        item = upsert_plantilla_admin(
+            db,
+            notary_id=notary_id,
+            acto=payload.acto,
+            fuente=payload.fuente,
+            legal_entity_id=payload.legal_entity_id,
+            name=payload.name,
+            body_html=payload.body_html,
+            tokens=payload.tokens,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    resuelta = get_plantilla_admin(db, item.id, [notary_id])
+    if resuelta is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo releer el molde guardado.")
+    return PlantillaAdminDetailOut(
+        id=resuelta.id,
+        acto=resuelta.acto,
+        fuente=resuelta.fuente,
+        name=resuelta.name,
+        body_html=resuelta.body_html,
+        tokens=[PlantillaSemillaTokenOut(**token) for token in resuelta.tokens],
+        bank_name=resuelta.bank_name,
+        legal_entity_id=resuelta.legal_entity_id,
+        notaria=resuelta.notaria,
     )
 
 

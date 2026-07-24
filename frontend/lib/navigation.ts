@@ -39,6 +39,7 @@ export const appNavigation: NavigationItem[] = [
   { label: "Minutas", href: "/dashboard/casos", icon: FolderKanban, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "Crear Minuta", href: "/dashboard/minutas/nueva", icon: PenTool, roles: [...NOTARIAL_WORKSPACE_ROLES] },
   { label: "Minutas Asistidas", href: "/dashboard/escritura", icon: ScrollText, roles: [...NOTARIAL_WORKSPACE_ROLES] },
+  { label: "Registro de moldes", href: "/dashboard/escritura/moldes", icon: Layers3, roles: ["super_admin", "admin_notary"] },
   { label: "Biblioteca", href: "/dashboard/biblioteca", icon: BookOpen, roles: [...NOTARIAL_ROLES_SANS_SUPERADMIN] },
   { label: "Actos / Plantillas", href: "/dashboard/actos-plantillas", icon: Layers3, roles: [...NOTARIAL_ROLES_SANS_SUPERADMIN] },
   { label: "Revisión Documental", href: "/dashboard/inteligencia-documental", icon: GitCompareArrows, roles: [...NOTARIAL_ROLES_SANS_SUPERADMIN] },
