@@ -1,0 +1,365 @@
+<!--
+  PLANTILLA SEMILLA — Davivienda · Compraventa + Hipoteca abierta con cuantía indeterminada + Afectación a vivienda familiar
+  Fuente: minuta real Notaría Dieciséis de Medellín (E.P. 3.740 del 3 de junio de 2026 — compraventa + hipoteca abierta sin
+  límite de cuantía a favor del BANCO DAVIVIENDA S.A. + afectación a vivienda familiar Ley 258/1996, PH).
+  El texto legal (Ley 258/1996 y 854/2003, Ley 546/1999, Ley 788/2002, renuncia condición resolutoria de pago y entrega,
+  cláusulas de la hipoteca abierta, cláusula aceleratoria, seguros, cesión/titularización, notas SNR/SARLAF) es la redacción
+  PROPIA DE DAVIVIENDA y se conserva VERBATIM del documento fuente (solo se corrigió ruido de OCR: líneas de guiones y tabs).
+  Los marcadores dobles-llave se corresponden 1:1 con los campos de CompraventaState (ver .map.json) y usan el MISMO
+  vocabulario de tokens del molde de Bancolombia.
+  El banco es DAVIVIENDA fijo en el texto (este es el molde propio de Davivienda); solo el apoderado, el poder E.P. y la
+  notaría del poder son tokens ({{apoderadoBanco}}, {{poderBancoEP}}, {{poderBancoNot}}).
+  Convenciones de condicionalidad (no son tokens, son marcas para el motor):
+    [[if ph]] … [[/if]]        bloques de propiedad horizontal
+    [[if credito]] … [[/if]]   toda la sección de hipoteca, aceptación del apoderado y NOTAS 1-3
+    [[if afect]] … [[/if]]     afectación a vivienda familiar (código 304, Ley 258/1996 — token afect)
+    [[if vis]] … [[/if]]       lenguaje de Vivienda de Interés Social
+    [[if subsidio]] … [[/if]]  mención de subsidio
+    [[if C.0.estado in casado_sc|union]] … [[/if]]  comparecencia y ratificación del cónyuge/compañero(a) para Ley 258
+  Los tramos marcados con «·····» son datos que el modelo de tokens actual NO captura (ver .map.json → no_capturado_por_tokens).
+-->
+<article class="escritura" lang="es">
+
+  <!-- ===================== ENCABEZADO / CARÁTULA ===================== -->
+  <header class="caratula">
+    <p class="titulo-escritura">ESCRITURA PÚBLICA NRO. {{numEscritura}}</p>
+    <p class="acto">COMPRAVENTA, RENUNCIA CONDICIÓN RESOLUTORIA DERIVADA DE LA FORMA DE PAGO y ENTREGA<!-- [[if credito]] -->, HIPOTECA ABIERTA CON CUANTÍA INDETERMINADA<!-- [[/if]] --><!-- [[if afect in si]] --> y AFECTACIÓN A VIVIENDA FAMILIAR<!-- [[/if]] -->.</p>
+    <p>Otorgada por: {{V.0.nombre}}.</p>
+    <p>A favor de: {{C.0.nombre}}.</p>
+    <!-- [[if credito]] -->
+    <p>Hipoteca a favor de: BANCO DAVIVIENDA S.A.</p>
+    <!-- [[/if]] -->
+  </header>
+
+  <!-- ===================== FORMATO DE CALIFICACIÓN (SNR) ===================== -->
+  <section class="snr formato-calificacion">
+    <h2>SUPERINTENDENCIA DE NOTARIADO Y REGISTRO</h2>
+    <p class="sub">FORMATO DE CALIFICACIÓN — ART. 8 PAR. 4 LEY 1579 / 2012</p>
+
+    <table class="snr-tabla">
+      <tbody>
+        <tr><th>Folio(s) de matrícula inmobiliaria Nro(s):</th><td>{{matricula}}</td></tr>
+        <tr><th>Código catastral Nro.:</th><td>{{catastral}}</td></tr>
+        <tr><th>NUPRE:</th><td>{{nupre}}</td></tr>
+      </tbody>
+    </table>
+
+    <h3>UBICACIÓN DEL PREDIO</h3>
+    <table class="snr-tabla">
+      <tbody>
+        <tr><th>Municipio:</th><td>BELLO ANT. — Predio: URBANO.</td></tr>
+        <tr><th>Nombre o dirección:</th><td>{{inmdesc}}</td></tr>
+      </tbody>
+    </table>
+
+    <h3>DATOS DE LA ESCRITURA</h3>
+    <table class="snr-tabla">
+      <tbody>
+        <tr><th>Escritura Nro.:</th><td>{{numEscritura}}</td></tr>
+        <tr><th>Fecha de otorgamiento:</th><td>{{fechaOtorg}}</td></tr>
+        <tr><th>Notaría:</th><td>NOTARÍA DIECISÉIS DE MEDELLÍN.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>NATURALEZA JURÍDICA DEL ACTO</h3>
+    <table class="snr-tabla naturaleza">
+      <thead>
+        <tr><th>Código</th><th>Especificación</th><th>Valor del acto</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>125</td><td>COMPRAVENTA</td><td>{{total}}</td></tr>
+        <!-- [[if credito]] -->
+        <tr><td>205</td><td>HIPOTECA ABIERTA SIN LÍMITE</td><td>{{saldo}}</td></tr>
+        <!-- [[/if]] -->
+        <!-- [[if afect in si]] -->
+        <tr><td>304</td><td>AFECTACIÓN A VIVIENDA FAMILIAR</td><td></td></tr>
+        <!-- [[/if]] -->
+      </tbody>
+    </table>
+
+    <h3>PERSONAS QUE INTERVIENEN EN EL ACTO</h3>
+    <table class="snr-tabla personas">
+      <thead>
+        <tr><th>Nombre</th><th>Identificación</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>{{V.0.nombre}}</td><td>C.C. {{V.0.id}}</td></tr>
+        <tr><td>{{C.0.nombre}}</td><td>C.C. {{C.0.id}}</td></tr>
+        <!-- [[if credito]] -->
+        <tr><td>BANCO DAVIVIENDA S.A.</td><td>NIT. 860.034.313-7</td></tr>
+        <!-- [[/if]] -->
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===================== COMPARECENCIA ===================== -->
+  <section class="comparecencia">
+    <p>En la ciudad de Medellín, Departamento de Antioquia, República de Colombia, a {{fechaOtorg}}, al despacho de la NOTARÍA DIECISÉIS DEL CÍRCULO NOTARIAL DE MEDELLÍN, cuya titularidad ejerce el(la) doctor(a) ·····<span class="nota-hueco" title="Notario(a) / Interino(a) / Encargado(a) y acto de designación — no capturado por el modelo de tokens">[Notario(a) o su encargado(a)/interino(a) y acto de designación]</span>·····.</p>
+
+    <p>Compareció el(la) señor(a) {{V.0.nombre}}, quien dijo ser mayor de edad, domiciliado(a) en el Municipio de {{V.0.ciudad}}, de tránsito por esta ciudad de Medellín, identificado(a) con la cédula de ciudadanía número {{V.0.id}} expedida en ·····<span class="nota-hueco" title="Ciudad de expedición del documento — no capturado por el modelo de tokens">[ciudad de expedición]</span>·····, de estado civil {{V.0.estado}} y manifestó(aron):</p>
+  </section>
+
+  <!-- ===================== DECLARACIONES DEL VENDEDOR ===================== -->
+  <section class="clausulas vendedor">
+
+    <p class="clausula"><span class="ord">PRIMERO:</span> Que comparece(n) al otorgamiento del presente instrumento, obrando en nombre(s) propio(s) y quien(es) para los efectos del presente contrato se denominará(n) en lo sucesivo como El (La, Los) Vendedor (a, es).</p>
+
+    <p class="clausula"><span class="ord">SEGUNDO:</span> <span class="epigrafe">OBJETO DEL NEGOCIO Y DESCRIPCIÓN DEL BIEN INMUEBLE:</span> Que obrando en la condición dicha, Transfiere(n) a Título de {{tipoNegocio}} en favor de el(la, los) señor(a, es) {{C.0.nombre}} el derecho de {{derecho}} y posesión real y material que el(la, los) exponente(s) Vendedor(a, es) tiene(n) y ejerce(n) sobre el(los) siguiente(s) bien(es) inmueble(s):</p>
+
+    <p class="inmueble-desc">{{inmdesc}} {{linderos}}</p>
+
+    <table class="snr-tabla inmueble-registral">
+      <tbody>
+        <tr><th>Folio(s) de matrícula inmobiliaria Nro(s):</th><td>{{matricula}}</td></tr>
+        <tr><th>Código catastral Nro.:</th><td>{{catastral}}</td></tr>
+        <tr><th>NUPRE:</th><td>{{nupre}}</td></tr>
+      </tbody>
+    </table>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO PRIMERO:</span> No obstante la mención de la cabida, área y linderos, el(los) inmueble(s) se transfiere(n) como cuerpo(s) cierto(s).</p>
+
+    <!-- [[if ph]] -->
+    <p class="paragrafo"><span class="ord">PARÁGRAFO SEGUNDO:</span> El(los) inmueble(s) anteriormente descrito(s) hace(n) parte integrante de la Manzana 6 - Etapa 3 de la URBANIZACIÓN RIACHUELOS, distinguida en su puerta de entrada con la placa número 65-93 de la Calle 52-B, de la actual nomenclatura urbana del Municipio de Bello Antioquia, construida sobre un lote de terreno, cuyos linderos se encuentran descritos en la {{phReg}}.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO TERCERO:</span> <span class="epigrafe">RÉGIMEN DE PROPIEDAD HORIZONTAL:</span> Dicha edificación fue sometida al régimen de propiedad horizontal y su reglamento elevado a {{phReg}}, debidamente registrada(s) en el(los) respectivo(s) folio(s) de matrícula inmobiliaria.</p>
+    <!-- [[/if]] -->
+
+    <p class="clausula"><span class="ord">TERCERO:</span> <span class="epigrafe">TRADICIÓN Y TÍTULO(S) DE ADQUISICIÓN:</span> Que el(la, los) vendedor(a, es) adquirió(eron) el(los) inmueble(s) que transfiere(n) mediante el presente instrumento, por {{tituloTipo}} hecha a ·····<span class="nota-hueco" title="Nombre del anterior propietario/tradente — no capturado por el modelo de tokens">[anterior propietario/tradente]</span>·····, como consta en los contratos contenidos en la Escritura Pública número {{tituloNum}} del {{tituloFecha}} de la {{tituloNotaria}}, debidamente registrada en la Oficina de Registro de Instrumentos Públicos de Medellín — Zona Norte, bajo el(los) FOLIO(S) DE MATRÍCULA INMOBILIARIA NÚMERO(S) {{matricula}}.</p>
+
+    <p class="clausula"><span class="ord">CUARTO:</span> Que no ha(n) vendido ni prometido en venta a ninguna otra persona el(los) inmueble(s) que aquí vende(n) y que éste(os) lo(s) garantiza(n) {{gravamen}} de toda clase de gravámenes y limitaciones al dominio en general, como censo, pleitos pendientes, derechos de usufructo, uso y habitación, arrendamiento por escritura pública, patrimonio de familia inembargable y condiciones resolutorias.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO PRIMERO:</span> En cuanto a hipotecas el(los) inmueble(s) objeto de venta, se encuentra(n) libre(s) como ya se dijo y en cuanto a limitaciones al dominio únicamente soporta(n) las limitaciones inherentes al régimen de propiedad horizontal.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO SEGUNDO:</span> <span class="epigrafe">EFECTOS DE LA LEY 258 DE 1996, MODIFICADA POR LA LEY 854 DE 2003:</span> De conformidad con el Artículo 6 de la Ley 258 de 1996 la suscrita notaria indaga a el(la, los) Vendedor(a, es) sobre si tiene sociedad conyugal vigente, matrimonio o unión marital de hecho y si el inmueble objeto de este contrato está afectado al régimen de vivienda familiar. El(la, los) Vendedor(a, es) manifestó(aron) bajo la gravedad del juramento que su estado civil es {{V.0.estado}} y que el(los) inmueble(s) que ahora enajena(n) {{afect}} está(n) afectado(s) a vivienda familiar.</p>
+
+    <p class="clausula"><span class="ord">QUINTO:</span> Que el precio de la compraventa lo constituye la cantidad de: {{total}}, suma de dinero que El (la, los) Comprador (a, es) cancelará(n) así:</p>
+
+    <p class="literal">a.- La suma de {{inicial}} suma de dinero que el(la, los) Comprador(a, es) ha(n) pagado con recursos propios y que el(la, los) Vendedor(a, es) declara(n) tener recibido(s) a entera satisfacción.</p>
+
+    <p class="literal">b.- Y el saldo restante o sea la cantidad de: {{saldo}}
+      <!-- [[if vis]] -->
+      suma de dinero que no supera el 80% del Avalúo Comercial del inmueble por ser considerado que el inmueble objeto de financiación está dentro del rango establecido para Vivienda de Interés Social, el cual se adjunta para su protocolización con el presente instrumento, de conformidad con el Literal a) del Artículo 1 del Decreto 145 de 2000.
+      <!-- [[/if]] -->
+      suma de dinero que el(la, los) comprador(a, es) pagará(n) con el producto de un crédito aprobado por el BANCO DAVIVIENDA S.A. y que será desembolsado mediante transferencia bancaria a la Cuenta AFC Nro. ·····<span class="nota-hueco" title="Cuenta AFC de desembolso y titular — no capturado por el modelo de tokens">[cuenta AFC de desembolso y titular]</span>····· del BANCO DAVIVIENDA S.A.</p>
+
+    <!-- [[if subsidio]] -->
+    <p class="literal">Del valor antes indicado, parte corresponde a subsidio de vivienda otorgado por {{subsidioEnt}}.</p>
+    <!-- [[/if]] -->
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO 5.1:</span> Las partes de común acuerdo, aceptan, que en el caso en que se haya pactado en la presente cláusula el giro de recursos a través del servicio de transferencia ACH entre entidades bancarias y dicha(s) transferencia(s) hayan sido rechazada(s) por cualquier motivo, el Banco Davivienda procederá a girar los recursos a través de cheque de gerencia en las mismas condiciones de monto y beneficiario(s) de los recursos, pactados en la presente cláusula.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO 5.2:</span> Las partes de común acuerdo aceptan y conocen que en caso de que el desembolso se realice a un tercero se genera el cobro del 4*1000 sobre el valor del desembolso.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO 5.3:</span> <span class="epigrafe">RENUNCIA A LA CONDICIÓN RESOLUTORIA DERIVADA DE LA FORMA DE PAGO:</span> Las partes manifiestan que renuncian expresamente al ejercicio de la condición resolutoria derivada de la forma de pago prevista en la presente Cláusula.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO 5.4:</span> Los comparecientes de conformidad con lo previsto en el Artículo 61 de la Ley 2010 de 27 de Diciembre de 2019, modificatorio del Artículo 90 del Estatuto Tributario; declaramos bajo la gravedad de juramento, que el precio incluido en la escritura es real y no ha sido objeto de pacto privado en el que se haya señalado este valor, así mismo declaramos que no existen sumas que se hayan convenido o facturado por fuera de la misma. Esta declaración se hace de manera libre y espontánea por parte de nosotros los comparecientes sin responsabilidad alguna por parte del Notario.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO 5.5:</span> <span class="epigrafe">DECLARACIÓN DE ORIGEN DE FONDOS:</span> Los comparecientes declaran que tanto los recursos que fueron utilizados para la ejecución del presente contrato, como los ingresos con los que adquieren los inmuebles, provienen de actividades lícitas, que no se encuentra(n) con registros negativos en listados de prevención de lavado de activos nacionales o internacionales, ni incurre(n) en una de las dos categorías de lavado de activos (conversión o movimiento), ni se encuentra(n) inscrito(s) en los listados de la OFAC o de cualquier otra autoridad local, extranjera o internacional como sospechoso(s) de actividades de lavado de activos o lavado de dinero.</p>
+
+    <p class="nota-legal"><span class="epigrafe">NOTA:</span> Para todos los efectos el "lavado de dinero" es el conjunto de procedimientos usados para cambiar la identidad del dinero obtenido ilegalmente, a fin de que aparente haber sido obtenido de fuentes legítimas. Estos procedimientos incluyen disimular la procedencia y propiedad verdadera de los fondos.</p>
+
+    <p class="clausula"><span class="ord">SEXTO:</span> Que la entrega real y material de el(los) inmueble(s) vendido(s) se realizará a la fecha del desembolso del crédito otorgado por el BANCO DAVIVIENDA S.A. a entera satisfacción de el(la, los) Comprador(a, es), por los linderos indicados, con todos sus usos, costumbres y servidumbres activas y pasivas, legalmente constituidas o que consten en títulos anteriores, y se obligan a salir al saneamiento de la venta en todos los casos que ordena la Ley, sea por evicción o por vicios redhibitorios.</p>
+
+    <p class="literal">Declara(n) además que conoce(n) y acepta(n) el estado de el(los) inmueble(s), sus características, especificaciones, áreas, los servicios públicos con que cuenta(n), incluyendo el estado de conexión provisional o definitivo, así como la prestación en el que se encuentra(n), su situación jurídica, ubicación, alinderación, los usos permitidos, los beneficios que puede(n) prestar el(los) inmueble(s) y su estado actual.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO:</span> <span class="epigrafe">RENUNCIA A LA CONDICIÓN RESOLUTORIA DERIVADA DE LA FORMA DE ENTREGA:</span> No obstante la fecha pactada en la presente cláusula para la entrega del inmueble, LAS PARTES manifiestan que Renuncian expresamente al Ejercicio de la Condición Resolutoria derivada de dicha entrega.</p>
+
+    <p class="clausula"><span class="ord">SÉPTIMO:</span> <span class="epigrafe">GASTOS:</span> Los gastos e impuestos que se ocasionen por el otorgamiento de la presente escritura pública de compraventa, tales como gastos notariales e impuesto de registro o (rentas) serán cubiertos por partes iguales entre el(la, los) Vendedor(a, es) y el(la, los) Comprador(a, es). La Retención en la Fuente será de cuenta exclusiva de el(la, los) Vendedor(a, es).</p>
+
+    <!-- [[if credito]] -->
+    <p class="paragrafo"><span class="ord">PARÁGRAFO:</span> Los gastos que se ocasionen por el registro de la presente escritura pública de compraventa y todos los gastos notariales e impuestos de beneficencia o rentas y el registro por concepto de la hipoteca que el(la, los) Comprador(a, es) constituye(n) por esta escritura a favor del BANCO DAVIVIENDA S.A., serán de cuenta exclusiva de el(la, los) Comprador(a, es).</p>
+    <!-- [[/if]] -->
+  </section>
+
+  <!-- ===================== ACEPTACIÓN DEL COMPRADOR ===================== -->
+  <section class="clausulas comprador">
+    <p>Presente el(la) Comprador(a) señor(a) {{C.0.nombre}}, quien dijo ser mayor de edad, domiciliado(a) en el Municipio de {{C.0.ciudad}}, de tránsito por esta ciudad de Medellín, identificado(a) con la cédula de ciudadanía número {{C.0.id}} expedida en ·····<span class="nota-hueco" title="Ciudad de expedición del documento — no capturado por el modelo de tokens">[ciudad de expedición]</span>·····, de estado civil: {{C.0.estado}}, manifestó(aron):</p>
+
+    <p class="literal">A.- Que comparece(n) al otorgamiento del presente instrumento obrando en nombre(s) propio(s).</p>
+    <p class="literal">B.- Que obrando en la calidad indicada acepta(n) la presente escritura y las declaraciones en ella contenidas.</p>
+    <p class="literal">C.- Que acepta(n) que la entrega de el(los) inmueble(s) se haga en la forma establecida en el numeral Sexto de las declaraciones de el(la, los) Vendedor(a, es) que anteceden en este mismo instrumento.</p>
+    <!-- [[if ph]] -->
+    <p class="literal">D.- Manifiesta(n) conocer y acatar en todas sus partes el reglamento de propiedad horizontal al cual se encuentra(n) sometido(s) el(los) inmueble(s) que se adquiere(n).</p>
+    <!-- [[/if]] -->
+    <!-- [[if credito]] -->
+    <p class="literal">E.- BANCO DAVIVIENDA S.A. inicialmente aprobó un crédito para la adquisición o construcción de vivienda, con un plazo comprendido entre los 5 y los 30 años, que será garantizado con hipoteca en primer grado constituida sobre la vivienda financiada.</p>
+    <!-- [[/if]] -->
+  </section>
+
+  <!-- ===================== LEY 258 — COMPARECENCIA DEL CÓNYUGE, AFECTACIÓN Y RATIFICACIÓN ===================== -->
+  <!-- [[if C.0.estado in casado_sc|union]] -->
+  <section class="ley258-comprador">
+    <p><span class="epigrafe">EFECTOS DE LA LEY 258 DE 1996, MODIFICADA POR LA LEY 854 DE 2003:</span> Comparece(n) nuevamente el(la, los) señor(a, es): {{C.0.nombre}} de las condiciones civiles conocidas y ·····<span class="nota-hueco" title="Cónyuge o compañero(a) permanente del comprador, nombre e identificación — no capturado por el modelo de tokens (no existe campo de cónyuge en el estado)">[cónyuge o compañero(a) permanente, nombre e identificación]</span>·····, mayor de edad, domiciliado(a) en el Municipio de Bello Antioquia, de tránsito por esta ciudad de Medellín, quien obra en su calidad de cónyuge, manifestó(aron): Que de común acuerdo entre sí, han decidido que el inmueble que se adquiere <!-- [[if afect in si]] -->SÍ<!-- [[/if]] --> queda afectado a vivienda familiar, de conformidad con lo establecido en el Artículo 6º Ley 258 de 1996, modificada por la Ley 854 de 2003<!-- [[if credito]] --> y así mismo acepta y ratifica la hipoteca que su cónyuge constituye a continuación a favor del BANCO DAVIVIENDA S.A.<!-- [[/if]] --></p>
+  </section>
+  <!-- [[/if]] -->
+
+  <!-- ===================== HIPOTECA ABIERTA CON CUANTÍA INDETERMINADA ===================== -->
+  <!-- [[if credito]] -->
+  <section class="hipoteca">
+    <h2>HIPOTECA ABIERTA CON CUANTÍA INDETERMINADA</h2>
+
+    <p>Comparece(n) nuevamente el(la, los) señor(a, es) {{C.0.nombre}}, quien dijo ser mayor de edad, domiciliado(a) en el Municipio de {{C.0.ciudad}}, de tránsito por esta ciudad de Medellín, identificado(a) con la cédula de ciudadanía número {{C.0.id}}, de estado civil: {{C.0.estado}}, quien(es) en este acto obra(n) en su(s) propio(s) nombre(s) y quien(es) en el texto de esta escritura se denominará(n) individual o conjuntamente EL (LOS) HIPOTECANTE (S) y manifestó(aron):</p>
+
+    <p class="clausula"><span class="ord">PRIMERO:</span> Que constituye(n) HIPOTECA ABIERTA SIN LÍMITE DE CUANTÍA a favor del BANCO DAVIVIENDA S.A., establecimiento de crédito, con NIT. 860.034.313-7, con domicilio en la ciudad de Bogotá, quien para efectos del presente instrumento se denominará EL ACREEDOR, sobre el(los) siguiente(s) inmueble(s):</p>
+
+    <p class="inmueble-desc">{{inmdesc}} Inmueble(s) que hace(n) parte integrante de la Manzana 6 - Etapa 3 de la URBANIZACIÓN RIACHUELOS, distinguida en su puerta de entrada con la placa número 65-93 de la Calle 52-B, de la actual nomenclatura urbana del Municipio de Bello Antioquia.</p>
+
+    <table class="snr-tabla inmueble-registral">
+      <tbody>
+        <tr><th>Folio(s) de matrícula inmobiliaria Nro(s):</th><td>{{matricula}}</td></tr>
+        <tr><th>Código catastral Nro.:</th><td>{{catastral}}</td></tr>
+        <tr><th>NUPRE:</th><td>{{nupre}}</td></tr>
+      </tbody>
+    </table>
+
+    <p class="paragrafo">Inmueble(s) cuyos linderos, cabida y demás elementos de identificación se encuentran consignados en la Cláusula Segunda del contrato de compraventa contenido en este mismo instrumento público y que antecede al presente contrato de hipoteca.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO PRIMERO:</span> No obstante la mención de áreas, cabida y linderos la hipoteca recae sobre cuerpo(s) cierto(s).</p>
+
+    <!-- [[if ph]] -->
+    <p class="paragrafo"><span class="ord">PARÁGRAFO SEGUNDO:</span> <span class="epigrafe">Régimen de Propiedad Horizontal:</span> El edificio, conjunto o agrupación del que forma parte el(los) inmueble(s) objeto de la presente hipoteca, fue(ron) sometido(s) al Régimen de Propiedad Horizontal con el lleno de los requisitos legales, según {{phReg}}, debidamente registrada en el(los) Folio(s) de Matrícula Inmobiliaria número(s) {{matricula}} de la Oficina de Registro de Instrumentos Públicos de Medellín — Zona Norte.</p>
+    <!-- [[/if]] -->
+
+    <p class="clausula"><span class="ord">SEGUNDO:</span> Que EL (LOS) HIPOTECANTE (S) en su condición de constituyente(s) del gravamen hipotecario contenido en esta escritura actúa(n) para el efecto solidariamente, razón por la cual todas las cláusulas y declaraciones que ella contiene los obligan en tal carácter de solidaridad.</p>
+
+    <p class="clausula"><span class="ord">TERCERO:</span> Que el(los) inmueble(s) que se hipoteca(n) por este instrumento fue(ron) adquirido(s) por compra hecha a el(la) señor(a) {{V.0.nombre}} mediante esta misma escritura, tal como consta en la primera parte de este instrumento.</p>
+
+    <p class="clausula"><span class="ord">CUARTO:</span> Que con la presente hipoteca se garantiza el crédito hipotecario de vivienda individual a largo plazo aprobado por EL ACREEDOR a EL (LOS) HIPOTECANTE (S) por la suma de {{saldo}} pesos moneda corriente. Adicionalmente, bajo la consideración de que esta hipoteca es abierta y sin límite de cuantía, la misma garantiza a EL ACREEDOR no solamente el crédito hipotecario indicado en esta cláusula, sus intereses remuneratorios y moratorios así como los ajustes por variación de la UVR cuando el crédito esté denominado en esta unidad, sino también toda clase de obligaciones expresadas en moneda legal o en UVR, o en cualquier otra unidad que la sustituya (debidamente aprobada por la autoridad competente), ya causadas y/o que se causen en el futuro a cargo de EL (LOS) HIPOTECANTE (S) conjunta, separada o individualmente, y sin ninguna limitación respecto a la cuantía de las obligaciones garantizadas, sus intereses, costas, gastos (incluyendo los gastos de cobranza judicial y extrajudicial) y honorarios de abogado, bien sean directas o indirectas y por cualquier concepto, adquiridas en su propio nombre o con otra u otras firmas, conjunta o separadamente, ya se trate de préstamos, descuentos, endosos, cesión de instrumentos negociables o de créditos de otro orden, garantías bancarias, avales, cartas de crédito, sobregiros en cuenta corriente, cargos por tarjeta de crédito o cualquier otro género de obligaciones, que consten en pagarés, letras de cambio, cheques, certificados, notas débito o en cualquier otro documento comercial o civil, girado, aceptado, endosado, cedido o firmado por EL (LOS) HIPOTECANTE (S), o en cualquier otro medio probatorio, individual o conjuntamente con otra u otras personas o entidades, y que se hayan girado, endosado, cedido o aceptado a favor de EL ACREEDOR, directamente o a favor de un tercero que los hubiere negociado, endosado o cedido a EL ACREEDOR o que los negociare, endosare o cediere en el futuro, por cualquier concepto, esto es, por valor recibido, por valor en garantía, por dación en pago entre otros y aún sin la intervención o contra la voluntad de EL (LOS) HIPOTECANTE (S). Esta hipoteca garantiza las obligaciones en la forma y condiciones que consten en los documentos correspondientes y no se extingue por el solo hecho de prorrogarse, cambiarse o renovarse las citadas obligaciones, continuando vigente hasta la cancelación total de las mismas.</p>
+
+    <p class="clausula"><span class="ord">QUINTO:</span> Que para efectos exclusivos de determinar los derechos notariales y de registro a que haya lugar, se fija la suma determinada en la cláusula anterior, valor que corresponde en pesos colombianos al monto del crédito hipotecario de vivienda individual a largo plazo aprobado por EL ACREEDOR a EL (LOS) HIPOTECANTE (S). Con tal fin, se protocoliza con este instrumento la respectiva carta de aprobación del crédito hipotecario expedida por EL ACREEDOR, sin que esto implique modificación alguna del carácter de hipoteca abierta sin límite de cuantía que tiene la presente garantía.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO:</span> En cumplimiento de lo ordenado por el Artículo 58 de la Ley 788 de 2002 y sólo para los efectos tributarios a que haya lugar, EL (LOS) HIPOTECANTE (S) certifica(n) que a la fecha no ha(n) recibido desembolsos efectivos de créditos que estén garantizados con la presente hipoteca distintos o adicionales al crédito hipotecario de vivienda individual a largo plazo a que se hace referencia en este instrumento.</p>
+
+    <p class="clausula"><span class="ord">SEXTO:</span> Que EL (LOS) HIPOTECANTE (S) declara(n) además:</p>
+    <p class="literal">a.- que la presente hipoteca comprende sus anexidades, mejoras, construcciones, frutos y dependencias y se extiende a todos los aumentos que reciba, así como a las pensiones e indemnizaciones conforme a las leyes;</p>
+    <p class="literal">b.- que el(los) inmueble(s) que por este instrumento hipoteca(n), es(son) de su exclusiva propiedad, lo(s) posee(n) real y materialmente y lo(s) garantiza(n) libre(s) de todo gravamen, limitación al dominio, demandas civiles o cualquier circunstancia que lo(s) ponga fuera del comercio o limite su negociabilidad. En todo caso EL (LOS) HIPOTECANTE (S) saldrá(n) al saneamiento en los casos de ley;</p>
+    <p class="literal">c.- Que si la hipoteca constituida a favor de EL ACREEDOR quedare inicialmente en segundo grado, EL (LOS) HIPOTECANTE (S) se comprometen a obtener la cancelación de la hipoteca que estuviere en primer grado, a asumir los costos de dicha cancelación y a entregar a EL ACREEDOR un certificado de libertad expedido por la Oficina de Registro de Instrumentos Públicos correspondiente al(los) inmueble(s) hipotecado(s) en el que conste la cancelación del gravamen a satisfacción de EL ACREEDOR, en un término máximo de noventa (90) días hábiles contados a partir del desembolso del crédito garantizado con la(s) hipoteca(s).</p>
+    <p class="literal">d.- Que serán de su cargo todos los gastos e impuestos que cause este gravamen, entre otros, los gastos de escrituración y registro, los de su cancelación así como los gastos de cobro de cualquier obligación que con este instrumento se garantice si hubiere lugar a ello, salvo en los casos en que la ley determine lo contrario;</p>
+    <p class="literal">e.- Que se compromete(n) a entregar a EL ACREEDOR la primera copia de esta escritura de hipoteca y un certificado de libertad expedido por la Oficina de Registro de Instrumentos Públicos correspondiente al(los) inmueble(s) hipotecado(s) en el que conste la inscripción del gravamen a satisfacción de EL ACREEDOR, en un término máximo de noventa (90) días hábiles contados a partir de la firma de la presente escritura;</p>
+    <p class="literal">f.- Que conoce(n) y acepta(n) que en caso de pérdida, destrucción, deterioro o sustracción de la primera copia de esta escritura EL ACREEDOR, a través de su representante legal directamente o a través de apoderado especial debidamente constituido para el efecto, podrá solicitar la expedición de una copia sustitutiva con la constancia de que presta igual mérito ejecutivo para exigir el cumplimiento de las obligaciones que en ella consten, todo de conformidad con lo dispuesto por el Artículo 81 del Decreto 960 de 1970, en concordancia con el Artículo 43 de la Ley 1395 de 2010 y el numeral 8 del Artículo 617 del Código General del Proceso, o las normas que las modifiquen o sustituyan.</p>
+
+    <p class="clausula"><span class="ord">SÉPTIMO.-</span> <span class="epigrafe">SEGUROS.-</span> Que para amparar los riesgos de incendio, terremoto, así como los riesgos de muerte y de incapacidad total y permanente de EL (LOS) HIPOTECANTE (S), éste(éstos) se obliga(n) a contratar a favor de EL ACREEDOR los seguros correspondientes, y los demás seguros aplicables sobre el(los) bien(es) hipotecado(s), con la compañía de seguros escogida libremente por EL (LOS) HIPOTECANTE (S). Dichos seguros estarán vigentes por el término de la obligación respectiva, y el pago de las primas le corresponderá a EL (LOS) HIPOTECANTE (S). En caso de mora en su obligación de pago de las primas de seguros, EL (LOS) HIPOTECANTE (S) faculta(n) a EL ACREEDOR para que realice el pago de las mismas y se obliga(n) a realizar el reembolso correspondiente.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO PRIMERO:</span> Sin perjuicio de lo anterior EL ACREEDOR está facultado, mas no obligado, a contratar por cuenta de EL (LOS) HIPOTECANTE (S) los mencionados seguros y a pagar las primas correspondientes, en caso de que EL (LOS) HIPOTECANTE (S) no lo haga(n) directamente en los términos de la presente cláusula. En este evento EL (LOS) HIPOTECANTE (S) se obliga(n) al reembolso de las primas de seguros a favor de EL ACREEDOR.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO SEGUNDO:</span> EL (LOS) HIPOTECANTE (S) acepta(n) expresamente que el valor de las primas que deban reembolsar en cualquier evento, le(s) sea cargado por EL ACREEDOR junto con las cuotas del crédito. Si al momento de hacer el pago de una cualquiera de las cuotas mensuales en la fecha respectiva, EL (LOS) HIPOTECANTE (S) ha(n) incumplido la obligación de pago de alguna de las primas de seguro, el valor pagado de dicha cuota se imputará primero a la solución de tal(es) prima(s).</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO TERCERO:</span> EL ACREEDOR no asumirá ninguna responsabilidad si decide no hacer uso de la facultad consignada en la presente cláusula de contratar los seguros y/o pagar las primas correspondientes cuando no lo hiciere(n) EL (LOS) HIPOTECANTE (S).</p>
+
+    <p class="clausula"><span class="ord">OCTAVO.-</span> <span class="epigrafe">CLÁUSULA ACELERATORIA:</span> Que autoriza(n) a EL ACREEDOR, para acelerar o exigir anticipadamente cualquier obligación a cargo de EL (LOS) HIPOTECANTE (S), sin necesidad de requerimiento judicial o extrajudicial alguno salvo en los casos previstos en la ley, además de los eventos previstos en los respectivos títulos de deuda, en cualquiera de los siguientes casos:</p>
+    <p class="literal">a.- Cuando incurra(n) en mora en el pago de alguna de las obligaciones a su cargo y a favor de EL ACREEDOR, derivadas del crédito hipotecario de vivienda individual a largo plazo aprobado por EL ACREEDOR a EL (LOS) HIPOTECANTE (S).</p>
+    <p class="literal">b.- Cuando incurra(n) en mora en el pago de cualquier otra obligación de crédito a su cargo y a favor de EL ACREEDOR.</p>
+    <p class="literal">c.- Cuando solicite(n) o sea(n) admitido(s) a cualquier trámite concursal, oferta de cesión de bienes, situación de insolvencia o cualquier otra alteración de orden patrimonial que haga prever el incumplimiento del pago del crédito en la forma establecida en la ley.</p>
+    <p class="literal">d.- Cuando haya inexactitud o falsedad en los documentos presentados a EL ACREEDOR para obtener la aprobación y/o el desembolso del crédito hipotecario de vivienda individual a largo plazo.</p>
+    <p class="literal">e.- Cuando el(los) inmueble(s) hipotecado(s) para garantizar el crédito fuere(n) embargado(s) total o parcialmente por terceros en ejercicio de cualquier acción legal.</p>
+    <p class="literal">f.- Cuando el(los) inmueble(s) hipotecado(s) para garantizar el crédito sea(n) enajenado(s) o hipotecado(s) o sea(n) objeto de cualquier gravamen total o parcial, sin el consentimiento expreso y escrito de EL ACREEDOR.</p>
+    <p class="literal">g.- Cuando exista pérdida o deterioro del(los) bien(es) inmueble(s) hipotecado(s) como garantía de la obligación, cualquiera que sea la causa, de manera tal que se pueda concluir, con base en un avalúo realizado por un perito inscrito en el Registro Nacional de Avaluadores o la entidad que haga sus veces, designado por EL ACREEDOR, que la garantía no es suficiente para la seguridad de la deuda y sus accesorios.</p>
+    <p class="literal">h.- Cuando EL (LOS) HIPOTECANTE (S) no de(n) al(los) crédito(s) otorgado(s) por EL ACREEDOR la destinación para la cual fue(ron) concedido(s).</p>
+    <p class="literal">i.- Cuando: (i) EL (LOS) HIPOTECANTE (S) no contrate(n) los seguros para amparar los riesgos de incendio y terremoto, así como los riesgos de muerte y de incapacidad total y permanente de EL (LOS) HIPOTECANTE (S), y los demás seguros aplicables sobre el(los) bien(es) hipotecado(s); (ii) se produzca la terminación de los seguros por falta de pago de las primas o no los mantenga(n) vigentes por cualquier otra causa; (iii) no reembolse(n) las sumas pagadas por EL ACREEDOR cuando haya ejercido la facultad de contratar por cuenta de EL (LOS) HIPOTECANTE (S) los seguros a los que está(n) obligado(s) y/o pagar las primas correspondientes o, (iv) no destine(n) el valor de las indemnizaciones que reconozca la compañía de seguros en virtud de la ocurrencia de siniestros de incendio o terremoto a la reparación del inmueble que por este instrumento se hipoteca, en aquellos casos en los cuales los daños sean parciales.</p>
+    <p class="literal">j.- Cuando incumpla(n) la obligación de presentar la primera copia de la escritura pública de hipoteca que garantice el crédito hipotecario, debidamente inscrita en la Oficina de Registro de Instrumentos Públicos correspondiente, junto con el certificado de libertad en el que conste dicha inscripción, dentro de los noventa (90) días hábiles contados a partir de la fecha de otorgamiento de esta escritura.</p>
+    <p class="literal">k.- Cuando incumpla(n) la obligación de presentar el(los) certificado(s) de libertad en el(los) que conste(n) la(s) cancelación(es) del(los) gravamen(es) hipotecario(s) vigente(s) a favor de terceros o en general cualquier otro gravamen o limitación que recaiga(n) sobre el(los) inmueble(s) dado(s) en garantía, dentro de los noventa (90) días hábiles siguientes a aquél en que se efectúe el desembolso del crédito garantizado con la(s) hipoteca(s), si es del caso.</p>
+    <p class="literal">l.- Cuando llegare(n) a ser: (i) vinculado(s) por parte de las autoridades competentes a cualquier tipo de investigación por delitos de narcotráfico, terrorismo, secuestro o lavado de activos, (ii) incluido(s) en listas para el control del lavado de activos administradas por cualquier autoridad nacional o extranjera, tales como la Oficina de Control de Activos en el Exterior (OFAC) del Departamento del Tesoro de los Estados Unidos de América o (iii) condenado(s) por parte de las autoridades competentes en cualquier tipo de proceso judicial relacionado con la comisión de cualquier hecho punible.</p>
+    <p class="literal">m.- Cuando se decrete por el Estado la expropiación del(los) bien(es) hipotecado(s) por cualquier causa o motivo, sin perjuicio de la vía procesal a través de la cual se adelante dicho procedimiento. En este evento EL (LOS) HIPOTECANTE (S) autoriza(n) a la entidad pública adquirente o beneficiaria a cualquier título y por cualquier razón, para entregar directamente a EL ACREEDOR el valor de la indemnización hasta concurrencia del total adeudado, de acuerdo con la liquidación que hiciere EL ACREEDOR.</p>
+    <p class="literal">n.- Cuando incumpla(n) cualquier obligación contenida en la presente escritura a cargo de EL (LOS) HIPOTECANTE (S), adquirida individual, conjunta o separadamente.</p>
+    <p class="literal">o.- Cuando incurra(n) en cualquier otra causal establecida en la ley, sus normas reglamentarias o disposiciones de autoridad competente, para exigir el pago de las obligaciones a cargo de EL (LOS) HIPOTECANTE (S) amparadas con la presente hipoteca.</p>
+
+    <p class="clausula"><span class="ord">NOVENO:</span> Que la hipoteca aquí constituida estará vigente mientras EL ACREEDOR no la cancele y mientras exista a su favor y a cargo de EL (LOS) HIPOTECANTE (S) cualquier obligación pendiente de pago.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO:</span> Que la presente hipoteca no modifica, altera, extingue, ni nova las garantías reales y/o personales que con antelación se hubieren otorgado a favor de EL ACREEDOR para caucionar obligaciones a cargo de las personas cuyas deudas se garantizan con esta hipoteca.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO PRIMERO:</span> Que en caso de solicitar a EL ACREEDOR la cesión del crédito hipotecario para vivienda individual y sus garantías, incluida la presente hipoteca, de acuerdo con lo dispuesto por el Artículo 24 de la Ley 546 de 1999, dicha cesión será autorizada una vez EL (LOS) HIPOTECANTE (S) cumpla(n) con las condiciones y requisitos establecidos en la normatividad vigente para su perfeccionamiento.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO SEGUNDO:</span> Que EL (LOS) HIPOTECANTE (S) acepta(n) desde ahora, con todas las consecuencias señaladas en la ley y sin necesidad de notificación alguna, la cesión, endoso o traspaso que EL ACREEDOR realice a un tercero, incluidas sociedades titularizadoras o fiduciarias en procesos de titularización hipotecaria, de la garantía hipotecaria otorgada en desarrollo del presente instrumento, de los créditos y obligaciones a cargo de EL (LOS) HIPOTECANTE (S) amparados por la citada garantía hipotecaria y de los contratos que celebre en relación con la administración del inmueble objeto de la garantía hipotecaria, en cuyo caso adicionalmente, dicho tercero adquirirá automáticamente y sin necesidad de cesión adicional alguna, el carácter de beneficiario a título oneroso de las pólizas de seguro que se expidan a favor de EL ACREEDOR, de acuerdo con lo previsto en la presente hipoteca.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO TERCERO:</span> Si el(los) inmueble(s) que por este instrumento se hipoteca(n) se encuentra(n) gravado(s) con hipoteca en mayor extensión a favor de EL ACREEDOR, de acuerdo con la normatividad vigente ésta será levantada cuando el constructor haya cancelado a EL ACREEDOR la prorrata correspondiente y EL (LOS) HIPOTECANTE (S) haya(n) cumplido todas las obligaciones exigidas y necesarias para el perfeccionamiento del crédito con EL ACREEDOR, incluyendo pero sin limitarse a la firma del pagaré, el pago de gastos legales y seguros, entre otros.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO CUARTO:</span> Que en ningún caso por razón de la constitución de la presente hipoteca EL ACREEDOR estará obligado con EL (LOS) HIPOTECANTE (S) a la entrega de sumas de dinero en desarrollo de contratos de mutuo, ni a la promesa o compromiso de celebrar con éste ningún tipo de contrato o a desembolsar recursos a favor de EL (LOS) HIPOTECANTE (S). En desarrollo de lo anterior, EL (LOS) HIPOTECANTE (S) reconoce(n) expresamente el derecho de EL ACREEDOR para celebrar a su discreción cualquier tipo de contrato con EL (LOS) HIPOTECANTE (S) o realizar cualquier desembolso de recursos en desarrollo de contratos de mutuo o cualquier otra clase de contrato, sin que en ningún caso haya lugar a considerar que las obligaciones que asuma EL ACREEDOR en los términos mencionados, tienen por origen o están fundamentadas en el otorgamiento de la presente escritura pública de hipoteca.</p>
+
+    <p class="paragrafo"><span class="ord">PARÁGRAFO PRIMERO.</span> EL (LOS) HIPOTECANTE (S) acepta(n) que la celebración de la hipoteca que se constituye mediante el presente acto no compromete a EL ACREEDOR para otorgar préstamos de ninguna naturaleza y cuantía a EL (LOS) HIPOTECANTE (S) cuando el(los) título(s) no sea(n) satisfactorio(s) para EL ACREEDOR.</p>
+
+    <p class="clausula"><span class="ord">DÉCIMO QUINTO:</span> Que tiene(n) pleno conocimiento de la facultad de constituir patrimonio de familia inembargable sobre el inmueble financiado, cuando el crédito hipotecario otorgado por EL ACREEDOR y amparado con la presente garantía hipotecaria, haya sido otorgado por un valor equivalente como mínimo al cincuenta por ciento (50%) del valor comercial del inmueble, gravamen que estará vigente hasta el día en que el saldo de la obligación a cargo de EL (LOS) HIPOTECANTE (S) represente menos del veinte por ciento (20%) de dicho valor.</p>
+  </section>
+
+  <!-- ===================== RATIFICACIÓN DE LA HIPOTECA (LEY 258) ===================== -->
+  <!-- [[if C.0.estado in casado_sc|union]] -->
+  <section class="ratificacion-conyuge">
+    <p>Presente(s) {{C.0.nombre}} y ·····<span class="nota-hueco" title="Cónyuge o compañero(a) permanente del comprador, nombre e identificación — no capturado por el modelo de tokens">[cónyuge o compañero(a) permanente]</span>·····, de las condiciones civiles anotadas, manifiesta(n) que acepta(n) y ratifica(n) la hipoteca que a favor del BANCO DAVIVIENDA S.A. se constituye por el presente instrumento. (Ley 258 de 1996).</p>
+  </section>
+  <!-- [[/if]] -->
+
+  <!-- ===================== ACEPTACIÓN DEL APODERADO DEL ACREEDOR ===================== -->
+  <section class="apoderado-acreedor">
+    <p>Presente el(la) doctor(a): {{apoderadoBanco}}, mayor de edad, domiciliado(a) en la ciudad de Medellín, identificado(a) con la cédula de ciudadanía número ·····<span class="nota-hueco" title="Cédula del apoderado del banco — no capturado por el modelo de tokens">[cédula del apoderado]</span>····· y manifestó:</p>
+    <p class="literal">Primero: Que para los efectos del presente instrumento obra en nombre y representación en su condición de Apoderado(a) Especial del BANCO DAVIVIENDA S.A. (para todos los efectos EL ACREEDOR), según Poder Especial conferido por medio de la Escritura Pública Nro. {{poderBancoEP}} de la {{poderBancoNot}}, copia de la cual, junto con el certificado expedido por la Superintendencia Financiera de Colombia, se adjuntan para su protocolización con el presente instrumento.</p>
+    <p class="literal">Segundo: Que en la condición antes mencionada acepta para EL ACREEDOR, la garantía hipotecaria y demás declaraciones contenidas en la presente escritura a favor de aquél por encontrarse en todo a su entera satisfacción.</p>
+  </section>
+  <!-- [[/if]] -->
+
+  <!-- ===================== CIERRE ===================== -->
+  <section class="cierre">
+    <p>Los exponentes leyeron personalmente el presente instrumento, lo aprobaron y en constancia lo firman.</p>
+    <p>Se advirtió el registro dentro del término legal para ello.</p>
+  </section>
+
+  <!-- ===================== NOTAS FINALES ===================== -->
+  <section class="notas-finales">
+    <!-- [[if credito]] -->
+    <p class="nota"><span class="epigrafe">NOTA 1:</span> El valor que sirvió de base para la liquidación de los derechos Notariales y de registro de la presente hipoteca abierta es la cantidad de {{saldo}}, según carta enviada por la entidad crediticia que se adjunta para su protocolización con el presente instrumento.</p>
+
+    <p class="nota"><span class="epigrafe">NOTA 2:</span> El(la) doctor(a) {{apoderadoBanco}}, actuando en su condición de Apoderado(a) Especial del BANCO DAVIVIENDA S.A. por autorización de la suscrita notaria, suscribe la presente escritura pública fuera de las instalaciones de la Notaría Dieciséis de Medellín, en su despacho, de conformidad con el Art. 12 del Decreto 2148 de 1983.</p>
+
+    <p class="nota"><span class="epigrafe">NOTA 3:</span> A los otorgantes se les hizo la advertencia que deben presentar esta escritura para su registro en la Oficina de Registro correspondiente dentro de los noventa (90) días siguientes a su otorgamiento y de no hacerlo en el término indicado se deberá otorgar una nueva escritura de hipoteca; y después de los dos (2) meses contados a partir de la fecha de otorgamiento, se causarán intereses moratorios por mes o fracción de mes de retardo.</p>
+    <!-- [[/if]] -->
+
+    <p class="nota"><span class="epigrafe">NOTA 4:</span> Los comparecientes hacen constar que han verificado cuidadosamente sus nombres completos, el número de sus documentos de identidad, igualmente declaran que todas las informaciones consignadas en el presente instrumento son correctas y que en consecuencia, asumen la responsabilidad que se derive de cualquier inexactitud en las mismas.</p>
+
+    <p class="nota"><span class="epigrafe">NOTA 5:</span> <span class="epigrafe">NOTIFICACIONES ELECTRÓNICAS.-</span> Los comparecientes manifiesta(n) que NO ( ) SI (X) dan su consentimiento, el cual se entiende concedido con la firma de la presente escritura pública, para ser notificado por medio electrónico sobre el estado del trámite del presente instrumento público ante la oficina de Instrumentos Públicos; y para efecto autoriza que sea a través del correo electrónico: ·····<span class="nota-hueco" title="Correo electrónico para notificaciones — no capturado por el modelo de tokens">[correo electrónico de notificación]</span>·····. Todo lo anterior de conformidad con el Artículo 15 del Decreto 1579 de 2012 y Artículo 56 del Código de Procedimiento Administrativo y de lo Contencioso Administrativo.</p>
+
+    <!-- [[if ph]] -->
+    <p class="nota"><span class="epigrafe">NOTA 6:</span> Con el presente instrumento se protocoliza paz y salvo por concepto de expensas comunes con la administración del edificio, de conformidad con el Artículo 29 de la Ley 675 de 2001.</p>
+    <!-- [[/if]] -->
+
+    <p class="nota"><span class="epigrafe">NOTA 7:</span> <span class="epigrafe">SARLAFT — AUTORIZACIÓN DE TRATAMIENTO DE DATOS PERSONALES:</span> La Notaría como entidad que almacena y recolecta datos personales requiere obtener su autorización para que, de manera libre, previa, expresa, voluntaria y debidamente informada, permita recaudar, almacenar, usar, compilar los datos que han sido suministrados y que se han incorporado en distintas bases o bancos de datos, o en repositorios electrónicos de todo tipo. Aceptación de Autorización de tratamiento de datos personales: Los comparecientes obrando en la calidad antes dicha manifiesta(n) su consentimiento el cual entiende otorgado con la firma del presente documento que no ( ) si (X). Autoriza dicha consulta. STRADATA SEARCH: en cumplimiento con la Circular 1536 del 17 de Septiembre de 2013 expedida por la SNR y del Artículo 17 de la Ley 282 de Junio 6 de 1996, se consultó información de el(la, los) otorgante(s) de esta escritura pública en el programa STRADATA.</p>
+
+    <p class="nota"><span class="epigrafe">NOTA 8:</span> Conforme a lo establecido en el numeral 3° del artículo 6° de la Ley 2097 del 2 de Julio de 2021, el enajenante manifiesta bajo la gravedad de juramento, que no tiene obligaciones pendientes o en mora de su cumplimiento por concepto de alimentos, y aporta Certificación de No Encontrarse Inscrito en el Registro de Deudores Alimentarios Morosos "REDAM", expedido por el Ministerio de Tecnologías de la Información y las Comunicaciones (MINTIC), documento que se protocoliza con el presente instrumento.</p>
+  </section>
+
+  <!-- ===================== ANEXOS Y AVALÚO ===================== -->
+  <section class="anexos">
+    <p><span class="epigrafe">ANEXOS:</span> {{V.0.nombre}} presentó Certificado(s) de Paz y Salvo por concepto de impuesto predial unificado y valorización, expedido(s) por la Tesorería de Rentas Municipales de Bello, e igualmente Certificados de Paz y Salvo de Valorización Departamental expedidos por la Secretaría de Infraestructura Física de la Gobernación de Antioquia. ·····<span class="nota-hueco" title="Números, fechas y vigencias de los paz y salvo predial/valorización — no capturado por el modelo de tokens">[números, fechas y vigencias de los paz y salvo]</span>·····</p>
+    <p><span class="epigrafe">AVALÚO CATASTRAL DE LOS INMUEBLES VENDIDOS:</span> {{avaluoCatastral}}</p>
+  </section>
+
+  <!-- ===================== FIRMAS ===================== -->
+  <section class="firmas">
+    <div class="firma">
+      <p class="firmante">{{V.0.nombre}}</p>
+      <p>C.C. {{V.0.id}}</p>
+      <p>Vendedor(a)</p>
+    </div>
+    <div class="firma">
+      <p class="firmante">{{C.0.nombre}}</p>
+      <p>C.C. {{C.0.id}}</p>
+      <p>Comprador(a) — Hipotecante</p>
+    </div>
+    <!-- [[if C.0.estado in casado_sc|union]] -->
+    <div class="firma">
+      <p class="firmante">·····<span class="nota-hueco" title="Cónyuge o compañero(a) permanente del comprador — no capturado por el modelo de tokens">[cónyuge o compañero(a) permanente]</span>·····</p>
+      <p>C.C.</p>
+      <p>Cónyuge — Ley 258 de 1996</p>
+    </div>
+    <!-- [[/if]] -->
+    <!-- [[if credito]] -->
+    <div class="firma">
+      <p class="firmante">{{apoderadoBanco}}</p>
+      <p>Apoderada(o) Especial</p>
+      <p>BANCO DAVIVIENDA S.A. — NIT. 860.034.313-7</p>
+    </div>
+    <!-- [[/if]] -->
+    <div class="firma">
+      <p class="firmante">·····<span class="nota-hueco" title="Notario(a) / Interino(a) / Encargado(a) — no capturado por el modelo de tokens">[Notario(a) o su encargado(a)/interino(a)]</span>·····</p>
+      <p>Notaría Dieciséis de Medellín</p>
+    </div>
+  </section>
+
+</article>
