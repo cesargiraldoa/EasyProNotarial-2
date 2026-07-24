@@ -1,6 +1,157 @@
 ﻿# SESSION.md â€” EasyProNotarial-2
 
 ---
+## Sesión 2026-07-24 — Minutas Asistidas: flujo completo por banco, notario, registro de moldes (#6) y skill de templatización
+
+**Objetivo:** Dejar "Minutas Asistidas" usable de punta a punta con datos reales: entrada acto-primero sin subir documentos, flujo guiado por banco con carga automática del molde, arreglar todos los defectos de UX detectados en el navegador, agregar el molde de un segundo banco (Davivienda), notario configurable, el **registro maestro de moldes** editable sin código (#6), y una **skill de Claude** para convertir minutas `.docx` en moldes a escala.
+
+**Rama de trabajo:** `claude/session-closure-2026-07-23-d9g7iy`. **NO** mergeada a `main` (queda para PR/merge cuando el usuario lo apruebe). Esta sesión = commits `73c89d5`..`17ab5b0` (+ SESSION.md/GUION del cierre). 181 tests frontend en verde y `tsc` limpio en cada paso.
+
+### REALIZADO — paso a paso, todo lo que se construyó
+
+**1. Entrada "acto-primero" (sin flujo .docx)** (`73c89d5`, `a5daa69`, `56be079`, `b5f22a8`)
+- "Nueva escritura" crea un caso vacío vía `POST /api/v1/escritura/cases` y abre el workspace directo, sin obligar a subir un .docx.
+- Se corrigió doble-stringify del body en `crearCasoEscritura` (mandaba el JSON stringificado dos veces).
+- Los casos nuevos nacen **en blanco**, no con los datos demo (Rodrigo/Marta/Laura). Antes arrancaban con el fixture de demostración y confundía.
+- Un solo botón "Cargar minuta base de [Banco]" (antes había dos caminos).
+
+**2. Backend de plantillas semilla (moldes)** (`e5fb643`, `b68edd4`, `6bdc846`, `307fc42`)
+- Modelo: un molde vive como `NotarialTemplateLibraryItem` (`template_kind="seed"`, `status="approved"`) + una `NotarialTemplateVersion` cuyo `content_json` guarda `{body_html, format}` y `placeholder_map_json` guarda `{tokens}`.
+- Servicio `resolver_plantilla_semilla(acto, fuente, legal_entity_id)`: busca el molde del banco; si no hay, cae al genérico del acto (`is_fallback=True`). 404 solo si el acto no tiene NINGÚN molde.
+- Endpoint `GET /api/v1/escritura/plantilla-semilla?acto&fuente&legal_entity_id`.
+- Seed `seed_plantillas_semilla.py`: lee `backend/app/seeds/templates/plantillas-semilla/<slug>.map.json` + `<slug>.html`, siembra una copia por notaría, idempotente por `(notary_id, library_key)`. `library_key = "seed|{acto}|{fuente}|{bank_nit|generico}"`.
+- Fix alembic: pgvector opcional sin superusuario (savepoint) para que la migración no aborte.
+
+**3. Selector de banco — la saga (bug de React) y su arreglo** (`8a293d4`, `e35a6d6`, `4eb901d`, `5b242e2`, `eca9306`, `2d8287f`, `a46b406`)
+- Síntoma: al elegir un banco no pasaba nada. Diagnóstico con traza en pantalla: el `<select>` **controlado** con `value={selId}` se **revertía a su valor previo ANTES** de que `onChange` leyera la nueva selección (interacción React 19 + wrapper `onChange` del workspace).
+- **Arreglo:** el select se hace **no-controlado** (`defaultValue`) y se lee la selección por **`event.currentTarget.selectedIndex`** en vez de por `value`. Robusto al valor.
+
+**4. Género y TODOS los selects "no dejaban cambiar"** (`7a0f31f`, `87234b9`, `791f98a`)
+- Mismo bug que el banco pero en el componente genérico `SelectField`. La consola del navegador lo confirmó: al elegir "Femenino", `onChange` leía "M" (valor viejo).
+- **Arreglo definitivo:** `SelectField` pasa a **no-controlado + `ref` con sync imperativo (useEffect) + lectura por `selectedIndex`**. Afecta género, estado civil, naturaleza, tipo de documento, derecho, y géneros de apoderado/notario.
+- Se dejó un test (`genero-repro.test.ts`) que renderiza el form real y prueba que el cambio de género SÍ propaga (evita regresión).
+
+**5. Mejoras de captura (UX pedida por el usuario)** (`aadb494`, `0458a80`, `f6bc7c4`)
+- **Textareas** (descripción del inmueble, linderos, descripción de cancelación): más altas por defecto, **auto-crecen** con el contenido (sin encoger, respetan el arrastre de la esquina) y con **botón de micrófono para dictar por voz** (Web Speech API, es-CO; se oculta si el navegador no soporta reconocimiento).
+- **Correo electrónico:** `EmailField` con **chips de dominios** (gmail, hotmail, outlook, yahoo, icloud) — el protocolista escribe el usuario y hace clic en el dominio.
+- **Un solo campo por fila:** `row2Class` pasó de 2 columnas a 1 (documento, cuota, domicilio, género, matrícula, catastral, etc. ya no van apretados de a dos).
+
+**6. Flujo guiado "elegir banco primero" + auto-carga del molde** (`0c95f0f`, `dc85efb`)
+- Cuando Fuente=Banco y aún no hay banco elegido, el formulario se reemplaza por un **"Paso 1 · Elige el banco del caso"** (componente `BankGate`). No deja diligenciar hasta elegir el banco → evita el "se llena y se pierde por error".
+- Al elegir banco: llena banco/NIT/apoderado, marca `credito`, y si Redacción está limpia **auto-carga la minuta base** (híbrido: no pisa ediciones ya hechas).
+- La auto-carga es **best-effort**: si el acto aún no tiene molde propio, muestra un aviso suave en vez del error `{"detail":"Not Found"}` (que era un 404 esperado del endpoint).
+- Fuente Particular/Proyecto NO se bloquea.
+
+**7. Notario editable (titular / suplente / encargado)** (`37dbd07`)
+- Antes el notario estaba **hardcodeado** en el motor (JUAN CAMILO OROZCO GAVIRIA / "Encargado"). Ahora hay 3 campos en el estado: `notarioNombre`, `notarioRol` (titular/suplente/encargado), `notarioGenero`.
+- El motor los usa en **comparecencia, autorización y firma**, con concordancia de género (Notario/Notaria, Encargado/Encargada, El suscrito/La suscrita).
+- El formulario tiene sección "Notario que autoriza" con **dropdown de los notarios de la Notaría 16** (Dra. Juliana Oliva titular F, Juan Camilo Orozco encargado M) que autocompleta + campos editables.
+- Fixtures golden regenerados (el rol ahora aparece consistente en todo el documento).
+
+**8. Molde de Davivienda — segundo banco (multi-banco real)** (`85a378b`)
+- Templatizado a mano (con subagente) desde la escritura real E.P. 3.740 de la Notaría 16: 365 líneas, texto legal **verbatim** de Davivienda (su hipoteca abierta, aceleratoria, seguros, cesión, NOTAS 1-8), con **afectación a vivienda familiar** (código 304) que Bancolombia no trae.
+- Bug encontrado y corregido: `[[if afect]]` evaluaba `Boolean("no")=true` → salía siempre; se cambió a **`[[if afect in si]]`** (solo con afect="si").
+- `bank_nit 860.034.313-7` → el resolver lo empareja al banco del catálogo. Validado end-to-end (relleno sin marcadores sobrantes, afect si/no correcto).
+
+**9. Registro maestro de moldes (#6) — crear/editar sin código** (`88b2ac0`)
+- **Backend:** en `plantilla_semilla.py`, funciones `list_plantillas_admin`, `get_plantilla_admin`, `upsert_plantilla_admin` (reusan el modelo del seed). Endpoints:
+  - `GET /api/v1/escritura/plantillas-semilla` → lista los moldes de las notarías del usuario.
+  - `GET /api/v1/escritura/plantillas-semilla/{id}` → un molde con su cuerpo HTML.
+  - `POST /api/v1/escritura/plantillas-semilla` → crea/actualiza (acto+fuente+banco). Upsert por `(notaría default, library_key)`; el resolver toma el más reciente.
+- **Frontend:** página **"Registro de moldes"** (`/dashboard/escritura/moldes`, componente `moldes-registro.tsx`) con lista + editor (acto, fuente, banco, nombre, cuerpo HTML con `{{tokens}}` y `[[if]]`). Ítem de menú para `super_admin`/`admin_notary`. Lo guardado se usa al instante.
+- Probado por el usuario: editar Bancolombia/Davivienda y guardar → mensaje verde y se refleja en la lista.
+
+**10. Arranque local sin fricción** (`19e9ff3`, `c975c9f`)
+- `scripts/dev-restart.ps1` (+ `.bat` de doble clic): libera puertos **8001** (backend) y **5179** (frontend), limpia `.next`, arranca backend con `--reload` y frontend apuntando a 8001. Rutas relativas (`$PSScriptRoot`) → funciona en la subcarpeta `easypro2`. Sin candado de rama (el `START_LOCAL_EASYPRO.ps1` viejo exigía la rama `feature/auditoria-easypro1` y usaba el puerto 8000 equivocado).
+- `npm run restart` (en `frontend/package.json`) y **tarea de VS Code** ("Reiniciar EasyPro (backend + frontend)" en `.vscode/tasks.json`, Ctrl+Shift+P → Run Task).
+
+**11. Skill de Claude `molde-maker` — templatizar a escala** (`17ab5b0`)
+- Skill portable (`.claude/skills/molde-maker/`) para la cuenta de Claude dedicada. Convierte una minuta `.docx` en `molde.html` + `molde.map.json`, validado.
+- Codifica la receta probada: extrae texto (`python-docx`), clasifica banco/acto/ciudad, reemplaza SOLO datos variables por `{{tokens}}` del **vocabulario fijo** (36 tokens en `references/tokens.md`), envuelve secciones en `[[if]]` con las trampas reales (`afect` → `[[if afect in si]]`), conserva el texto legal **verbatim**, y **autovalida** (balance de marcadores, parseo, prueba de relleno) con `scripts/validate_molde.py`.
+- El validador se probó OK contra los moldes reales de Bancolombia y Davivienda.
+- Entregada al usuario como `.skill` para instalar en su cuenta dedicada. También versionada en el repo.
+
+### FUNCIONES QUE TIENE HOY "MINUTAS ASISTIDAS" (inventario completo)
+
+**Entrada y casos**
+- Menú lateral "Minutas Asistidas" → landing con lista de casos + botón "Nueva escritura".
+- "Nueva escritura" crea un caso vacío (acto-primero), sin subir documentos.
+- Actos soportados: **Compraventa**, **Compraventa + Hipoteca** (acto `hipoteca`), **Cancelación de hipoteca**.
+
+**Fuente del caso** (banco / particular / proyecto)
+- Fuente=Banco → **flujo guiado**: obliga a elegir banco primero (BankGate) → auto-carga su minuta base.
+- Fuente=Particular/Proyecto → sin gate; molde genérico del acto.
+
+**Captura estructurada (formulario determinístico)**
+- Secciones: Acto (derecho que se transfiere, crédito, datos del banco/hipoteca), Parte vendedora (V), Parte compradora (C), Inmuebles (uno o varios), Título y estado jurídico, Encadenamientos (hipoteca previa, patrimonio de familia, afectación), Extranjería y divisas, Rural/UAF/baldíos, Capacidad y apoyos, Precio, Acto avanzado, Otorgamiento y firmas (incl. Notario, testigos, firma a ruego), Anexos.
+- Partes: persona natural/jurídica, tipo de doc, género (4 categorías legales M/F/NB/T), estado civil, cuota %, datos de firma (dirección, teléfono, ocupación, correo con chips de dominio, notificaciones electrónicas, PEP).
+- Inmuebles: descripción, linderos, matrícula, catastral, NUPRE, avalúo; múltiples inmuebles.
+- **Selects arreglados** (no-controlados, leen por selectedIndex) → cambian sin problema.
+- **Textareas** auto-crecen + **dictado por voz** (micrófono) en descripción/linderos.
+- **Un campo por fila.**
+- Notario: nombre + rol (titular/suplente/encargado) + género, con dropdown de la Notaría 16.
+
+**Motor de escritura (TypeScript, determinístico)** — `frontend/lib/motor-escritura/index.ts`
+- Genera el HTML de la escritura desde el estado, con concordancia de género por persona, guiones de relleno, formato SNR, cláusulas por acto, notas 1-8, SARLAFT/REDAM, liquidación.
+- Golden tests (fixtures compraventa/hipoteca/cancelación).
+
+**3 modos en el workspace**
+- **Captura**: formulario + preview en vivo del documento + panel de Cumplimiento (dock colapsable).
+- **Redacción**: editor manual sobre el molde cargado (con biblioteca de cláusulas, campos vinculados, comentarios estilo Word, resaltado); las citas de norma van ocultas para documento limpio.
+- **Cumplimiento**: certificado de cumplimiento (papel de seguridad) + calculadora de liquidación.
+
+**Validación legal en vivo (Cumplimiento)**
+- Motor de reglas contra el corpus jurídico vigente; tiles Cumple/Advertencia/Bloqueante.
+- **Exportación a Word bloqueada mientras haya bloqueantes** (protección legal). Al llenar los datos faltantes (matrícula, linderos) los bloqueantes bajan a 0 y se habilita "Generar documento".
+
+**Resaltado en vivo + popup de normas**
+- Al editar un campo, se resalta su valor en el cuerpo (azul+negrita sobre amarillo), scroll centrado.
+- Popup de norma al pasar el mouse sobre las citas `.cite` (funciona en modo Captura; reconoce ~70 normas del diccionario `NORMAS`).
+
+**Moldes / minutas base**
+- Bancolombia · Compraventa+Hipoteca (semilla).
+- Davivienda · Compraventa+Hipoteca (con afectación a vivienda familiar).
+- Registro de moldes: crear/editar cualquier molde por acto+banco desde la app, sin código.
+
+**Generación del documento**
+- "Generar documento" produce el Word (.docx) versionado del caso (cuando no hay bloqueantes).
+- Imprimir/PDF en Captura y Redacción.
+
+**Asistencia de Gari (IA)** — bloque colapsable: prellenar, clasificar, revisar (capa IA sobre la escritura).
+
+### DECISIONES TÉCNICAS CLAVE (el "por qué", para no repetir errores)
+- **Selects no-controlados:** en este entorno (React 19 + wrapper `onChange` del workspace) un `<select value=...>` se revierte antes de leer la selección. Solución: `defaultValue` + `ref`/`selectedIndex`. Si agregas un select nuevo, usa `SelectField` (ya arreglado), no `value` controlado.
+- **Flujo guiado banco-primero:** elegir banco antes de diligenciar evita que se llene y se pierda; la auto-carga del molde es best-effort (no rompe si no hay molde).
+- **Moldes verbatim + vocabulario de tokens cerrado:** el texto legal se copia letra por letra; solo los datos del caso se vuelven `{{tokens}}` de una lista fija. La detección automática de campos variables **NO se usa** (falló antes); la skill sigue el vocabulario y se autovalida.
+- **`afect` es enum (`no/si/nosabe`), no booleano:** condicionar la afectación como `[[if afect in si]]`, nunca `[[if afect]]` (evalúa "no" como verdadero).
+- **Escala (500 notarías):** los moldes son por **banco + acto + ciudad**, no por notaría — uno se hace una vez y las notarías lo heredan. La templatización la hace la skill `molde-maker` (IA propone siguiendo receta + se autovalida), no un humano marcando ni las notarías.
+
+### CÓMO ARRANCAR EN LOCAL (para retomar mañana)
+- **Un comando:** `cd frontend && npm run restart` — o **Ctrl+Shift+P → Run Task → "Reiniciar EasyPro"** — o doble clic en `scripts\dev-restart.bat`.
+- **Manual (dos terminales):**
+  - Backend: `cd backend; .\.venv\Scripts\Activate.ps1; python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload`
+  - Frontend: `cd frontend; Remove-Item -Recurse -Force .next,node_modules\.cache -ErrorAction SilentlyContinue; npm run dev:raw`
+- **Puertos:** backend **8001** (el `.env` local usa 8001; 8000 está reservado para Gari), frontend **5179**.
+- **Cargar un molde nuevo por seed:** `cd backend; python -m app.seeds.seed_plantillas_semilla`.
+- **Trampas conocidas:** (a) tras `git pull` con el frontend corriendo se corrompe `.next` (error "Cannot find module vendor-chunks") → correr `npm run restart` que borra `.next`. (b) `EADDRINUSE 5179` → matar el listener: `Get-NetTCPConnection -LocalPort 5179 -State Listen | %{Stop-Process -Id $_.OwningProcess -Force}`. (c) el backend debe **reiniciarse** para registrar endpoints nuevos (uvicorn viejo no los tiene).
+
+### PENDIENTES / HOJA DE RUTA (para la próxima sesión)
+1. **Biblioteca central compartida de moldes** (mayor impacto para escala): moldes banco×acto×ciudad que TODAS las notarías heredan, con override por notaría. Hoy el seed crea una copia por notaría; falta la capa "compartida + herencia".
+2. **Flujo de intake:** clasificar automáticamente cada `.docx` que llega (banco+acto+ciudad, por lectura del texto — NO detección de campos) para deduplicar y saber si ya hay molde o si falta uno.
+3. **Importar .docx en el registro** (opcional): botón que convierte Word→HTML como borrador dentro del editor de moldes.
+4. **Más moldes:** Bancolombia hipoteca sola, y demás bancos/ciudades usando la skill `molde-maker` con los `.docx` reales.
+5. **Tooltip de normas en Redacción** (hoy solo en Captura) y cubrir TODAS las normas citadas (no solo las ~70 del diccionario), si el usuario lo quiere.
+6. **PR/merge de esta rama a `main`** cuando se apruebe (esta sesión no mergeó a main).
+
+### ESTADO AL CIERRE
+- **Backend:** operativo (endpoints de plantillas semilla + registro maestro; requiere reinicio para registrar rutas nuevas).
+- **Frontend:** operativo; `tsc` limpio, **181 tests en verde**.
+- **Moldes en BD:** Bancolombia y Davivienda sembrados (seed corrido por el usuario: "2 definiciones × 3 notarías").
+- **Git:** rama `claude/session-closure-2026-07-23-d9g7iy` pusheada; SESSION.md y GUION-DEMO.md se commitean en este cierre. **No** mergeada a `main`.
+- **Entregables al usuario:** `molde-maker.skill`, `GUION-DEMO.md`, y los HTML de los moldes de Bancolombia y Davivienda.
+
+---
+
 ## Sesión 2026-07-23 — Rebranding "Minutas Asistidas" + arreglos UX de la escritura (resaltado en vivo, PDF, guiones, popup de norma)
 
 **Objetivo de la sesión:** Revisión visual del port de "Escritura asistida" con datos reales y corregir los defectos de UX detectados por el usuario en el navegador, dejándolos verificados con tests.
