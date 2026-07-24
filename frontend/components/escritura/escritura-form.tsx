@@ -49,7 +49,8 @@ type FieldProps = {
 const inputClass = "w-full rounded-lg border border-line-strong bg-white px-3 py-2 text-sm text-primary shadow-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-secondary";
 const labelClass = "mb-1 block text-xs font-semibold uppercase tracking-[0.04em] text-secondary";
 const fieldsetClass = "border-t border-line py-4 first:border-t-0";
-const row2Class = "grid gap-3 sm:grid-cols-2";
+// Un solo campo por fila (mejor UX): los Field ya traen mt-3, el wrapper solo agrupa.
+const row2Class = "";
 const checkClass = "flex items-start gap-2 text-sm text-primary";
 
 const generoOptions: Array<[GeneroCode, string]> = [
